@@ -12,6 +12,6 @@
 - [x] Geração e download de PDF profissional do orçamento com logótipo, dados do cliente e tabela de itens
 - [x] Design elegante e profissional (tipografia cuidada, espaçamentos generosos)
 - [x] Criação de testes Vitest para regras de cálculo e regras de negócio
-- [ ] Alterar moeda de Euros (€) para Reais (R$) em todo o sistema
-- [ ] Permitir preenchimento livre de largura/espessura/comprimento na criação de orçamento
-- [ ] Atualizar PDF para suportar dimensões livres e moeda em Reais
+- [x] Alterar moeda de Euros (€) para Reais (R$) em todo o sistema
+- [x] Permitir preenchimento livre de largura/espessura/comprimento na criação de orçamento
+- [x] Atualizar PDF para suportar dimensões livres e moeda em Reais

@@ -4,7 +4,7 @@ import * as db from "../db";
 
 const ItemSchema = z.object({
   madeiraId: z.number(),
-  bitolaId: z.number(),
+  bitolaId: z.number().nullable().optional(),
   madeiraNome: z.string(),
   bitolaDescricao: z.string(),
   espessura: z.string(),

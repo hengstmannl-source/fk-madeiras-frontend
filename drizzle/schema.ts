@@ -89,7 +89,7 @@ export const itensOrcamento = mysqlTable("itensOrcamento", {
   id: int("id").autoincrement().primaryKey(),
   orcamentoId: int("orcamentoId").notNull(),
   madeiraId: int("madeiraId").notNull(),
-  bitolaId: int("bitolaId").notNull(),
+  bitolaId: int("bitolaId"),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   bitolaDescricao: varchar("bitolaDescricao", { length: 200 }).notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
