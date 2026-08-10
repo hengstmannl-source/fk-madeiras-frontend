@@ -70,22 +70,14 @@ export default function OrcamentoNovo() {
     if (!selectedMadeiraId) { toast.error("Selecione uma madeira"); return; }
     const madeira = madeiras.data?.find(m => m.id === Number(selectedMadeiraId));
     if (!madeira) { toast.error("Madeira não encontrada"); return; }
-    const bitolaSelect = document.getElementById("bitola-select") as HTMLInputElement | null;
-    const espSelect = document.getElementById("espessura-select") as HTMLInputElement | null;
-    const largSelect = document.getElementById("largura-select") as HTMLInputElement | null;
-    const compInput = document.getElementById("comprimento-input") as HTMLInputElement | null;
-    const qtdInput = document.getElementById("quantidade-input") as HTMLInputElement | null;
 
-    // Use bitolas dropdown
-    const bitolaSelectEl = document.querySelector("[data-bitola-id]") as HTMLSelectElement | null;
-
-    // Get values from select elements
-    const espValue = (document.getElementById("esp-select") as HTMLSelectElement)?.value;
-    const largValue = (document.getElementById("larg-select") as HTMLSelectElement)?.value;
+    // Get values from input fields (free-form dimensions)
+    const espValue = (document.getElementById("esp-input") as HTMLInputElement)?.value;
+    const largValue = (document.getElementById("larg-input") as HTMLInputElement)?.value;
     const compValue = (document.getElementById("comp-input") as HTMLInputElement)?.value;
     const qtdValue = (document.getElementById("qtd-input") as HTMLInputElement)?.value;
 
-    if (!espValue || !largValue) { toast.error("Selecione as dimensões"); return; }
+    if (!espValue || !largValue) { toast.error("Preencha espessura e largura"); return; }
     const esp = parseFloat(espValue);
     const larg = parseFloat(largValue);
     const comp = parseFloat(compValue) || 3;
@@ -180,7 +172,7 @@ export default function OrcamentoNovo() {
               <h3 className="font-semibold text-sm mb-4 flex items-center gap-2"><Calculator className="h-4 w-4" />Adicionar Item</h3>
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label>Wood type *</Label>
+                  <Label>Tipo de madeira *</Label>
                   <Select value={selectedMadeiraId} onValueChange={setSelectedMadeiraId}>
                     <SelectTrigger className="bg-white"><SelectValue placeholder="Selecionar madeira" /></SelectTrigger>
                     <SelectContent>
@@ -189,33 +181,30 @@ export default function OrcamentoNovo() {
                   </Select>
                 </div>
                 {selectedMadeiraId && (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                      <Label>Espessura (mm) *</Label>
-                      <select id="esp-select" className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="">Selecionar</option>
-                        {bitolas.data?.map((b) => (<option key={b.id} value={b.espessura}>{b.espessura} mm</option>))}
-                      </select>
+                  <>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Dimensões (preencha livremente)</Label>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="space-y-2">
+                        <Label>Espessura (mm) *</Label>
+                        <Input id="esp-input" type="number" placeholder="25" step="1" min="1" className="bg-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Largura (mm) *</Label>
+                        <Input id="larg-input" type="number" placeholder="150" step="1" min="1" className="bg-white" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Comprimento (m)</Label>
+                        <Input id="comp-input" type="number" placeholder="3" step="0.1" min="0.1" className="bg-white" />
+                      </div>
                     </div>
                     <div className="space-y-2">
-                      <Label>Largura (mm) *</Label>
-                      <select id="larg-select" className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-ring">
-                        <option value="">Selecionar</option>
-                        {bitolas.data?.map((b) => (<option key={b.id} value={b.largura}>{b.largura} mm</option>))}
-                      </select>
+                      <Label>Quantidade *</Label>
+                      <Input id="qtd-input" type="number" placeholder="1" min="1" className="bg-white" />
                     </div>
-                  </div>
+                  </>
                 )}
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-2">
-                    <Label>Comprimento (m)</Label>
-                    <Input id="comp-input" type="number" defaultValue="3" step="0.1" className="bg-white" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Quantidade</Label>
-                    <Input id="qtd-input" type="number" defaultValue="1" min="1" className="bg-white" />
-                  </div>
-                </div>
                 <Button onClick={addItem} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="h-4 w-4 mr-2" />Adicionar Item
                 </Button>

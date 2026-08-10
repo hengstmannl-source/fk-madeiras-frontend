@@ -1,6 +1,16 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { getOrcamentoWithItems, listClientes } from "./db";
 
+// Format number as BRL currency (pt-BR: 1.234,56)
+function formatBRL(value: string): string {
+  const num = parseFloat(value);
+  if (isNaN(num)) return "0,00";
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
 export async function registerPdfRoutes(app: any) {
   app.get("/api/pdf/orcamento/:id", async (req: any, res: any) => {
     try {
@@ -30,7 +40,7 @@ export async function registerPdfRoutes(app: any) {
       y -= 40;
       page.drawText(`Orçamento: ${data.orcamento.numero}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.2, 0.15, 0.05) });
       y -= 18;
-      page.drawText(`Data: ${new Date(data.orcamento.createdAt).toLocaleDateString("pt-PT")}`, { x: 50, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      page.drawText(`Data: ${new Date(data.orcamento.createdAt).toLocaleDateString("pt-BR")}`, { x: 50, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
 
       // Estado
       page.drawText(`Estado: ${data.orcamento.estado}`, { x: width - 200, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
@@ -73,10 +83,10 @@ export async function registerPdfRoutes(app: any) {
         page.drawText(item.madeiraNome, { x, y, size: 8, font }); x += colWidths[0];
         page.drawText(`${item.espessura}×${item.largura}mm×${item.comprimento}m`, { x, y, size: 8, font }); x += colWidths[1];
         page.drawText(String(item.quantidade), { x, y, size: 8, font }); x += colWidths[2];
-        page.drawText(`${parseFloat(item.precoM3).toFixed(2)}€`, { x, y, size: 8, font }); x += colWidths[3];
-        page.drawText(`${parseFloat(item.precoLinear).toFixed(4)}€`, { x, y, size: 8, font }); x += colWidths[4];
-        page.drawText(`${parseFloat(item.valorPeca).toFixed(2)}€`, { x, y, size: 8, font }); x += colWidths[5];
-        page.drawText(`${parseFloat(item.valorTotal).toFixed(2)}€`, { x, y, size: 8, font: boldFont });
+        page.drawText(`R$ ${formatBRL(item.precoM3)}`, { x, y, size: 8, font }); x += colWidths[3];
+        page.drawText(`R$ ${formatBRL(item.precoLinear)}`, { x, y, size: 8, font }); x += colWidths[4];
+        page.drawText(`R$ ${formatBRL(item.valorPeca)}`, { x, y, size: 8, font }); x += colWidths[5];
+        page.drawText(`R$ ${formatBRL(item.valorTotal)}`, { x, y, size: 8, font: boldFont });
         y -= 16;
         if (y < 100) { const newPage = pdfDoc.addPage([595, 842]); y = newPage.getSize().height - 50; }
       }
@@ -87,13 +97,13 @@ export async function registerPdfRoutes(app: any) {
       y -= 20;
       page.drawText("RESUMO", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
       y -= 18;
-      page.drawText(`Subtotal: ${parseFloat(data.orcamento.subtotal).toFixed(2)}€`, { x: 50, y, size: 10, font });
+      page.drawText(`Subtotal: R$ ${formatBRL(data.orcamento.subtotal)}`, { x: 50, y, size: 10, font });
       y -= 14;
-      page.drawText(`Desconto: -${parseFloat(data.orcamento.desconto || "0").toFixed(2)}€`, { x: 50, y, size: 10, font, color: rgb(0.7, 0.2, 0.2) });
+      page.drawText(`Desconto: -R$ ${formatBRL(data.orcamento.desconto || "0")}`, { x: 50, y, size: 10, font, color: rgb(0.7, 0.2, 0.2) });
       y -= 14;
-      page.drawText(`Frete: +${parseFloat(data.orcamento.frete || "0").toFixed(2)}€`, { x: 50, y, size: 10, font });
+      page.drawText(`Frete: +R$ ${formatBRL(data.orcamento.frete || "0")}`, { x: 50, y, size: 10, font });
       y -= 14;
-      page.drawText(`Total: ${parseFloat(data.orcamento.total).toFixed(2)}€`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
+      page.drawText(`Total: R$ ${formatBRL(data.orcamento.total)}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
 
       y -= 14;
       page.drawText(`Total de peças: ${data.orcamento.totalPecas}`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
@@ -112,7 +122,7 @@ export async function registerPdfRoutes(app: any) {
       // Footer
       const footerY = 40;
       page.drawText("FK Madeiras — Sistema de Orçamentos", { x: 50, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-PT")}`, { x: width - 250, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
+      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 250, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
 
       const pdfBytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");

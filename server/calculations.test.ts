@@ -40,10 +40,10 @@ describe("Cálculos de Orçamento FK Madeiras", () => {
     expect(ml).toBe(30);
   });
 
-  it("formata moeda em Euros", () => {
+  it("formata moeda em Reais (BRL)", () => {
     const formatted = formatCurrency("1234.56");
-    expect(formatted).toContain("1234,56");
-    expect(formatted).toContain("€");
+    expect(formatted).toContain("1.234,56");
+    expect(formatted).toContain("R$");
     expect(formatCurrency("0")).toContain("0,00");
     expect(formatCurrency("100")).toContain("100,00");
   });
