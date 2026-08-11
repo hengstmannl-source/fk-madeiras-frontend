@@ -11,6 +11,15 @@ function formatBRL(value: string): string {
   }).format(num);
 }
 
+function formatDimensionCm(valueInMillimeters: string): string {
+  const num = parseFloat(valueInMillimeters);
+  if (isNaN(num)) return "0";
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(num / 10);
+}
+
 export async function registerPdfRoutes(app: any) {
   app.get("/api/pdf/orcamento/:id", async (req: any, res: any) => {
     try {
@@ -81,7 +90,7 @@ export async function registerPdfRoutes(app: any) {
       for (const item of data.itens) {
         x = 50;
         page.drawText(item.madeiraNome, { x, y, size: 8, font }); x += colWidths[0];
-        page.drawText(`${item.espessura}×${item.largura}mm×${item.comprimento}m`, { x, y, size: 8, font }); x += colWidths[1];
+        page.drawText(`${formatDimensionCm(item.espessura)}×${formatDimensionCm(item.largura)}cm×${item.comprimento}m`, { x, y, size: 8, font }); x += colWidths[1];
         page.drawText(String(item.quantidade), { x, y, size: 8, font }); x += colWidths[2];
         page.drawText(`R$ ${formatBRL(item.precoM3)}`, { x, y, size: 8, font }); x += colWidths[3];
         page.drawText(`R$ ${formatBRL(item.precoLinear)}`, { x, y, size: 8, font }); x += colWidths[4];

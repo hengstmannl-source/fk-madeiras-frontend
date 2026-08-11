@@ -10,11 +10,20 @@ import { Textarea } from "@/components/ui/textarea";
 import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
-import { calculatePrecoLinear, calculateValorPeca, calculateValorTotal, calculateVolume, calculateMetroLinear, formatCurrency } from "@/lib/utils";
+import {
+  calculatePrecoLinear,
+  calculateValorPeca,
+  calculateValorTotal,
+  calculateVolume,
+  centimetersToMillimeters,
+  formatCurrency,
+  formatDimensionCm,
+  parseDecimalInput,
+} from "@/lib/utils";
 
 interface ItemOrcamento {
   madeiraId: number;
-  bitolaId: number;
+  bitolaId: number | null;
   madeiraNome: string;
   bitolaDescricao: string;
   espessura: string;
@@ -40,9 +49,6 @@ export default function OrcamentoNovo() {
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
 
   const [selectedMadeiraId, setSelectedMadeiraId] = useState<string>("");
-  const bitolas = trpc.bitola.list.useQuery(
-    selectedMadeiraId ? { madeiraId: Number(selectedMadeiraId) } : undefined
-  );
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -78,10 +84,22 @@ export default function OrcamentoNovo() {
     const qtdValue = (document.getElementById("qtd-input") as HTMLInputElement)?.value;
 
     if (!espValue || !largValue) { toast.error("Preencha espessura e largura"); return; }
-    const esp = parseFloat(espValue);
-    const larg = parseFloat(largValue);
-    const comp = parseFloat(compValue) || 3;
+    const espCm = parseDecimalInput(espValue);
+    const largCm = parseDecimalInput(largValue);
+    const comp = parseDecimalInput(compValue) || 3;
     const qtd = parseInt(qtdValue) || 1;
+    if (!Number.isFinite(espCm) || espCm <= 0 || !Number.isFinite(largCm) || largCm <= 0) {
+      toast.error("Introduza dimensões válidas em centímetros");
+      return;
+    }
+    if (!Number.isFinite(comp) || comp <= 0 || !Number.isInteger(qtd) || qtd <= 0) {
+      toast.error("Introduza comprimento e quantidade válidos");
+      return;
+    }
+
+    // O utilizador trabalha em centímetros; os cálculos e a base de dados mantêm milímetros.
+    const esp = centimetersToMillimeters(espCm);
+    const larg = centimetersToMillimeters(largCm);
     const precoM3 = parseFloat(madeira.precoM3);
     const precoLinear = calculatePrecoLinear(esp, larg, precoM3);
     const valorPeca = calculateValorPeca(precoLinear, comp);
@@ -89,9 +107,9 @@ export default function OrcamentoNovo() {
 
     setItens([...itens, {
       madeiraId: Number(selectedMadeiraId),
-      bitolaId: 0,
+      bitolaId: null,
       madeiraNome: madeira.nome,
-      bitolaDescricao: `${esp}×${larg} mm`,
+      bitolaDescricao: `${formatDimensionCm(esp)}×${formatDimensionCm(larg)} cm`,
       espessura: String(esp),
       largura: String(larg),
       comprimento: String(comp),
@@ -187,16 +205,16 @@ export default function OrcamentoNovo() {
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                       <div className="space-y-2">
-                        <Label>Espessura (mm) *</Label>
-                        <Input id="esp-input" type="number" placeholder="25" step="1" min="1" className="bg-white" />
+                        <Label>Espessura (cm) *</Label>
+                        <Input id="esp-input" type="text" inputMode="decimal" placeholder="2,5" className="bg-white" />
                       </div>
                       <div className="space-y-2">
-                        <Label>Largura (mm) *</Label>
-                        <Input id="larg-input" type="number" placeholder="150" step="1" min="1" className="bg-white" />
+                        <Label>Largura (cm) *</Label>
+                        <Input id="larg-input" type="text" inputMode="decimal" placeholder="15" className="bg-white" />
                       </div>
                       <div className="space-y-2">
                         <Label>Comprimento (m)</Label>
-                        <Input id="comp-input" type="number" placeholder="3" step="0.1" min="0.1" className="bg-white" />
+                        <Input id="comp-input" type="text" inputMode="decimal" placeholder="3" className="bg-white" />
                       </div>
                     </div>
                     <div className="space-y-2">

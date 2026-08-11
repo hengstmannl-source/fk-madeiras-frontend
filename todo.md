@@ -15,3 +15,4 @@
 - [x] Alterar moeda de Euros (€) para Reais (R$) em todo o sistema
 - [x] Permitir preenchimento livre de largura/espessura/comprimento na criação de orçamento
 - [x] Atualizar PDF para suportar dimensões livres e moeda em Reais
+- [x] Converter espessura e largura de milímetros para centímetros no formulário, cálculos, visualizações e PDF

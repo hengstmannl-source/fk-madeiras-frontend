@@ -24,6 +24,29 @@ export function formatNumber(value: string | number | null | undefined): string 
   }).format(num || 0);
 }
 
+/** Converte a dimensão introduzida em centímetros para a unidade interna em milímetros. */
+export function centimetersToMillimeters(value: number): number {
+  return value * 10;
+}
+
+/** Converte a dimensão interna em milímetros para apresentação em centímetros. */
+export function millimetersToCentimeters(value: string | number): number {
+  const numericValue = typeof value === "string" ? parseFloat(value) : value;
+  return Number.isFinite(numericValue) ? numericValue / 10 : 0;
+}
+
+export function formatDimensionCm(valueInMillimeters: string | number): string {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(millimetersToCentimeters(valueInMillimeters));
+}
+
+/** Aceita notação decimal brasileira, como "2,5", para campos numéricos da interface. */
+export function parseDecimalInput(value: string): number {
+  return parseFloat(value.trim().replace(",", "."));
+}
+
 export function calculatePrecoLinear(espessura: number, largura: number, precoM3: number): number {
   return (espessura / 1000) * (largura / 1000) * precoM3;
 }

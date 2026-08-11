@@ -8,7 +8,7 @@ import {
   ArrowLeft, FileText, Download, Send, CheckCircle2, XCircle, Clock, Loader2,
   Mail, Phone, MapPin, Package,
 } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { formatCurrency, formatDimensionCm } from "@/lib/utils";
 import { toast } from "sonner";
 
 const estadoColors: Record<string, string> = {
@@ -115,7 +115,7 @@ export default function OrcamentoEdit() {
                     {itens?.map((item, idx) => (
                       <tr key={idx} className="border-b border-border/50">
                         <td className="py-2.5 font-medium">{item.madeiraNome}</td>
-                        <td className="py-2.5 text-muted-foreground">{item.espessura}×{item.largura}mm × {item.comprimento}m</td>
+                        <td className="py-2.5 text-muted-foreground">{formatDimensionCm(item.espessura)}×{formatDimensionCm(item.largura)} cm × {item.comprimento} m</td>
                         <td className="py-2.5 text-right">{item.quantidade}</td>
                         <td className="py-2.5 text-right">{formatCurrency(item.precoM3)}</td>
                         <td className="py-2.5 text-right">{formatCurrency(item.precoLinear)}</td>

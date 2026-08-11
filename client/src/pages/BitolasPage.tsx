@@ -1,5 +1,11 @@
 import { useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
+import {
+  centimetersToMillimeters,
+  formatDimensionCm,
+  millimetersToCentimeters,
+  parseDecimalInput,
+} from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,7 +37,19 @@ export default function BitolasPage() {
 
   const handleSubmit = () => {
     if (!form.madeiraId || !form.espessura || !form.largura) { toast.error("Preencha os campos obrigatórios"); return; }
-    const payload = { madeiraId: Number(form.madeiraId), espessura: form.espessura, largura: form.largura, comprimento: form.comprimento || undefined, descricao: form.descricao || undefined };
+    const espessuraCm = parseDecimalInput(form.espessura);
+    const larguraCm = parseDecimalInput(form.largura);
+    if (!Number.isFinite(espessuraCm) || espessuraCm <= 0 || !Number.isFinite(larguraCm) || larguraCm <= 0) {
+      toast.error("Introduza dimensões válidas em centímetros");
+      return;
+    }
+    const payload = {
+      madeiraId: Number(form.madeiraId),
+      espessura: String(centimetersToMillimeters(espessuraCm)),
+      largura: String(centimetersToMillimeters(larguraCm)),
+      comprimento: form.comprimento || undefined,
+      descricao: form.descricao || undefined,
+    };
     if (editId) {
       update.mutate({ id: editId, ...payload }, {
         onSuccess: () => { toast.success("Bitola atualizada"); utils.bitola.list.invalidate(); setOpen(false); setEditId(null); setForm({ madeiraId: "", espessura: "", largura: "", comprimento: "", descricao: "" }); },
@@ -46,7 +64,7 @@ export default function BitolasPage() {
   };
 
   const handleEdit = (b: any) => {
-    setEditId(b.id); setForm({ madeiraId: String(b.madeiraId), espessura: b.espessura, largura: b.largura, comprimento: b.comprimento || "", descricao: b.descricao || "" }); setOpen(true);
+    setEditId(b.id); setForm({ madeiraId: String(b.madeiraId), espessura: String(millimetersToCentimeters(b.espessura)), largura: String(millimetersToCentimeters(b.largura)), comprimento: b.comprimento || "", descricao: b.descricao || "" }); setOpen(true);
   };
   const handleDelete = (id: number) => {
     if (!confirm("Eliminar esta bitola?")) return;
@@ -69,16 +87,16 @@ export default function BitolasPage() {
           <DialogContent>
             <DialogHeader><DialogTitle>{editId ? "Editar" : "Nova"} Bitola</DialogTitle></DialogHeader>
             <div className="space-y-4">
-              <div className="space-y-2"><Label>Wood type *</Label>
+              <div className="space-y-2"><Label>Tipo de madeira *</Label>
                 <Select value={form.madeiraId} onValueChange={(v) => setForm({...form, madeiraId: v})}>
                   <SelectTrigger className="bg-white"><SelectValue placeholder="Selecionar madeira" /></SelectTrigger>
                   <SelectContent>{madeiras.data?.filter(m => m.ativo).map((m) => (<SelectItem key={m.id} value={String(m.id)}>{m.nome}</SelectItem>))}</SelectContent>
                 </Select>
               </div>
               <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-2"><Label>Espessura (mm) *</Label><Input type="number" value={form.espessura} onChange={(e) => setForm({...form, espessura: e.target.value})} className="bg-white" /></div>
-                <div className="space-y-2"><Label>Largura (mm) *</Label><Input type="number" value={form.largura} onChange={(e) => setForm({...form, largura: e.target.value})} className="bg-white" /></div>
-                <div className="space-y-2"><Label>Comprimento (m)</Label><Input type="number" value={form.comprimento} onChange={(e) => setForm({...form, comprimento: e.target.value})} className="bg-white" /></div>
+                <div className="space-y-2"><Label>Espessura (cm) *</Label><Input type="text" inputMode="decimal" placeholder="2,5" value={form.espessura} onChange={(e) => setForm({...form, espessura: e.target.value})} className="bg-white" /></div>
+                <div className="space-y-2"><Label>Largura (cm) *</Label><Input type="text" inputMode="decimal" placeholder="15" value={form.largura} onChange={(e) => setForm({...form, largura: e.target.value})} className="bg-white" /></div>
+                <div className="space-y-2"><Label>Comprimento (m)</Label><Input type="text" inputMode="decimal" placeholder="3" value={form.comprimento} onChange={(e) => setForm({...form, comprimento: e.target.value})} className="bg-white" /></div>
               </div>
               <div className="space-y-2"><Label>Descrição</Label><Input value={form.descricao} onChange={(e) => setForm({...form, descricao: e.target.value})} className="bg-white" /></div>
               <Button onClick={handleSubmit} disabled={create.isPending || update.isPending} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">{create.isPending || update.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{editId ? "Atualizar" : "Criar"}</Button>
@@ -112,8 +130,8 @@ export default function BitolasPage() {
               {bitolas.data.map((b) => (
                 <TableRow key={b.id} className="hover:bg-muted/30">
                   <TableCell className="font-medium">{madeiraName(b.madeiraId)}</TableCell>
-                  <TableCell>{b.espessura} mm</TableCell>
-                  <TableCell>{b.largura} mm</TableCell>
+                  <TableCell>{formatDimensionCm(b.espessura)} cm</TableCell>
+                  <TableCell>{formatDimensionCm(b.largura)} cm</TableCell>
                   <TableCell>{b.comprimento ? `${b.comprimento} m` : "—"}</TableCell>
                   <TableCell className="text-muted-foreground">{b.descricao || "—"}</TableCell>
                   <TableCell className="text-right">

@@ -7,31 +7,37 @@ import {
   calculateMetroLinear,
   formatCurrency,
   formatNumber,
+  parseDecimalInput,
+} from "../client/src/lib/utils";
+import {
+  centimetersToMillimeters,
+  millimetersToCentimeters,
+  formatDimensionCm,
 } from "../client/src/lib/utils";
 
 describe("Cálculos de Orçamento FK Madeiras", () => {
   it("calcula preço linear corretamente", () => {
-    // espessura 25mm, largura 150mm, preço 800/m³
-    // espessura em metros = 0.025, largura em metros = 0.150
-    const precoLinear = calculatePrecoLinear(25, 150, 800);
-    // 0.025 * 0.150 * 800 = 3.00 €/m
+    // O utilizador introduz 2,5 cm × 15 cm → internamente 25 mm × 150 mm, preço 800 R$/m³
+    const espMm = centimetersToMillimeters(2.5); // 25 mm
+    const largMm = centimetersToMillimeters(15);  // 150 mm
+    const precoLinear = calculatePrecoLinear(espMm, largMm, 800);
+    // 0.025 * 0.150 * 800 = 3.00 R$/m
     expect(precoLinear).toBeCloseTo(3.0, 2);
   });
 
   it("calcula valor por peça", () => {
-    const valorPeca = calculateValorPeca(3.0, 3); // 3€/m × 3m = 9€
+    const valorPeca = calculateValorPeca(3.0, 3); // 3 R$/m × 3 m = 9 R$
     expect(valorPeca).toBeCloseTo(9.0, 2);
   });
 
   it("calcula valor total", () => {
-    const total = calculateValorTotal(9.0, 10); // 9€ × 10 = 90€
+    const total = calculateValorTotal(9.0, 10); // 9 R$ × 10 = 90 R$
     expect(total).toBeCloseTo(90.0, 2);
   });
 
   it("calcula volume corretamente", () => {
-    // 25mm × 150mm × 3m × 10 peças
-    // 0.025 * 0.150 * 3 * 10 = 0.1125 m³
-    const volume = calculateVolume(25, 150, 3, 10);
+    // Utilizador introduz 2,5 cm × 15 cm → 25 mm × 150 mm × 3 m × 10 peças
+    const volume = calculateVolume(centimetersToMillimeters(2.5), centimetersToMillimeters(15), 3, 10);
     expect(volume).toBeCloseTo(0.1125, 4);
   });
 
@@ -55,9 +61,9 @@ describe("Cálculos de Orçamento FK Madeiras", () => {
   });
 
   it("calcula com dimensões variadas", () => {
-    // 50mm × 100mm × 4m × 5 peças @ 600/m³
-    const precoLinear = calculatePrecoLinear(50, 100, 600);
-    // 0.050 * 0.100 * 600 = 3.00 €/m
+    // Utilizador introduz 5 cm × 10 cm → 50 mm × 100 mm × 4 m × 5 peças @ 600 R$/m³
+    const precoLinear = calculatePrecoLinear(centimetersToMillimeters(5), centimetersToMillimeters(10), 600);
+    // 0.050 * 0.100 * 600 = 3.00 R$/m
     expect(precoLinear).toBeCloseTo(3.0, 2);
 
     const valorPeca = calculateValorPeca(precoLinear, 4);
@@ -73,5 +79,32 @@ describe("Cálculos de Orçamento FK Madeiras", () => {
     expect(calculateValorTotal(0, 0)).toBe(0);
     expect(calculateVolume(0, 0, 0, 0)).toBe(0);
     expect(calculateMetroLinear(0, 0)).toBe(0);
+  });
+
+  describe("Conversão de unidades (cm ↔ mm)", () => {
+    it("converte centímetros para milímetros", () => {
+      expect(centimetersToMillimeters(2.5)).toBe(25);
+      expect(centimetersToMillimeters(15)).toBe(150);
+      expect(centimetersToMillimeters(0)).toBe(0);
+    });
+
+    it("converte milímetros para centímetros", () => {
+      expect(millimetersToCentimeters(25)).toBe(2.5);
+      expect(millimetersToCentimeters(150)).toBe(15);
+      expect(millimetersToCentimeters("25")).toBe(2.5);
+      expect(millimetersToCentimeters(0)).toBe(0);
+    });
+
+    it("formata dimensão em centímetros a partir de milímetros", () => {
+      expect(formatDimensionCm(25)).toBe("2,5");
+      expect(formatDimensionCm("150")).toBe("15");
+      expect(formatDimensionCm(0)).toBe("0");
+    });
+
+    it("aceita vírgula ou ponto em entradas decimais", () => {
+      expect(parseDecimalInput("2,5")).toBe(2.5);
+      expect(parseDecimalInput("2.5")).toBe(2.5);
+      expect(parseDecimalInput(" 15 ")).toBe(15);
+    });
   });
 });
