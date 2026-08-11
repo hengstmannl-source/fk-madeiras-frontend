@@ -251,8 +251,11 @@ export async function getOrcamentoById(id: number) {
   return result[0];
 }
 
-async function validarAlteracaoOrcamento(id: number, confirmacaoDupla = false) {
-  const orcamento = await getOrcamentoById(id);
+async function validarAlteracaoOrcamento(id: number, confirmacaoDupla = false, database?: any) {
+  const db = database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const resultado = await db.select().from(orcamentos).where(eq(orcamentos.id, id)).limit(1);
+  const orcamento = resultado[0];
   if (!orcamento) throw new Error("Orçamento não encontrado");
   if (!podeAlterarOrcamentoPago(orcamento.pago, confirmacaoDupla)) {
     throw new Error("Orçamento pago está bloqueado. Confirme duas vezes para prosseguir.");
@@ -311,10 +314,16 @@ export async function deleteOrcamento(id: number, confirmacaoDupla = false) {
   return { success: true };
 }
 
-export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" | "enviado" | "aprovado" | "rejeitado", userId?: number, confirmacaoDupla = false) {
-  const db = await getDb();
+export async function updateOrcamentoEstado(
+  id: number,
+  novoEstado: "rascunho" | "enviado" | "aprovado" | "rejeitado",
+  userId?: number,
+  confirmacaoDupla = false,
+  dependencias?: { database?: any; criarTituloReceber?: (orcamentoId: number, usuarioId: number) => Promise<unknown> },
+) {
+  const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  await validarAlteracaoOrcamento(id, confirmacaoDupla);
+  await validarAlteracaoOrcamento(id, confirmacaoDupla, db);
   await db.update(orcamentos).set({ estado: novoEstado }).where(eq(orcamentos.id, id));
   if (userId) {
     await db.insert(historicoAlteracoes).values({
@@ -325,7 +334,7 @@ export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" |
     });
   }
   if (novoEstado === "aprovado" && userId) {
-    await criarTituloReceberDeOrcamento(id, userId);
+    await (dependencias?.criarTituloReceber ?? criarTituloReceberDeOrcamento)(id, userId);
   }
   return { success: true };
 }

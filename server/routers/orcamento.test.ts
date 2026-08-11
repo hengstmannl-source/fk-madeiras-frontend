@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ItemSchema } from "./orcamento";
+import { historicoAlteracoes } from "../../drizzle/schema";
 
 describe("itens de orçamento livres", () => {
   it("aceita madeira digitada e preço por m³ sem madeira cadastrada", () => {
@@ -24,3 +25,8 @@ describe("itens de orçamento livres", () => {
   });
 });
 
+describe("histórico de alterações", () => {
+  it("aceita registrar mudanças de estado de orçamento", () => {
+    expect(historicoAlteracoes.tipo.enumValues).toContain("estado");
+  });
+});

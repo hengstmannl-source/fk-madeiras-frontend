@@ -50,3 +50,6 @@
 - [x] Criar painel financeiro com fluxo de caixa, vencidos e compromissos futuros
 - [x] Exibir a conta financeira associada a cada baixa na conciliação manual
 - [x] Exibir blocos específicos de títulos vencidos e próximos vencimentos no painel financeiro
+- [x] Corrigir a gravação do histórico de alterações ao enviar ou aprovar um orçamento
+- [x] Testar os fluxos de envio e aprovação após a correção do histórico
+- [x] Testar as transições de envio e aprovação registrando histórico de estado sem erro
