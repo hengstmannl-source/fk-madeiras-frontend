@@ -23,7 +23,7 @@ import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, Users,
-  Package, FileText,
+  Package, FileText, Building2,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -35,6 +35,7 @@ const menuItems = [
   { icon: Package, label: "Madeiras", path: "/madeiras" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: FileText, label: "Orçamentos", path: "/orcamentos" },
+  { icon: Building2, label: "Empresa", path: "/empresa" },
 ];
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";

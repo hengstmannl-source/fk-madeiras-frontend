@@ -2,7 +2,7 @@ import { eq, and, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
-  orcamentos, itensOrcamento, historicoAlteracoes,
+  orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento,
 } from "../drizzle/schema";
@@ -178,6 +178,41 @@ export async function deleteCliente(id: number) {
   if (!db) throw new Error("Database not available");
   await db.update(clientes).set({ ativo: false }).where(eq(clientes.id, id));
   return { success: true };
+}
+
+// ─── Configuração da Empresa ───
+export async function getEmpresaConfiguracao() {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(empresaConfiguracoes).where(eq(empresaConfiguracoes.id, 1)).limit(1);
+  return result[0];
+}
+
+export async function saveEmpresaLogo(logo: { key: string; url: string; mimeType: string }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(empresaConfiguracoes).values({
+    id: 1,
+    logoKey: logo.key,
+    logoUrl: logo.url,
+    logoMimeType: logo.mimeType,
+  }).onDuplicateKeyUpdate({
+    set: {
+      logoKey: logo.key,
+      logoUrl: logo.url,
+      logoMimeType: logo.mimeType,
+    },
+  });
+  return getEmpresaConfiguracao();
+}
+
+export async function clearEmpresaLogo() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.insert(empresaConfiguracoes).values({ id: 1 }).onDuplicateKeyUpdate({
+    set: { logoKey: null, logoUrl: null, logoMimeType: null },
+  });
+  return getEmpresaConfiguracao();
 }
 
 // ─── Orçamentos ───

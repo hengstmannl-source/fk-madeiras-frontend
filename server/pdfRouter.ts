@@ -1,5 +1,6 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { getOrcamentoWithItems, listClientes } from "./db";
+import { getEmpresaConfiguracao, getOrcamentoWithItems, listClientes } from "./db";
+import { storageGetSignedUrl } from "./storage";
 
 // Format number as BRL currency (pt-BR: 1.234,56)
 function formatBRL(value: string): string {
@@ -20,6 +21,24 @@ function formatDimensionCm(valueInMillimeters: string): string {
   }).format(num / 10);
 }
 
+async function loadCompanyLogo(pdfDoc: PDFDocument) {
+  const configuracao = await getEmpresaConfiguracao();
+  if (!configuracao?.logoKey || !configuracao.logoMimeType) return undefined;
+
+  try {
+    const signedUrl = await storageGetSignedUrl(configuracao.logoKey);
+    const response = await fetch(signedUrl);
+    if (!response.ok) throw new Error(`Falha ao obter logótipo (${response.status})`);
+    const image = await response.arrayBuffer();
+    return configuracao.logoMimeType === "image/png"
+      ? await pdfDoc.embedPng(image)
+      : await pdfDoc.embedJpg(image);
+  } catch (error) {
+    console.warn("[PDF] Não foi possível incluir o logótipo da empresa:", error);
+    return undefined;
+  }
+}
+
 export async function registerPdfRoutes(app: any) {
   app.get("/api/pdf/orcamento/:id", async (req: any, res: any) => {
     try {
@@ -37,16 +56,28 @@ export async function registerPdfRoutes(app: any) {
       const { width, height } = page.getSize();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const logo = await loadCompanyLogo(pdfDoc);
 
-      let y = height - 50;
+      const logoDimensions = logo?.scaleToFit(118, 54);
+      const headerX = logoDimensions ? 50 + logoDimensions.width + 16 : 50;
+      if (logoDimensions) {
+        page.drawImage(logo!, {
+          x: 50,
+          y: height - 50 - logoDimensions.height,
+          width: logoDimensions.width,
+          height: logoDimensions.height,
+        });
+      }
+
+      let y = height - 55;
 
       // Header - Company name
-      page.drawText("FK MADEIRAS", { x: 50, y, size: 24, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
+      page.drawText("FK MADEIRAS", { x: headerX, y, size: 24, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
       y -= 20;
-      page.drawText("Sistema de Orçamentos", { x: 50, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText("Sistema de Orçamentos", { x: headerX, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
 
       // Orçamento number and date
-      y -= 40;
+      y -= 48;
       page.drawText(`Orçamento: ${data.orcamento.numero}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.2, 0.15, 0.05) });
       y -= 18;
       page.drawText(`Data: ${new Date(data.orcamento.createdAt).toLocaleDateString("pt-BR")}`, { x: 50, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });

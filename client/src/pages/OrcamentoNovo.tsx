@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator, UserPlus } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator, UserPlus, Check, ChevronsUpDown } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -48,6 +50,7 @@ export default function OrcamentoNovo() {
   const clientes = trpc.cliente.list.useQuery();
 
   const [clienteId, setClienteId] = useState("");
+  const [clienteSelectorOpen, setClienteSelectorOpen] = useState(false);
   const [novoClienteOpen, setNovoClienteOpen] = useState(false);
   const [novoClienteForm, setNovoClienteForm] = useState({ nome: "", contacto: "", email: "", morada: "", nif: "" });
   const createCliente = trpc.cliente.create.useMutation();
@@ -58,6 +61,7 @@ export default function OrcamentoNovo() {
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
 
   const [selectedMadeiraId, setSelectedMadeiraId] = useState<string>("");
+  const clienteSelecionado = clientes.data?.find((cliente) => cliente.id === Number(clienteId));
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -193,12 +197,48 @@ export default function OrcamentoNovo() {
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
                   <div className="flex gap-2">
-                    <Select value={clienteId} onValueChange={setClienteId}>
-                      <SelectTrigger className="bg-white flex-1"><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
-                      <SelectContent>
-                        {clientes.data?.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>))}
-                      </SelectContent>
-                    </Select>
+                    <Popover open={clienteSelectorOpen} onOpenChange={setClienteSelectorOpen}>
+                      <PopoverTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          role="combobox"
+                          aria-expanded={clienteSelectorOpen}
+                          className="bg-white flex-1 justify-between font-normal"
+                        >
+                          <span className="truncate">
+                            {clienteSelecionado
+                              ? `${clienteSelecionado.nome}${clienteSelecionado.contacto ? ` · ${clienteSelecionado.contacto}` : ""}`
+                              : "Buscar cliente por nome ou telefone"}
+                          </span>
+                          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-[420px] max-w-[calc(100vw-2rem)] p-0" align="start">
+                        <Command>
+                          <CommandInput placeholder="Digite nome ou telefone..." />
+                          <CommandList>
+                            <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
+                            <CommandGroup heading="Clientes">
+                              {clientes.data?.map((cliente) => (
+                                <CommandItem
+                                  key={cliente.id}
+                                  value={`${cliente.nome} ${cliente.contacto ?? ""}`}
+                                  onSelect={() => {
+                                    setClienteId(String(cliente.id));
+                                    setClienteSelectorOpen(false);
+                                  }}
+                                >
+                                  <Check className={`mr-2 h-4 w-4 ${clienteId === String(cliente.id) ? "opacity-100" : "opacity-0"}`} />
+                                  <span className="min-w-0 truncate">{cliente.nome}</span>
+                                  {cliente.contacto && <span className="ml-auto pl-3 text-xs text-muted-foreground">{cliente.contacto}</span>}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </CommandList>
+                        </Command>
+                      </PopoverContent>
+                    </Popover>
                     <Button
                       type="button"
                       variant="outline"

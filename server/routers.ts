@@ -7,6 +7,7 @@ import { bitolaRouter } from "./routers/bitola";
 import { clienteRouter } from "./routers/cliente";
 import { orcamentoRouter } from "./routers/orcamento";
 import { dashboardRouter } from "./routers/dashboard";
+import { empresaRouter } from "./routers/empresa";
 
 export const appRouter = router({
   system: systemRouter,
@@ -23,6 +24,7 @@ export const appRouter = router({
   cliente: clienteRouter,
   orcamento: orcamentoRouter,
   dashboard: dashboardRouter,
+  empresa: empresaRouter,
 });
 
 export type AppRouter = typeof appRouter;

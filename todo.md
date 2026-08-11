@@ -19,3 +19,6 @@
 - [x] Remover aba Bitolas da navegação lateral e das rotas visíveis
 - [x] Adicionar opção de criar cliente em contexto no formulário de novo orçamento
 - [x] Validar o retorno de insertId para selecionar automaticamente o cliente criado em contexto
+- [x] Adicionar pesquisa de clientes por nome ou telefone no novo orçamento
+- [x] Permitir enviar e gerir o logótipo da empresa para uso nos PDFs de orçamento
+- [x] Incluir automaticamente o logótipo configurado no cabeçalho do PDF de orçamento

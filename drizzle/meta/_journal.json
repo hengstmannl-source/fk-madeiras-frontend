@@ -15,6 +15,13 @@
       "when": 1786365056445,
       "tag": "0001_superb_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1786456754816,
+      "tag": "0002_abandoned_spyke",
+      "breakpoints": true
     }
   ]
 }

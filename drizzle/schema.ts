@@ -115,3 +115,16 @@ export const historicoAlteracoes = mysqlTable("historicoAlteracoes", {
 });
 
 export type HistoricoAlteracao = typeof historicoAlteracoes.$inferSelect;
+
+export const empresaConfiguracoes = mysqlTable("empresaConfiguracoes", {
+  /** Registo único da empresa, sempre persistido com id 1. */
+  id: int("id").primaryKey(),
+  logoKey: varchar("logoKey", { length: 500 }),
+  logoUrl: varchar("logoUrl", { length: 700 }),
+  logoMimeType: varchar("logoMimeType", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type EmpresaConfiguracao = typeof empresaConfiguracoes.$inferSelect;
+export type InsertEmpresaConfiguracao = typeof empresaConfiguracoes.$inferInsert;
