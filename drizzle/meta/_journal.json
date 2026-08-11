@@ -22,6 +22,20 @@
       "when": 1786456754816,
       "tag": "0002_abandoned_spyke",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1786459186053,
+      "tag": "0003_previous_hellfire_club",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1786459295303,
+      "tag": "0004_large_warbound",
+      "breakpoints": true
     }
   ]
 }

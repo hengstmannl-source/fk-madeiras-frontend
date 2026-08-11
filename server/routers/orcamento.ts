@@ -2,8 +2,8 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 
-const ItemSchema = z.object({
-  madeiraId: z.number(),
+export const ItemSchema = z.object({
+  madeiraId: z.number().nullable().optional(),
   bitolaId: z.number().nullable().optional(),
   madeiraNome: z.string(),
   bitolaDescricao: z.string(),
@@ -79,17 +79,24 @@ export const orcamentoRouter = router({
     .input(z.object({
       id: z.number(),
       estado: z.enum(["rascunho", "enviado", "aprovado", "rejeitado"]),
+      confirmacaoDupla: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
-      await db.updateOrcamentoEstado(input.id, input.estado, ctx.user.id);
+      await db.updateOrcamentoEstado(input.id, input.estado, ctx.user.id, input.confirmacaoDupla);
       return { success: true };
     }),
 
   delete: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(z.object({ id: z.number(), confirmacaoDupla: z.boolean().default(false) }))
     .mutation(async ({ input }) => {
-      await db.deleteOrcamento(input.id);
+      await db.deleteOrcamento(input.id, input.confirmacaoDupla);
       return { success: true };
+    }),
+
+  registrarPagamento: protectedProcedure
+    .input(z.object({ id: z.number() }))
+    .mutation(async ({ ctx, input }) => {
+      return db.registrarPagamentoOrcamento(input.id, ctx.user.id);
     }),
 
   duplicate: protectedProcedure

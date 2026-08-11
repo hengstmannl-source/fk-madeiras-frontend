@@ -3,7 +3,6 @@ import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
@@ -30,7 +29,7 @@ import {
 } from "@/components/ui/dialog";
 
 interface ItemOrcamento {
-  madeiraId: number;
+  madeiraId: number | null;
   bitolaId: number | null;
   madeiraNome: string;
   bitolaDescricao: string;
@@ -46,7 +45,6 @@ interface ItemOrcamento {
 
 export default function OrcamentoNovo() {
   const [, setLocation] = useLocation();
-  const madeiras = trpc.madeira.list.useQuery();
   const clientes = trpc.cliente.list.useQuery();
 
   const [clienteId, setClienteId] = useState("");
@@ -60,7 +58,6 @@ export default function OrcamentoNovo() {
   const [vendedor, setVendedor] = useState("");
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
 
-  const [selectedMadeiraId, setSelectedMadeiraId] = useState<string>("");
   const clienteSelecionado = clientes.data?.find((cliente) => cliente.id === Number(clienteId));
 
   const totals = useMemo(() => {
@@ -86,16 +83,16 @@ export default function OrcamentoNovo() {
   }, [itens, desconto, frete]);
 
   const addItem = () => {
-    if (!selectedMadeiraId) { toast.error("Selecione uma madeira"); return; }
-    const madeira = madeiras.data?.find(m => m.id === Number(selectedMadeiraId));
-    if (!madeira) { toast.error("Madeira não encontrada"); return; }
-
-    // Get values from input fields (free-form dimensions)
+    const madeiraNome = (document.getElementById("madeira-input") as HTMLInputElement)?.value.trim();
+    const precoM3Input = (document.getElementById("preco-m3-input") as HTMLInputElement)?.value;
     const espValue = (document.getElementById("esp-input") as HTMLInputElement)?.value;
     const largValue = (document.getElementById("larg-input") as HTMLInputElement)?.value;
     const compValue = (document.getElementById("comp-input") as HTMLInputElement)?.value;
     const qtdValue = (document.getElementById("qtd-input") as HTMLInputElement)?.value;
 
+    if (!madeiraNome) { toast.error("Informe o nome da madeira"); return; }
+    const precoM3 = parseDecimalInput(precoM3Input);
+    if (!Number.isFinite(precoM3) || precoM3 <= 0) { toast.error("Informe um preço por m³ válido"); return; }
     if (!espValue || !largValue) { toast.error("Preencha espessura e largura"); return; }
     const espCm = parseDecimalInput(espValue);
     const largCm = parseDecimalInput(largValue);
@@ -113,15 +110,14 @@ export default function OrcamentoNovo() {
     // O utilizador trabalha em centímetros; os cálculos e a base de dados mantêm milímetros.
     const esp = centimetersToMillimeters(espCm);
     const larg = centimetersToMillimeters(largCm);
-    const precoM3 = parseFloat(madeira.precoM3);
     const precoLinear = calculatePrecoLinear(esp, larg, precoM3);
     const valorPeca = calculateValorPeca(precoLinear, comp);
     const valorTotal = calculateValorTotal(valorPeca, qtd);
 
     setItens([...itens, {
-      madeiraId: Number(selectedMadeiraId),
+      madeiraId: null,
       bitolaId: null,
-      madeiraNome: madeira.nome,
+      madeiraNome,
       bitolaDescricao: `${formatDimensionCm(esp)}×${formatDimensionCm(larg)} cm`,
       espessura: String(esp),
       largura: String(larg),
@@ -132,6 +128,10 @@ export default function OrcamentoNovo() {
       valorPeca: String(parseFloat(valorPeca.toFixed(2))),
       valorTotal: String(parseFloat(valorTotal.toFixed(2))),
     }]);
+    ["madeira-input", "preco-m3-input", "esp-input", "larg-input", "comp-input", "qtd-input"].forEach((id) => {
+      const input = document.getElementById(id) as HTMLInputElement | null;
+      if (input) input.value = "";
+    });
     toast.success("Item adicionado");
   };
 
@@ -263,40 +263,37 @@ export default function OrcamentoNovo() {
             <CardContent className="p-5">
               <h3 className="font-semibold text-sm mb-4 flex items-center gap-2"><Calculator className="h-4 w-4" />Adicionar Item</h3>
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label>Tipo de madeira *</Label>
-                  <Select value={selectedMadeiraId} onValueChange={setSelectedMadeiraId}>
-                    <SelectTrigger className="bg-white"><SelectValue placeholder="Selecionar madeira" /></SelectTrigger>
-                    <SelectContent>
-                      {madeiras.data?.filter(m => m.ativo).map((m) => (<SelectItem key={m.id} value={String(m.id)}>{m.nome} — {formatCurrency(m.precoM3)}/m³</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="sm:col-span-2 space-y-2">
+                    <Label>Madeira *</Label>
+                    <Input id="madeira-input" placeholder="Ex.: Guarandi" className="bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Preço por m³ (R$) *</Label>
+                    <Input id="preco-m3-input" type="text" inputMode="decimal" placeholder="2400,00" className="bg-white" />
+                  </div>
                 </div>
-                {selectedMadeiraId && (
-                  <>
-                    <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">Dimensões (preencha livremente)</Label>
-                    </div>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div className="space-y-2">
-                        <Label>Espessura (cm) *</Label>
-                        <Input id="esp-input" type="text" inputMode="decimal" placeholder="2,5" className="bg-white" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Largura (cm) *</Label>
-                        <Input id="larg-input" type="text" inputMode="decimal" placeholder="15" className="bg-white" />
-                      </div>
-                      <div className="space-y-2">
-                        <Label>Comprimento (m)</Label>
-                        <Input id="comp-input" type="text" inputMode="decimal" placeholder="3" className="bg-white" />
-                      </div>
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Quantidade *</Label>
-                      <Input id="qtd-input" type="number" placeholder="1" min="1" className="bg-white" />
-                    </div>
-                  </>
-                )}
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Dimensões (preencha livremente)</Label>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label>Espessura (cm) *</Label>
+                    <Input id="esp-input" type="text" inputMode="decimal" placeholder="2,5" className="bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Largura (cm) *</Label>
+                    <Input id="larg-input" type="text" inputMode="decimal" placeholder="15" className="bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Comprimento (m)</Label>
+                    <Input id="comp-input" type="text" inputMode="decimal" placeholder="3" className="bg-white" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Quantidade *</Label>
+                  <Input id="qtd-input" type="number" placeholder="1" min="1" className="bg-white" />
+                </div>
                 <Button onClick={addItem} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="h-4 w-4 mr-2" />Adicionar Item
                 </Button>

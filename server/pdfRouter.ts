@@ -112,10 +112,8 @@ export async function registerPdfRoutes(app: any) {
         x += colWidths[i];
       }
 
-      // Separator line
-      y -= 12;
-      page.drawLine({ start: { x: 50, y }, end: { x: width - 50, y }, thickness: 0.5, color: rgb(0.8, 0.8, 0.8) });
-      y -= 4;
+      // Espaçamento antes da primeira linha de item, sem regra horizontal.
+      y -= 16;
 
       // Items
       for (const item of data.itens) {

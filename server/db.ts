@@ -235,6 +235,26 @@ export async function getOrcamentoWithItems(id: number) {
   return { orcamento: orc[0], itens };
 }
 
+export function podeAlterarOrcamentoPago(pago: boolean, confirmacaoDupla: boolean) {
+  return !pago || confirmacaoDupla;
+}
+
+export async function getOrcamentoById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(orcamentos).where(eq(orcamentos.id, id)).limit(1);
+  return result[0];
+}
+
+async function validarAlteracaoOrcamento(id: number, confirmacaoDupla = false) {
+  const orcamento = await getOrcamentoById(id);
+  if (!orcamento) throw new Error("Orçamento não encontrado");
+  if (!podeAlterarOrcamentoPago(orcamento.pago, confirmacaoDupla)) {
+    throw new Error("Orçamento pago está bloqueado. Confirme duas vezes para prosseguir.");
+  }
+  return orcamento;
+}
+
 export async function createOrcamento(data: InsertOrcamento, itens: Partial<InsertItemOrcamento>[]) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -243,7 +263,7 @@ export async function createOrcamento(data: InsertOrcamento, itens: Partial<Inse
   if (itens.length > 0) {
     const itensWithOrcId: InsertItemOrcamento[] = itens.map((i): InsertItemOrcamento => ({
       orcamentoId: orcId,
-      madeiraId: i.madeiraId!,
+      madeiraId: i.madeiraId ?? null,
       bitolaId: i.bitolaId!,
       madeiraNome: i.madeiraNome!,
       bitolaDescricao: i.bitolaDescricao!,
@@ -269,24 +289,27 @@ export async function createOrcamento(data: InsertOrcamento, itens: Partial<Inse
   return { id: orcId };
 }
 
-export async function updateOrcamento(id: number, data: Partial<InsertOrcamento>) {
+export async function updateOrcamento(id: number, data: Partial<InsertOrcamento>, confirmacaoDupla = false) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  await validarAlteracaoOrcamento(id, confirmacaoDupla);
   await db.update(orcamentos).set(data).where(eq(orcamentos.id, id));
   return { success: true };
 }
 
-export async function deleteOrcamento(id: number) {
+export async function deleteOrcamento(id: number, confirmacaoDupla = false) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  await validarAlteracaoOrcamento(id, confirmacaoDupla);
   await db.delete(itensOrcamento).where(eq(itensOrcamento.orcamentoId, id));
   await db.delete(orcamentos).where(eq(orcamentos.id, id));
   return { success: true };
 }
 
-export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" | "enviado" | "aprovado" | "rejeitado", userId?: number) {
+export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" | "enviado" | "aprovado" | "rejeitado", userId?: number, confirmacaoDupla = false) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  await validarAlteracaoOrcamento(id, confirmacaoDupla);
   await db.update(orcamentos).set({ estado: novoEstado }).where(eq(orcamentos.id, id));
   if (userId) {
     await db.insert(historicoAlteracoes).values({
@@ -297,6 +320,25 @@ export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" |
     });
   }
   return { success: true };
+}
+
+export async function registrarPagamentoOrcamento(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const orcamento = await getOrcamentoById(id);
+  if (!orcamento) throw new Error("Orçamento não encontrado");
+  if (orcamento.estado !== "aprovado") throw new Error("Apenas orçamentos aprovados podem ser marcados como pagos");
+  if (orcamento.pago) throw new Error("Este orçamento já foi registrado como pago");
+
+  const pagoEm = new Date();
+  await db.update(orcamentos).set({ pago: true, pagoEm, pagoPor: userId }).where(eq(orcamentos.id, id));
+  await db.insert(historicoAlteracoes).values({
+    orcamentoId: id,
+    usuarioId: userId,
+    tipo: "alteracao" as any,
+    detalhes: JSON.stringify({ acao: "pagamento_registrado", pagoEm: pagoEm.toISOString() }),
+  });
+  return { success: true, pagoEm };
 }
 
 export async function duplicateOrcamento(id: number) {
@@ -325,6 +367,9 @@ export async function duplicateOrcamento(id: number) {
     observacoes: orcamento.observacoes,
     vendedor: orcamento.vendedor,
     criadoPor: orcamento.criadoPor,
+    pago: false,
+    pagoEm: null,
+    pagoPor: null,
   };
   const novosItens: Omit<InsertItemOrcamento, "id">[] = itens.map(i => ({
     orcamentoId: 0, // will be replaced by createOrcamento

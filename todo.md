@@ -22,3 +22,7 @@
 - [x] Adicionar pesquisa de clientes por nome ou telefone no novo orçamento
 - [x] Permitir enviar e gerir o logótipo da empresa para uso nos PDFs de orçamento
 - [x] Incluir automaticamente o logótipo configurado no cabeçalho do PDF de orçamento
+- [x] Permitir informar livremente o nome da madeira e o preço por metro cúbico no novo orçamento
+- [x] Corrigir a linha indevida acima das informações da tabela de itens no PDF
+- [x] Criar aba de Orçamentos Aprovados com registro de pagamento
+- [x] Bloquear alteração e exclusão de orçamento pago, exigindo dupla confirmação para desbloqueio excepcional

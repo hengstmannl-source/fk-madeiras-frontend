@@ -42,9 +42,10 @@ export default function OrcamentosPage() {
     });
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (orcamento: { id: number; pago: boolean }) => {
     if (!confirm("Eliminar este orçamento?")) return;
-    remove.mutate({ id }, { onSuccess: () => { toast.success("Orçamento eliminado"); utils.orcamento.list.invalidate(); }, onError: (err) => toast.error(err.message) });
+    if (orcamento.pago && !confirm("Este orçamento está pago e bloqueado. Confirma novamente que deseja eliminá-lo?")) return;
+    remove.mutate({ id: orcamento.id, confirmacaoDupla: orcamento.pago }, { onSuccess: () => { toast.success("Orçamento eliminado"); utils.orcamento.list.invalidate(); }, onError: (err) => toast.error(err.message) });
   };
 
   const handleDuplicate = (id: number) => {
@@ -99,7 +100,7 @@ export default function OrcamentosPage() {
                 <TableRow key={o.id} className="hover:bg-muted/30">
                   <TableCell className="font-medium text-primary">{o.numero}</TableCell>
                   <TableCell>{clienteMap.get(o.clienteId) || "—"}</TableCell>
-                  <TableCell><Badge variant="outline" className={`text-xs ${estadoColors[o.estado] ?? ""}`}>{o.estado}</Badge></TableCell>
+                  <TableCell><div className="flex items-center gap-2"><Badge variant="outline" className={`text-xs ${estadoColors[o.estado] ?? ""}`}>{o.estado}</Badge>{o.pago && <Badge variant="outline" className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">pago</Badge>}</div></TableCell>
                   <TableCell className="font-semibold">{formatCurrency(o.total)}</TableCell>
                   <TableCell>{o.totalPecas}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(o.createdAt).toLocaleDateString("pt-PT")}</TableCell>
@@ -107,7 +108,7 @@ export default function OrcamentosPage() {
                     <div className="flex items-center justify-end gap-1">
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setLocation(`/orcamentos/${o.id}`)}><Eye className="h-3.5 w-3.5" /></Button>
                       <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDuplicate(o.id)}><Copy className="h-3.5 w-3.5" /></Button>
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(o.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(o)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </TableCell>
                 </TableRow>

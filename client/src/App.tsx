@@ -12,6 +12,7 @@ import OrcamentosPage from "./pages/OrcamentosPage";
 import OrcamentoNovo from "./pages/OrcamentoNovo";
 import OrcamentoEdit from "./pages/OrcamentoEdit";
 import EmpresaPage from "./pages/EmpresaPage";
+import OrcamentosAprovadosPage from "./pages/OrcamentosAprovadosPage";
 
 function Router() {
   return (
@@ -20,6 +21,7 @@ function Router() {
         <Route path="/" component={Dashboard} />
         <Route path="/madeiras" component={MadeirasPage} />
         <Route path="/clientes" component={ClientesPage} />
+        <Route path="/orcamentos/aprovados" component={OrcamentosAprovadosPage} />
         <Route path="/orcamentos" component={OrcamentosPage} />
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />
         <Route path="/orcamentos/:id" component={OrcamentoEdit} />

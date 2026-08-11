@@ -31,7 +31,10 @@ export default function OrcamentoEdit() {
   const cliente = clientes.data?.find(c => c.id === orc.data?.orcamento.clienteId);
 
   const handleEstado = (estado: string) => {
-    updateEstado.mutate({ id: orcamentoId, estado: estado as any }, {
+    const pago = Boolean(orc.data?.orcamento.pago);
+    if (pago && !confirm("Este orçamento está pago e bloqueado. Deseja iniciar uma alteração excepcional?")) return;
+    if (pago && !confirm("Confirma novamente a alteração do estado de um orçamento pago?")) return;
+    updateEstado.mutate({ id: orcamentoId, estado: estado as any, confirmacaoDupla: pago }, {
       onSuccess: () => { toast.success(`Estado atualizado para "${estado}"`); utils.orcamento.get.invalidate({ id: orcamentoId }); },
       onError: (err) => toast.error(err.message),
     });
@@ -59,6 +62,7 @@ export default function OrcamentoEdit() {
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">{orcamento.numero}</h1>
             <Badge variant="outline" className={`text-xs ${estadoColors[orcamento.estado] ?? ""}`}>{orcamento.estado}</Badge>
+            {orcamento.pago && <Badge variant="outline" className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">pago e bloqueado</Badge>}
           </div>
           <p className="text-sm text-muted-foreground mt-1">
             {new Date(orcamento.createdAt).toLocaleDateString("pt-PT", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}

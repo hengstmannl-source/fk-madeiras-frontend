@@ -1,0 +1,1 @@
+ALTER TABLE `itensOrcamento` MODIFY COLUMN `madeiraId` int;

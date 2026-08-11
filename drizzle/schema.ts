@@ -78,6 +78,9 @@ export const orcamentos = mysqlTable("orcamentos", {
   vendedor: varchar("vendedor", { length: 200 }),
   criadoPor: int("criadoPor"),
   dataValidade: timestamp("dataValidade"),
+  pago: boolean("pago").notNull().default(false),
+  pagoEm: timestamp("pagoEm"),
+  pagoPor: int("pagoPor"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -88,7 +91,7 @@ export type InsertOrcamento = typeof orcamentos.$inferInsert;
 export const itensOrcamento = mysqlTable("itensOrcamento", {
   id: int("id").autoincrement().primaryKey(),
   orcamentoId: int("orcamentoId").notNull(),
-  madeiraId: int("madeiraId").notNull(),
+  madeiraId: int("madeiraId"),
   bitolaId: int("bitolaId"),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   bitolaDescricao: varchar("bitolaDescricao", { length: 200 }).notNull(),
