@@ -1,6 +1,6 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   baixas: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
   estornar: vi.fn(),
+  importar: vi.fn(),
   invalidar: vi.fn(),
   fluxo: {
     saldoAbertura: 100,
@@ -42,6 +43,7 @@ vi.mock("@/lib/trpc", () => {
           recorrencias: { list: invalidar },
           alertas: { list: invalidar },
           relatorios: { fluxoCaixa: invalidar },
+          intercambios: { modeloLancamentosCsv: invalidar, exportarLancamentosCsv: invalidar },
         },
       }),
       cliente: { list: queryVazia },
@@ -82,6 +84,11 @@ vi.mock("@/lib/trpc", () => {
         recorrencias: { list: queryVazia, create: mutationInerte },
         alertas: { list: queryVazia },
         relatorios: { fluxoCaixa: { useQuery: () => ({ data: state.fluxo, isLoading: false, isFetching: false, refetch: vi.fn() }) } },
+        intercambios: {
+          modeloLancamentosCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "referencia;tipo" }) }) },
+          exportarLancamentosCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "referencia;tipo" }) }) },
+          importarLancamentosCsv: { useMutation: () => ({ isPending: false, mutate: (input: { conteudo: string }, callbacks: { onSuccess?: (resultado: { importados: number; erros: string[] }) => void }) => { state.importar(input); callbacks.onSuccess?.({ importados: 0, erros: ["Linha 2: categoria não encontrada"] }); } }) },
+        },
       },
     },
   };
@@ -94,6 +101,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     state.search = "";
     state.cancelar.mockReset();
     state.estornar.mockReset();
+    state.importar.mockReset();
     state.invalidar.mockReset();
     state.baixas = [{
       id: 40,
@@ -199,5 +207,16 @@ describe("FinanceiroPage — cancelamento manual", () => {
       expect(screen.getByText("Estornada")).toBeInTheDocument();
       expect(screen.getByText(/Pagamento duplicado/)).toBeInTheDocument();
     });
+  });
+
+  it("oferece modelo, exportação e importação CSV com orientação de validação", async () => {
+    render(<FinanceiroPage />);
+
+    expect(screen.getByRole("button", { name: "Modelo CSV" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exportar CSV" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Importar CSV" }));
+    expect(screen.getByRole("heading", { name: "Importar lançamentos financeiros" })).toBeInTheDocument();
+    expect(screen.getByText(/se houver alguma linha inválida/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Arquivo CSV para importação")).toHaveAttribute("accept", ".csv,text/csv");
   });
 });

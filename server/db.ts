@@ -12,6 +12,7 @@ import {
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
+import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -455,6 +456,7 @@ export type OrigemTituloFinanceiro = "orcamento" | "manual" | "recorrencia";
 export type CriarTituloFinanceiroInput = {
   tipo: TipoTituloFinanceiro;
   origem?: OrigemTituloFinanceiro;
+  chaveImportacao?: string | null;
   descricao: string;
   categoriaId: number;
   valorOriginal: string;
@@ -578,6 +580,7 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
   const data: InsertTituloFinanceiro = {
     tipo: input.tipo,
     origem: input.origem ?? "manual",
+    chaveImportacao: input.chaveImportacao ?? null,
     descricao: input.descricao.trim(),
     clienteId: input.clienteId ?? null,
     fornecedorId: input.fornecedorId ?? null,
@@ -650,6 +653,76 @@ export async function listTitulosFinanceiros(
     return true;
   });
   return Promise.all(titulosVisiveis.map((titulo: any) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
+}
+
+function dataImportada(valor: string): Date {
+  const [ano, mes, dia] = valor.split("-").map(Number);
+  return new Date(ano, mes - 1, dia, 12, 0, 0);
+}
+
+export function getModeloImportacaoLancamentosCsv() {
+  return criarModeloCsvLancamentos();
+}
+
+export async function exportarLancamentosFinanceirosCsv(filters?: { tipo?: TipoTituloFinanceiro }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [titulos, categorias] = await Promise.all([
+    listTitulosFinanceiros(filters),
+    listCategoriasFinanceiras(),
+  ]);
+  const categoriasPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome]));
+  return exportarLancamentosCsv(titulos
+    .filter((titulo) => titulo.origem === "manual")
+    .map((titulo) => ({
+      id: titulo.id,
+      chaveImportacao: titulo.chaveImportacao,
+      tipo: titulo.tipo,
+      descricao: titulo.descricao,
+      categoria: categoriasPorId.get(titulo.categoriaId) ?? `Categoria ${titulo.categoriaId}`,
+      valor: titulo.valorOriginal,
+      dataEmissao: titulo.dataEmissao,
+      dataVencimento: titulo.dataVencimento,
+      competencia: titulo.competencia,
+      contraparte: titulo.contraparteNome,
+      observacoes: titulo.observacoes,
+    })));
+}
+
+export async function importarLancamentosFinanceirosCsv(
+  conteudo: string,
+  userId: number,
+  dependencias?: { database?: any; categorias?: any[]; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
+) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const [categorias, titulosExistentes] = await Promise.all([
+    dependencias?.categorias ?? listCategoriasFinanceiras(),
+    dependencias?.titulosExistentes ?? db.select({ id: titulosFinanceiros.id, chaveImportacao: titulosFinanceiros.chaveImportacao }).from(titulosFinanceiros),
+  ]);
+  const preparo = prepararImportacaoLancamentos({ conteudo, categorias, titulosExistentes });
+  if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
+  await db.transaction(async (tx: any) => {
+    await tx.insert(titulosFinanceiros).values(preparo.linhas.map((linha) => ({
+      tipo: linha.tipo,
+      origem: "manual" as const,
+      chaveImportacao: linha.referencia,
+      descricao: linha.descricao,
+      categoriaId: linha.categoriaId,
+      valorOriginal: linha.valor,
+      desconto: "0",
+      juros: "0",
+      valorBaixado: "0",
+      dataEmissao: dataImportada(linha.dataEmissao),
+      dataVencimento: dataImportada(linha.dataVencimento),
+      competencia: linha.competencia ? dataImportada(linha.competencia) : null,
+      contraparteNome: linha.contraparte,
+      estado: calcularEstadoTitulo({ valorOriginal: linha.valor, dataVencimento: dataImportada(linha.dataVencimento) }),
+      observacoes: linha.observacoes,
+      criadoPor: userId,
+    })));
+  });
+  return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
 export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">) {

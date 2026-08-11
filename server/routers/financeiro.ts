@@ -133,6 +133,16 @@ export const financeiroRouter = router({
     })),
   }),
 
+  intercambios: router({
+    modeloLancamentosCsv: protectedProcedure.query(() => db.getModeloImportacaoLancamentosCsv()),
+    exportarLancamentosCsv: protectedProcedure.input(z.object({
+      tipo: TipoTituloSchema.optional(),
+    }).optional()).query(({ input }) => db.exportarLancamentosFinanceirosCsv(input)),
+    importarLancamentosCsv: protectedProcedure.input(z.object({
+      conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
+    })).mutation(({ ctx, input }) => db.importarLancamentosFinanceirosCsv(input.conteudo, ctx.user.id)),
+  }),
+
   titulos: router({
     list: protectedProcedure.input(z.object({
       tipo: TipoTituloSchema.optional(),

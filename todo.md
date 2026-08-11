@@ -91,3 +91,13 @@
 - [x] Validar visualmente os filtros e indicadores do relatório de fluxo de caixa na interface financeira
 - [x] Cobrir a confirmação, motivo obrigatório e atualização visual do estorno com teste de interface
 - [x] Permitir abrir diretamente a aba de fluxo de caixa pela URL para facilitar revisão e compartilhamento do relatório
+- [x] Definir um modelo CSV de lançamentos financeiros com cabeçalhos e exemplo para importação
+- [x] Exportar os lançamentos financeiros filtrados para CSV compatível com planilhas
+- [x] Validar importações de lançamentos antes de gravar, incluindo datas, valores, tipos e referências
+- [x] Importar lançamentos válidos sem criar duplicidades e informar as linhas recusadas
+- [x] Adicionar controles de importação, exportação e download de modelo no Financeiro
+- [x] Cobrir o intercâmbio de lançamentos com testes automatizados e validação visual
+- [x] Validar visualmente a tela autenticada do Financeiro confirmando que os botões Modelo CSV, Exportar CSV e Importar CSV aparecem no módulo de Lançamentos
+- [x] Registrar uma verificação visual autenticada do diálogo de importação CSV e do posicionamento dos controles após login
+- [x] Integrar a validação CSV ao procedimento real antes de qualquer gravação financeira
+- [x] Testar a recusa integral de arquivos inválidos e a prevenção de gravação parcial

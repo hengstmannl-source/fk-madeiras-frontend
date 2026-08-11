@@ -196,6 +196,7 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
   origem: mysqlEnum("origem", ["orcamento", "manual", "recorrencia"]).notNull().default("manual"),
+  chaveImportacao: varchar("chaveImportacao", { length: 120 }).unique(),
   descricao: varchar("descricao", { length: 300 }).notNull(),
   clienteId: int("clienteId"),
   fornecedorId: int("fornecedorId"),

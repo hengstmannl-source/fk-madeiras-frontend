@@ -12,7 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowDownToLine, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
-  CircleAlert, CircleDollarSign, Landmark, Loader2, Plus, RefreshCw, RotateCcw, Tags, WalletCards,
+  CircleAlert, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2, Plus, RefreshCw, RotateCcw, Tags, Upload, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -71,6 +71,17 @@ function formatarDataFinanceira(value: string | Date): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(value));
 }
 
+function baixarCsv(conteudo: string, nomeArquivo: string) {
+  const url = URL.createObjectURL(new Blob([conteudo], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
 function StatusBadge({ estado }: { estado: string }) {
   const styles: Record<string, string> = {
     aberto: "bg-sky-50 text-sky-700 border-sky-200",
@@ -98,6 +109,9 @@ export default function FinanceiroPage() {
   const [baixaParaEstornar, setBaixaParaEstornar] = useState<any>(null);
   const [motivoEstorno, setMotivoEstorno] = useState("");
   const [periodoFluxo, setPeriodoFluxo] = useState({ dataInicio: primeiroDiaDoMes(), dataFim: hoje() });
+  const [importacaoAberta, setImportacaoAberta] = useState(false);
+  const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
+  const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
 
   useEffect(() => {
     if (abaFinanceiraDaUrl(search) === "fluxo") setAba("fluxo");
@@ -108,6 +122,7 @@ export default function FinanceiroPage() {
   const [categoria, setCategoria] = useState({ nome: "", tipo: "ambos" as "receita" | "despesa" | "ambos" });
   const [conta, setConta] = useState({ nome: "", tipo: "caixa" as "caixa" | "banco" | "carteira" | "outro", saldoInicial: "0", observacoes: "" });
   const [recorrencia, setRecorrencia] = useState(valorInicialRecorrencia);
+  const tipoAtalho = new URLSearchParams(search).get("tipo") === "pagar" ? "pagar" : new URLSearchParams(search).get("tipo") === "receber" ? "receber" : null;
 
   const titulos = trpc.financeiro.titulos.list.useQuery();
   const categorias = trpc.financeiro.categorias.list.useQuery();
@@ -116,6 +131,8 @@ export default function FinanceiroPage() {
   const recorrencias = trpc.financeiro.recorrencias.list.useQuery();
   const alertas = trpc.financeiro.alertas.list.useQuery();
   const fluxoCaixa = trpc.financeiro.relatorios.fluxoCaixa.useQuery(periodoFluxo);
+  const modeloImportacao = trpc.financeiro.intercambios.modeloLancamentosCsv.useQuery(undefined, { enabled: false });
+  const exportacaoLancamentos = trpc.financeiro.intercambios.exportarLancamentosCsv.useQuery(tipoAtalho ? { tipo: tipoAtalho } : undefined, { enabled: false });
   const baixasTitulo = trpc.financeiro.titulos.baixas.useQuery(
     { tituloId: tituloBaixas?.id ?? 0 },
     { enabled: Boolean(tituloBaixas) },
@@ -131,6 +148,7 @@ export default function FinanceiroPage() {
   const conciliarBaixa = trpc.financeiro.titulos.conciliarBaixa.useMutation();
   const estornarBaixa = trpc.financeiro.titulos.estornarBaixa.useMutation();
   const cancelarTitulo = trpc.financeiro.titulos.cancelar.useMutation();
+  const importarLancamentos = trpc.financeiro.intercambios.importarLancamentosCsv.useMutation();
   const maiorFluxoDiario = useMemo(() => Math.max(...(fluxoCaixa.data?.dias ?? []).flatMap((dia: any) => [Number(dia.entradas), Number(dia.saidas)]), 1), [fluxoCaixa.data]);
 
   const resumo = useMemo(() => {
@@ -159,7 +177,6 @@ export default function FinanceiroPage() {
     };
   }, [titulos.data]);
 
-  const tipoAtalho = new URLSearchParams(search).get("tipo") === "pagar" ? "pagar" : new URLSearchParams(search).get("tipo") === "receber" ? "receber" : null;
   const titulosExibidos = useMemo(() => (titulos.data ?? []).filter((titulo: any) => !tipoAtalho || titulo.tipo === tipoAtalho), [titulos.data, tipoAtalho]);
   const tituloLancamentos = tipoAtalho === "pagar" ? "Contas a pagar" : tipoAtalho === "receber" ? "Contas a receber" : "Contas a pagar e receber";
 
@@ -255,6 +272,40 @@ export default function FinanceiroPage() {
     });
   };
 
+  const baixarModeloImportacao = async () => {
+    const resposta = await modeloImportacao.refetch();
+    if (!resposta.data) { toast.error("Não foi possível gerar o modelo CSV"); return; }
+    baixarCsv(resposta.data, "modelo-lancamentos-fk-madeiras.csv");
+    toast.success("Modelo CSV baixado");
+  };
+
+  const exportarLancamentos = async () => {
+    const resposta = await exportacaoLancamentos.refetch();
+    if (!resposta.data) { toast.error("Não foi possível exportar os lançamentos"); return; }
+    baixarCsv(resposta.data, `lancamentos-fk-madeiras-${hoje()}.csv`);
+    toast.success("Lançamentos exportados em CSV");
+  };
+
+  const importarArquivo = async () => {
+    if (!arquivoImportacao) { toast.error("Selecione um arquivo CSV para importar"); return; }
+    try {
+      const conteudo = await arquivoImportacao.text();
+      importarLancamentos.mutate({ conteudo }, {
+        onSuccess: (resultado) => {
+          if (resultado.erros.length) { setErrosImportacao(resultado.erros); toast.error("A importação foi recusada. Revise as linhas indicadas."); return; }
+          toast.success(`${resultado.importados} lançamento(s) importado(s) com sucesso`);
+          setArquivoImportacao(null);
+          setErrosImportacao([]);
+          setImportacaoAberta(false);
+          invalidarFinanceiro();
+        },
+        onError: (erro) => toast.error(erro.message),
+      });
+    } catch {
+      toast.error("Não foi possível ler o arquivo selecionado");
+    }
+  };
+
   const salvarFornecedor = () => criarFornecedor.mutate({ ...fornecedor, email: fornecedor.email || null, contacto: fornecedor.contacto || null, documento: fornecedor.documento || null, endereco: fornecedor.endereco || null, observacoes: fornecedor.observacoes || null }, {
     onSuccess: () => { toast.success("Fornecedor cadastrado"); utils.financeiro.fornecedores.list.invalidate(); setFornecedorAberto(false); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); },
     onError: (erro) => toast.error(erro.message),
@@ -299,7 +350,7 @@ export default function FinanceiroPage() {
           <div className="flex items-center gap-2"><div className="rounded-lg bg-primary/10 p-2"><WalletCards className="h-5 w-5 text-primary" /></div><h1 className="text-2xl font-bold tracking-tight text-foreground">Financeiro</h1></div>
           <p className="text-sm text-muted-foreground mt-2">Contas a receber, pagar e movimentações financeiras da empresa.</p>
         </div>
-        <Button onClick={() => setLancamentoAberto(true)} className="bg-primary text-primary-foreground"><Plus className="h-4 w-4 mr-2" />Novo lançamento avulso</Button>
+        <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setImportacaoAberta(true)}><Upload className="mr-2 h-4 w-4" />Importar CSV</Button><Button onClick={() => setLancamentoAberto(true)} className="bg-primary text-primary-foreground"><Plus className="h-4 w-4 mr-2" />Novo lançamento avulso</Button></div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -321,7 +372,7 @@ export default function FinanceiroPage() {
 
       {aba === "lancamentos" && (
         <section className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/20"><div><h2 className="font-semibold">{tituloLancamentos}</h2><p className="text-xs text-muted-foreground mt-0.5">Inclui lançamentos originados em vendas e lançamentos avulsos.</p></div><Badge variant="outline">{titulosExibidos.length} títulos</Badge></div>
+          <div className="flex flex-col gap-3 px-5 py-4 border-b bg-muted/20 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">{tituloLancamentos}</h2><p className="text-xs text-muted-foreground mt-0.5">A exportação CSV inclui somente lançamentos avulsos, preservando as vendas vinculadas.</p></div><div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />Modelo CSV</Button><Button size="sm" variant="outline" onClick={exportarLancamentos} disabled={exportacaoLancamentos.isFetching}><Download className="mr-1.5 h-3.5 w-3.5" />Exportar CSV</Button><Badge variant="outline">{titulosExibidos.length} títulos</Badge></div></div>
           {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : titulosExibidos.length ? (
             <Table>
               <TableHeader><TableRow className="bg-muted/40"><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Vencimento</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader>
@@ -355,6 +406,8 @@ export default function FinanceiroPage() {
       {aba === "fornecedores" && <CadastroTabela titulo="Fornecedores" descricao="Cadastre os fornecedores utilizados em contas a pagar." icone={<Building2 className="h-5 w-5" />} botao="Novo fornecedor" aoCriar={() => setFornecedorAberto(true)} colunas={["Fornecedor", "Contato", "E-mail", "Documento"]} linhas={(fornecedores.data ?? []).map((item: any) => [item.nome, item.contacto || "—", item.email || "—", item.documento || "—"])} vazio="Nenhum fornecedor cadastrado" />}
       {aba === "categorias" && <CadastroTabela titulo="Categorias financeiras" descricao="Classifique receitas e despesas para os relatórios financeiros." icone={<Tags className="h-5 w-5" />} botao="Nova categoria" aoCriar={() => setCategoriaAberta(true)} colunas={["Categoria", "Aplicação"]} linhas={(categorias.data ?? []).map((item: any) => [item.nome, item.tipo === "ambos" ? "Receita e despesa" : item.tipo === "receita" ? "Receita" : "Despesa"])} vazio="Nenhuma categoria cadastrada" />}
       {aba === "contas" && <CadastroTabela titulo="Contas financeiras" descricao="Defina onde os valores entram e saem: caixa, bancos e carteiras." icone={<Landmark className="h-5 w-5" />} botao="Nova conta" aoCriar={() => setContaAberta(true)} colunas={["Conta", "Tipo", "Saldo inicial"]} linhas={(contas.data ?? []).map((item: any) => [item.nome, item.tipo, formatCurrency(item.saldoInicial)])} vazio="Nenhuma conta financeira cadastrada" />}
+
+      <Dialog open={importacaoAberta} onOpenChange={(aberto) => { setImportacaoAberta(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); } }}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Importar lançamentos financeiros</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Importação segura por CSV</p><p className="mt-1 text-sky-900">Use o modelo disponibilizado. O sistema valida todo o arquivo antes de gravar: se houver alguma linha inválida ou referência duplicada, nenhum lançamento será criado.</p></div><div className="space-y-2"><Label htmlFor="arquivo-importacao">Arquivo CSV *</Label><Input id="arquivo-importacao" aria-label="Arquivo CSV para importação" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); }} /><p className="text-xs text-muted-foreground">Limite de 1.000 lançamentos e 1 MB por arquivo.</p></div>{arquivoImportacao && <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="truncate">{arquivoImportacao.name}</span></div>}{errosImportacao.length > 0 && <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><p className="font-medium">O arquivo não foi importado:</p>{errosImportacao.map((erro, indice) => <p key={`${erro}-${indice}`} className="text-xs">• {erro}</p>)}</div>}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><Button variant="ghost" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><Download className="mr-1.5 h-4 w-4" />Baixar modelo</Button><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setImportacaoAberta(false)} disabled={importarLancamentos.isPending}>Cancelar</Button><Button onClick={importarArquivo} disabled={!arquivoImportacao || importarLancamentos.isPending}>{importarLancamentos.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Importar arquivo</Button></div></div></div></DialogContent></Dialog>
 
       <Dialog open={Boolean(tituloParaCancelar)} onOpenChange={(aberto) => !aberto && setTituloParaCancelar(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Cancelar {tituloParaCancelar?.tipo === "receber" ? "conta a receber" : "conta a pagar"}</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-medium">{tituloParaCancelar?.descricao}</p><p className="mt-1">Este título deixará de aparecer nas listas ativas e permanecerá registrado como cancelado para auditoria.</p></div><p className="text-sm text-muted-foreground">A operação não pode ser usada em títulos com baixas financeiras. Deseja continuar?</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaCancelar(null)} disabled={cancelarTitulo.isPending}>Voltar</Button><Button variant="destructive" onClick={confirmarCancelamento} disabled={cancelarTitulo.isPending}>{cancelarTitulo.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar cancelamento</Button></div></div></DialogContent></Dialog>
 
