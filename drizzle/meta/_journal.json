@@ -43,6 +43,13 @@
       "when": 1786460158034,
       "tag": "0005_lumpy_abomination",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1786470450572,
+      "tag": "0006_numerous_shotgun",
+      "breakpoints": true
     }
   ]
 }

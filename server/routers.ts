@@ -8,6 +8,7 @@ import { clienteRouter } from "./routers/cliente";
 import { orcamentoRouter } from "./routers/orcamento";
 import { dashboardRouter } from "./routers/dashboard";
 import { empresaRouter } from "./routers/empresa";
+import { financeiroRouter } from "./routers/financeiro";
 
 export const appRouter = router({
   system: systemRouter,
@@ -25,6 +26,7 @@ export const appRouter = router({
   orcamento: orcamentoRouter,
   dashboard: dashboardRouter,
   empresa: empresaRouter,
+  financeiro: financeiroRouter,
 });
 
 export type AppRouter = typeof appRouter;

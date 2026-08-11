@@ -23,19 +23,19 @@ import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, Users,
-  Package, FileText, Building2, BadgeCheck,
+  FileText, Building2, BadgeCheck, WalletCards,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 
-const menuItems = [
+export const dashboardMenuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Package, label: "Madeiras", path: "/madeiras" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: FileText, label: "Orçamentos", path: "/orcamentos" },
   { icon: BadgeCheck, label: "Aprovados", path: "/orcamentos/aprovados" },
+  { icon: WalletCards, label: "Financeiro", path: "/financeiro" },
   { icon: Building2, label: "Empresa", path: "/empresa" },
 ];
 
@@ -105,8 +105,8 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = menuItems.find(item => location.startsWith("/orcamentos/aprovados"))
-    ?? menuItems.find(item => location.startsWith(item.path));
+  const activeMenuItem = dashboardMenuItems.find(item => location.startsWith("/orcamentos/aprovados"))
+    ?? dashboardMenuItems.find(item => location.startsWith(item.path));
   const isMobile = useIsMobile();
 
   useEffect(() => { if (isCollapsed) setIsResizing(false); }, [isCollapsed]);
@@ -153,7 +153,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold tracking-tight truncate text-sm text-foreground">FK Madeiras</span>
-                    <span className="text-[10px] text-muted-foreground truncate">Orçamentos</span>
+                    <span className="text-[10px] text-muted-foreground truncate">Gestão madeireira</span>
                   </div>
                 </div>
               ) : (
@@ -166,7 +166,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
 
           <SidebarContent className="gap-0">
             <SidebarMenu className="px-2 py-1">
-              {menuItems.map(item => {
+              {dashboardMenuItems.map(item => {
                 const isActive = item.path === "/orcamentos"
                   ? location === "/orcamentos" || (location.startsWith("/orcamentos/") && !location.startsWith("/orcamentos/aprovados"))
                   : location === item.path || (item.path !== "/" && location.startsWith(item.path));

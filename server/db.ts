@@ -3,10 +3,15 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
+  fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros,
+  baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras,
   type InsertMadeira, type InsertBitola, type InsertCliente,
-  type InsertOrcamento, type InsertItemOrcamento,
+  type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
+  type InsertCategoriaFinanceira, type InsertContaFinanceira,
+  type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
+import { calcularEstadoTitulo, decimalParaNumero, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -319,6 +324,9 @@ export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" |
       detalhes: JSON.stringify({ novoEstado }),
     });
   }
+  if (novoEstado === "aprovado" && userId) {
+    await criarTituloReceberDeOrcamento(id, userId);
+  }
   return { success: true };
 }
 
@@ -330,6 +338,18 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
   if (orcamento.estado !== "aprovado") throw new Error("Apenas orçamentos aprovados podem ser marcados como pagos");
   if (orcamento.pago) throw new Error("Este orçamento já foi registrado como pago");
 
+  const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm);
+  if (titulo) {
+    const contaFinanceiraId = await getOrCreateContaFinanceiraPadrao(userId);
+    await registrarBaixaFinanceira({
+      tituloId: titulo.id,
+      contaFinanceiraId,
+      valor: saldoAbertoTitulo(titulo.valorOriginal, titulo.desconto, titulo.juros, titulo.valorBaixado).toFixed(2),
+      dataBaixa: pagoEm,
+      formaPagamento,
+      criadoPor: userId,
+    });
+  }
   await db.update(orcamentos).set({ pago: true, pagoEm, formaPagamento, pagoPor: userId }).where(eq(orcamentos.id, id));
   await db.insert(historicoAlteracoes).values({
     orcamentoId: id,
@@ -387,6 +407,369 @@ export async function duplicateOrcamento(id: number) {
     valorTotal: i.valorTotal,
   }));
   return createOrcamento(novoOrc, novosItens);
+}
+
+// ─── Financeiro ───
+export type TipoTituloFinanceiro = "receber" | "pagar";
+export type OrigemTituloFinanceiro = "orcamento" | "manual" | "recorrencia";
+
+export type CriarTituloFinanceiroInput = {
+  tipo: TipoTituloFinanceiro;
+  origem?: OrigemTituloFinanceiro;
+  descricao: string;
+  categoriaId: number;
+  valorOriginal: string;
+  dataEmissao: Date;
+  dataVencimento: Date;
+  criadoPor: number;
+  clienteId?: number | null;
+  fornecedorId?: number | null;
+  contraparteNome?: string | null;
+  orcamentoId?: number | null;
+  recorrenciaId?: number | null;
+  grupoParcelamento?: string | null;
+  numeroParcela?: number | null;
+  totalParcelas?: number | null;
+  desconto?: string;
+  juros?: string;
+  observacoes?: string | null;
+};
+
+export async function listFornecedores() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(fornecedores).where(eq(fornecedores.ativo, true)).orderBy(desc(fornecedores.createdAt));
+}
+
+export async function createFornecedor(data: InsertFornecedor) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(fornecedores).values(data);
+  return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(fornecedores).set(data).where(eq(fornecedores.id, id));
+  return { success: true };
+}
+
+export async function archiveFornecedor(id: number) {
+  return updateFornecedor(id, { ativo: false });
+}
+
+export async function listCategoriasFinanceiras() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(categoriasFinanceiras).where(eq(categoriasFinanceiras.ativo, true)).orderBy(desc(categoriasFinanceiras.createdAt));
+}
+
+export async function createCategoriaFinanceira(data: InsertCategoriaFinanceira) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(categoriasFinanceiras).values(data);
+  return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(categoriasFinanceiras).set(data).where(eq(categoriasFinanceiras.id, id));
+  return { success: true };
+}
+
+export async function listContasFinanceiras() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(contasFinanceiras).where(eq(contasFinanceiras.ativa, true)).orderBy(desc(contasFinanceiras.createdAt));
+}
+
+export async function createContaFinanceira(data: InsertContaFinanceira) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(contasFinanceiras).values(data);
+  return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(contasFinanceiras).set(data).where(eq(contasFinanceiras.id, id));
+  return { success: true };
+}
+
+export async function getOrCreateCategoriaReceitaVendas(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existente = await db.select().from(categoriasFinanceiras)
+    .where(and(eq(categoriasFinanceiras.nome, "Receitas de vendas"), eq(categoriasFinanceiras.ativo, true))).limit(1);
+  if (existente[0]) return existente[0].id;
+  const result = await db.insert(categoriasFinanceiras).values({
+    nome: "Receitas de vendas",
+    tipo: "receita",
+    ativo: true,
+    criadoPor: userId,
+  });
+  return getInsertedId(result as MysqlInsertResult);
+}
+
+export async function getOrCreateContaFinanceiraPadrao(userId: number): Promise<number> {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existente = await db.select().from(contasFinanceiras)
+    .where(and(eq(contasFinanceiras.nome, "Caixa geral"), eq(contasFinanceiras.ativa, true))).limit(1);
+  if (existente[0]) return existente[0].id;
+  const result = await db.insert(contasFinanceiras).values({
+    nome: "Caixa geral",
+    tipo: "caixa",
+    saldoInicial: "0",
+    ativa: true,
+    criadoPor: userId,
+  });
+  return getInsertedId(result as MysqlInsertResult);
+}
+
+export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!input.descricao.trim()) throw new Error("Informe uma descrição para o lançamento");
+  if (decimalParaNumero(input.valorOriginal) <= 0) throw new Error("O valor do título deve ser maior que zero");
+  const data: InsertTituloFinanceiro = {
+    tipo: input.tipo,
+    origem: input.origem ?? "manual",
+    descricao: input.descricao.trim(),
+    clienteId: input.clienteId ?? null,
+    fornecedorId: input.fornecedorId ?? null,
+    contraparteNome: input.contraparteNome ?? null,
+    orcamentoId: input.orcamentoId ?? null,
+    categoriaId: input.categoriaId,
+    recorrenciaId: input.recorrenciaId ?? null,
+    grupoParcelamento: input.grupoParcelamento ?? null,
+    numeroParcela: input.numeroParcela ?? null,
+    totalParcelas: input.totalParcelas ?? null,
+    valorOriginal: input.valorOriginal,
+    desconto: input.desconto ?? "0",
+    juros: input.juros ?? "0",
+    valorBaixado: "0",
+    dataEmissao: input.dataEmissao,
+    dataVencimento: input.dataVencimento,
+    estado: calcularEstadoTitulo({ valorOriginal: input.valorOriginal, dataVencimento: input.dataVencimento }),
+    observacoes: input.observacoes ?? null,
+    criadoPor: input.criadoPor,
+  };
+  const result = await db.insert(titulosFinanceiros).values(data);
+  return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export async function getTituloFinanceiroById(id: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.id, id)).limit(1);
+  return result[0];
+}
+
+export async function atualizarEstadoTituloFinanceiro(titulo: any) {
+  const novoEstado = calcularEstadoTitulo({
+    valorOriginal: titulo.valorOriginal,
+    desconto: titulo.desconto,
+    juros: titulo.juros,
+    valorBaixado: titulo.valorBaixado,
+    dataVencimento: titulo.dataVencimento,
+    cancelado: titulo.estado === "cancelado",
+  });
+  if (novoEstado !== titulo.estado) {
+    const db = await getDb();
+    if (db) await db.update(titulosFinanceiros).set({ estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
+  }
+  return { ...titulo, estado: novoEstado };
+}
+
+export async function listTitulosFinanceiros(filters?: { tipo?: TipoTituloFinanceiro; estado?: string; clienteId?: number; fornecedorId?: number }) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [];
+  if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
+  if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado as any));
+  if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
+  if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
+  const titulos = await db.select().from(titulosFinanceiros)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(titulosFinanceiros.dataVencimento));
+  return Promise.all(titulos.map(atualizarEstadoTituloFinanceiro));
+}
+
+export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const titulo = await getTituloFinanceiroById(data.tituloId);
+  if (!titulo) throw new Error("Título financeiro não encontrado");
+  if (titulo.estado === "cancelado" || titulo.estado === "quitado") throw new Error("Este título não aceita novas baixas");
+  const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, data.contaFinanceiraId), eq(contasFinanceiras.ativa, true))).limit(1);
+  if (!conta[0]) throw new Error("Informe uma conta financeira ativa para a baixa");
+  const valorBaixa = decimalParaNumero(data.valor);
+  const saldoAberto = saldoAbertoTitulo(titulo.valorOriginal, titulo.desconto, titulo.juros, titulo.valorBaixado);
+  if (valorBaixa <= 0 || valorBaixa > saldoAberto + 0.005) throw new Error("O valor da baixa deve ser maior que zero e não pode exceder o saldo em aberto");
+  const result = await db.insert(baixasFinanceiras).values({ ...data, valor: valorBaixa.toFixed(2) });
+  const novoValorBaixado = (decimalParaNumero(titulo.valorBaixado) + valorBaixa).toFixed(2);
+  const novoEstado = calcularEstadoTitulo({
+    valorOriginal: titulo.valorOriginal,
+    desconto: titulo.desconto,
+    juros: titulo.juros,
+    valorBaixado: novoValorBaixado,
+    dataVencimento: titulo.dataVencimento,
+  });
+  await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
+  return { id: getInsertedId(result as MysqlInsertResult), estado: novoEstado, valorBaixado: novoValorBaixado };
+}
+
+export async function listBaixasFinanceiras(tituloId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: baixasFinanceiras.id,
+    tituloId: baixasFinanceiras.tituloId,
+    contaFinanceiraId: baixasFinanceiras.contaFinanceiraId,
+    valor: baixasFinanceiras.valor,
+    dataBaixa: baixasFinanceiras.dataBaixa,
+    formaPagamento: baixasFinanceiras.formaPagamento,
+    observacoes: baixasFinanceiras.observacoes,
+    conciliada: baixasFinanceiras.conciliada,
+    conciliadaEm: baixasFinanceiras.conciliadaEm,
+    criadoPor: baixasFinanceiras.criadoPor,
+    createdAt: baixasFinanceiras.createdAt,
+    contaNome: contasFinanceiras.nome,
+    contaTipo: contasFinanceiras.tipo,
+  }).from(baixasFinanceiras)
+    .leftJoin(contasFinanceiras, eq(baixasFinanceiras.contaFinanceiraId, contasFinanceiras.id))
+    .where(eq(baixasFinanceiras.tituloId, tituloId))
+    .orderBy(desc(baixasFinanceiras.dataBaixa));
+}
+
+export async function conciliarBaixaFinanceira(id: number, conciliada: boolean) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(baixasFinanceiras).set({ conciliada, conciliadaEm: conciliada ? new Date() : null }).where(eq(baixasFinanceiras.id, id));
+  return { success: true };
+}
+
+export async function cancelarTituloFinanceiro(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const titulo = await getTituloFinanceiroById(id);
+  if (!titulo) throw new Error("Título financeiro não encontrado");
+  if (decimalParaNumero(titulo.valorBaixado) > 0) throw new Error("Títulos com baixas devem ser regularizados por estorno antes do cancelamento");
+  await db.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: new Date(), canceladoPor: userId }).where(eq(titulosFinanceiros.id, id));
+  return { success: true };
+}
+
+export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const orcamento = await getOrcamentoById(orcamentoId);
+  if (!orcamento || orcamento.estado !== "aprovado" || orcamento.pago) return undefined;
+  const existente = await db.select().from(titulosFinanceiros)
+    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, orcamentoId))).limit(1);
+  if (existente[0]) return existente[0];
+  const categoriaId = await getOrCreateCategoriaReceitaVendas(userId);
+  const criacao = await createTituloFinanceiro({
+    tipo: "receber",
+    origem: "orcamento",
+    descricao: `Orçamento ${orcamento.numero}`,
+    clienteId: orcamento.clienteId,
+    orcamentoId,
+    categoriaId,
+    valorOriginal: orcamento.total,
+    dataEmissao: new Date(),
+    dataVencimento,
+    criadoPor: userId,
+  });
+  return getTituloFinanceiroById(criacao.id);
+}
+
+export async function listRecorrenciasFinanceiras() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(recorrenciasFinanceiras).orderBy(desc(recorrenciasFinanceiras.proximoVencimento));
+}
+
+export async function createRecorrenciaFinanceira(data: InsertRecorrenciaFinanceira) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (decimalParaNumero(data.valor) <= 0) throw new Error("O valor da recorrência deve ser maior que zero");
+  const result = await db.insert(recorrenciasFinanceiras).values(data);
+  return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export async function updateRecorrenciaFinanceira(id: number, data: Partial<InsertRecorrenciaFinanceira>) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(recorrenciasFinanceiras).set(data).where(eq(recorrenciasFinanceiras.id, id));
+  return { success: true };
+}
+
+export async function getConfiguracaoFinanceiraByTaskUid(taskUid: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(configuracoesFinanceiras)
+    .where(eq(configuracoesFinanceiras.alertaCronTaskUid, taskUid)).limit(1);
+  return result[0];
+}
+
+export async function configurarProcessamentoFinanceiro(taskUid: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existente = await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.id, 1)).limit(1);
+  if (existente[0]) {
+    await db.update(configuracoesFinanceiras).set({ alertaCronTaskUid: taskUid }).where(eq(configuracoesFinanceiras.id, 1));
+  } else {
+    await db.insert(configuracoesFinanceiras).values({ id: 1, alertaCronTaskUid: taskUid, alertaDiasAntecedencia: 7 });
+  }
+  return { success: true };
+}
+
+export async function processarRecorrenciasFinanceiras(agora = new Date()) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const recorrencias = await db.select().from(recorrenciasFinanceiras).where(eq(recorrenciasFinanceiras.ativa, true));
+  let titulosGerados = 0;
+
+  for (const recorrencia of recorrencias) {
+    let vencimento = new Date(recorrencia.proximoVencimento);
+    const fim = recorrencia.dataFim ? new Date(recorrencia.dataFim) : null;
+    while (vencimento <= agora && (!fim || vencimento <= fim)) {
+      const existentes = await db.select().from(titulosFinanceiros).where(and(
+        eq(titulosFinanceiros.recorrenciaId, recorrencia.id),
+        eq(titulosFinanceiros.dataVencimento, vencimento),
+      )).limit(1);
+      if (!existentes[0]) {
+        await createTituloFinanceiro({
+          tipo: recorrencia.tipo,
+          origem: "recorrencia",
+          descricao: recorrencia.descricao,
+          clienteId: recorrencia.clienteId,
+          fornecedorId: recorrencia.fornecedorId,
+          contraparteNome: recorrencia.contraparteNome,
+          categoriaId: recorrencia.categoriaId,
+          recorrenciaId: recorrencia.id,
+          valorOriginal: recorrencia.valor,
+          dataEmissao: vencimento,
+          dataVencimento: vencimento,
+          observacoes: recorrencia.observacoes,
+          criadoPor: recorrencia.criadoPor,
+        });
+        titulosGerados += 1;
+      }
+      vencimento = proximoVencimento(vencimento, recorrencia.frequencia);
+    }
+    if (vencimento.getTime() !== new Date(recorrencia.proximoVencimento).getTime()) {
+      const ativa = !fim || vencimento <= fim;
+      await db.update(recorrenciasFinanceiras).set({ proximoVencimento: vencimento, ativa }).where(eq(recorrenciasFinanceiras.id, recorrencia.id));
+    }
+  }
+
+  await db.update(configuracoesFinanceiras).set({ ultimoProcessamentoEm: agora }).where(eq(configuracoesFinanceiras.id, 1));
+  return { titulosGerados, recorrenciasAnalisadas: recorrencias.length };
 }
 
 // ─── Dashboard ───

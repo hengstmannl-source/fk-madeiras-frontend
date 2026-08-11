@@ -32,3 +32,16 @@
 - [x] Proteger PDFs de orçamento e recibo com autenticação consistente com o sistema
 - [x] Testar que recibos só são acessíveis a utilizadores autenticados e para documentos quitados
 - [x] Limitar medidas lineares e volumes exibidos a no máximo três casas decimais
+- [x] Remover a aba Madeiras da navegação lateral do sistema
+- [x] Definir a primeira etapa do módulo financeiro, com contas a pagar e receber vinculáveis aos orçamentos
+- [x] Modelar títulos financeiros, baixas e vínculos com orçamentos sem duplicar o histórico comercial
+- [x] Criar cadastros de fornecedores e categorias financeiras
+- [x] Criar contas financeiras para caixa, bancos e carteiras
+- [x] Implementar contas a pagar e receber com vencimento, status e lançamento manual
+- [x] Permitir lançamentos não programados de contas a pagar e receber para ocorrências excepcionais
+- [x] Suportar parcelamento e pagamentos parciais com histórico de baixas
+- [ ] Implementar lançamentos recorrentes e alertas automáticos de vencimento
+- [x] Permitir conciliação manual das baixas financeiras por conta de movimentação
+- [x] Criar painel financeiro com fluxo de caixa, vencidos e compromissos futuros
+- [x] Exibir a conta financeira associada a cada baixa na conciliação manual
+- [x] Exibir blocos específicos de títulos vencidos e próximos vencimentos no painel financeiro

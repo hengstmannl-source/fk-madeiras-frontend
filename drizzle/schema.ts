@@ -132,3 +132,133 @@ export const empresaConfiguracoes = mysqlTable("empresaConfiguracoes", {
 
 export type EmpresaConfiguracao = typeof empresaConfiguracoes.$inferSelect;
 export type InsertEmpresaConfiguracao = typeof empresaConfiguracoes.$inferInsert;
+
+// ─── Financeiro ───
+export const fornecedores = mysqlTable("fornecedores", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 300 }).notNull(),
+  contacto: varchar("contacto", { length: 100 }),
+  email: varchar("email", { length: 300 }),
+  documento: varchar("documento", { length: 30 }),
+  endereco: text("endereco"),
+  observacoes: text("observacoes"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Fornecedor = typeof fornecedores.$inferSelect;
+export type InsertFornecedor = typeof fornecedores.$inferInsert;
+
+export const categoriasFinanceiras = mysqlTable("categoriasFinanceiras", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 150 }).notNull(),
+  tipo: mysqlEnum("tipo", ["receita", "despesa", "ambos"]).notNull().default("ambos"),
+  categoriaPaiId: int("categoriaPaiId"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type CategoriaFinanceira = typeof categoriasFinanceiras.$inferSelect;
+export type InsertCategoriaFinanceira = typeof categoriasFinanceiras.$inferInsert;
+
+export const contasFinanceiras = mysqlTable("contasFinanceiras", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 150 }).notNull(),
+  tipo: mysqlEnum("tipo", ["caixa", "banco", "carteira", "outro"]).notNull().default("caixa"),
+  saldoInicial: decimal("saldoInicial", { precision: 14, scale: 2 }).notNull().default("0"),
+  ativa: boolean("ativa").notNull().default(true),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ContaFinanceira = typeof contasFinanceiras.$inferSelect;
+export type InsertContaFinanceira = typeof contasFinanceiras.$inferInsert;
+
+export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
+  origem: mysqlEnum("origem", ["orcamento", "manual", "recorrencia"]).notNull().default("manual"),
+  descricao: varchar("descricao", { length: 300 }).notNull(),
+  clienteId: int("clienteId"),
+  fornecedorId: int("fornecedorId"),
+  contraparteNome: varchar("contraparteNome", { length: 300 }),
+  orcamentoId: int("orcamentoId"),
+  categoriaId: int("categoriaId").notNull(),
+  recorrenciaId: int("recorrenciaId"),
+  grupoParcelamento: varchar("grupoParcelamento", { length: 64 }),
+  numeroParcela: int("numeroParcela"),
+  totalParcelas: int("totalParcelas"),
+  valorOriginal: decimal("valorOriginal", { precision: 14, scale: 2 }).notNull(),
+  desconto: decimal("desconto", { precision: 14, scale: 2 }).notNull().default("0"),
+  juros: decimal("juros", { precision: 14, scale: 2 }).notNull().default("0"),
+  valorBaixado: decimal("valorBaixado", { precision: 14, scale: 2 }).notNull().default("0"),
+  dataEmissao: timestamp("dataEmissao").notNull(),
+  dataVencimento: timestamp("dataVencimento").notNull(),
+  estado: mysqlEnum("estado", ["aberto", "parcial", "quitado", "vencido", "cancelado"]).notNull().default("aberto"),
+  observacoes: text("observacoes"),
+  canceladoEm: timestamp("canceladoEm"),
+  canceladoPor: int("canceladoPor"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type TituloFinanceiro = typeof titulosFinanceiros.$inferSelect;
+export type InsertTituloFinanceiro = typeof titulosFinanceiros.$inferInsert;
+
+export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
+  id: int("id").autoincrement().primaryKey(),
+  tituloId: int("tituloId").notNull(),
+  contaFinanceiraId: int("contaFinanceiraId").notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  dataBaixa: timestamp("dataBaixa").notNull(),
+  formaPagamento: varchar("formaPagamento", { length: 50 }).notNull(),
+  observacoes: text("observacoes"),
+  conciliada: boolean("conciliada").notNull().default(false),
+  conciliadaEm: timestamp("conciliadaEm"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type BaixaFinanceira = typeof baixasFinanceiras.$inferSelect;
+export type InsertBaixaFinanceira = typeof baixasFinanceiras.$inferInsert;
+
+export const recorrenciasFinanceiras = mysqlTable("recorrenciasFinanceiras", {
+  id: int("id").autoincrement().primaryKey(),
+  tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
+  descricao: varchar("descricao", { length: 300 }).notNull(),
+  clienteId: int("clienteId"),
+  fornecedorId: int("fornecedorId"),
+  contraparteNome: varchar("contraparteNome", { length: 300 }),
+  categoriaId: int("categoriaId").notNull(),
+  contaFinanceiraId: int("contaFinanceiraId"),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  frequencia: mysqlEnum("frequencia", ["semanal", "mensal", "trimestral", "semestral", "anual"]).notNull(),
+  proximoVencimento: timestamp("proximoVencimento").notNull(),
+  dataFim: timestamp("dataFim"),
+  ativa: boolean("ativa").notNull().default(true),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RecorrenciaFinanceira = typeof recorrenciasFinanceiras.$inferSelect;
+export type InsertRecorrenciaFinanceira = typeof recorrenciasFinanceiras.$inferInsert;
+
+export const configuracoesFinanceiras = mysqlTable("configuracoesFinanceiras", {
+  id: int("id").primaryKey(),
+  alertaDiasAntecedencia: int("alertaDiasAntecedencia").notNull().default(7),
+  alertaCronTaskUid: varchar("alertaCronTaskUid", { length: 65 }),
+  ultimoProcessamentoEm: timestamp("ultimoProcessamentoEm"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ConfiguracaoFinanceira = typeof configuracoesFinanceiras.$inferSelect;

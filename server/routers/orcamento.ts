@@ -71,7 +71,7 @@ export const orcamentoRouter = router({
       const mes = String(now.getMonth() + 1).padStart(2, "0");
       const seq = Math.floor(Math.random() * 9000 + 1000);
       const numero = `ORC-${ano}${mes}-${seq}`;
-      return db.createOrcamento(
+      const orcamento = await db.createOrcamento(
         {
           numero,
           clienteId: input.clienteId,
@@ -89,6 +89,10 @@ export const orcamentoRouter = router({
         },
         input.itens
       );
+      if (input.estado === "aprovado") {
+        await db.criarTituloReceberDeOrcamento(orcamento.id, ctx.user.id);
+      }
+      return orcamento;
     }),
 
   updateEstado: protectedProcedure
@@ -99,6 +103,9 @@ export const orcamentoRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       await db.updateOrcamentoEstado(input.id, input.estado, ctx.user.id, input.confirmacaoDupla);
+      if (input.estado === "aprovado") {
+        await db.criarTituloReceberDeOrcamento(input.id, ctx.user.id);
+      }
       return { success: true };
     }),
 
