@@ -148,11 +148,22 @@ export async function getClienteById(id: number) {
   return result.length > 0 ? result[0] : undefined;
 }
 
+type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
+
+/** Extrai o ID devolvido pelo mysql2, cuja resposta é [ResultSetHeader, fields]. */
+export function getInsertedId(result: MysqlInsertResult): number {
+  const id = Number(result[0]?.insertId ?? 0);
+  if (!Number.isInteger(id) || id <= 0) {
+    throw new Error("A criação do registo não devolveu um identificador válido");
+  }
+  return id;
+}
+
 export async function createCliente(data: InsertCliente) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(clientes).values(data);
-  return result;
+  return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
 export async function updateCliente(id: number, data: Partial<InsertCliente>) {

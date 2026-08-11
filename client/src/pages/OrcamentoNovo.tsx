@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator } from "lucide-react";
+import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator, UserPlus } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
@@ -20,6 +20,12 @@ import {
   formatDimensionCm,
   parseDecimalInput,
 } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ItemOrcamento {
   madeiraId: number;
@@ -42,6 +48,9 @@ export default function OrcamentoNovo() {
   const clientes = trpc.cliente.list.useQuery();
 
   const [clienteId, setClienteId] = useState("");
+  const [novoClienteOpen, setNovoClienteOpen] = useState(false);
+  const [novoClienteForm, setNovoClienteForm] = useState({ nome: "", contacto: "", email: "", morada: "", nif: "" });
+  const createCliente = trpc.cliente.create.useMutation();
   const [desconto, setDesconto] = useState("0");
   const [frete, setFrete] = useState("0");
   const [observacoes, setObservacoes] = useState("");
@@ -127,6 +136,20 @@ export default function OrcamentoNovo() {
   const create = trpc.orcamento.create.useMutation();
   const utils = trpc.useUtils();
 
+  const handleCriarCliente = () => {
+    if (!novoClienteForm.nome.trim()) { toast.error("Nome é obrigatório"); return; }
+    createCliente.mutate(novoClienteForm, {
+      onSuccess: async (res) => {
+        toast.success("Cliente criado com sucesso");
+        await utils.cliente.list.invalidate();
+        if (res.id) setClienteId(String(res.id));
+        setNovoClienteOpen(false);
+        setNovoClienteForm({ nome: "", contacto: "", email: "", morada: "", nif: "" });
+      },
+      onError: (err: any) => toast.error(err.message),
+    });
+  };
+
   const handleSave = (estado: "rascunho" | "enviado") => {
     if (!clienteId) { toast.error("Selecione um cliente"); return; }
     if (itens.length === 0) { toast.error("Adicione pelo menos um item"); return; }
@@ -169,12 +192,23 @@ export default function OrcamentoNovo() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
-                  <Select value={clienteId} onValueChange={setClienteId}>
-                    <SelectTrigger className="bg-white"><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
-                    <SelectContent>
-                      {clientes.data?.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex gap-2">
+                    <Select value={clienteId} onValueChange={setClienteId}>
+                      <SelectTrigger className="bg-white flex-1"><SelectValue placeholder="Selecionar cliente" /></SelectTrigger>
+                      <SelectContent>
+                        {clientes.data?.map((c) => (<SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="shrink-0 border-primary/40 text-primary hover:bg-primary/10"
+                      onClick={() => setNovoClienteOpen(true)}
+                    >
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Novo cliente
+                    </Button>
+                  </div>
                 </div>
                 <div className="space-y-2">
                   <Label>Vendedor</Label>
@@ -298,6 +332,77 @@ export default function OrcamentoNovo() {
           </Card>
         </div>
       </div>
+
+      {/* Dialog: Criar cliente em contexto */}
+      <Dialog open={novoClienteOpen} onOpenChange={setNovoClienteOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="h-4 w-4 text-primary" />
+              Novo Cliente
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-2">
+              <Label>Nome *</Label>
+              <Input
+                value={novoClienteForm.nome}
+                onChange={(e) => setNovoClienteForm({ ...novoClienteForm, nome: e.target.value })}
+                placeholder="Nome completo"
+                className="bg-white"
+                autoFocus
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label>Contacto</Label>
+                <Input
+                  value={novoClienteForm.contacto}
+                  onChange={(e) => setNovoClienteForm({ ...novoClienteForm, contacto: e.target.value })}
+                  placeholder="+55 ..."
+                  className="bg-white"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>CPF / CNPJ</Label>
+                <Input
+                  value={novoClienteForm.nif}
+                  onChange={(e) => setNovoClienteForm({ ...novoClienteForm, nif: e.target.value })}
+                  placeholder="000.000.000-00"
+                  className="bg-white"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input
+                type="email"
+                value={novoClienteForm.email}
+                onChange={(e) => setNovoClienteForm({ ...novoClienteForm, email: e.target.value })}
+                placeholder="email@exemplo.com"
+                className="bg-white"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Endereço</Label>
+              <Input
+                value={novoClienteForm.morada}
+                onChange={(e) => setNovoClienteForm({ ...novoClienteForm, morada: e.target.value })}
+                placeholder="Endereço completo"
+                className="bg-white"
+              />
+            </div>
+            <Button
+              onClick={handleCriarCliente}
+              disabled={createCliente.isPending}
+              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+            >
+              {createCliente.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <UserPlus className="h-4 w-4 mr-2" />}
+              Criar e Selecionar Cliente
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

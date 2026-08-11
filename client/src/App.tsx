@@ -7,7 +7,6 @@ import DashboardLayout from "./components/DashboardLayout";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import MadeirasPage from "./pages/MadeirasPage";
-import BitolasPage from "./pages/BitolasPage";
 import ClientesPage from "./pages/ClientesPage";
 import OrcamentosPage from "./pages/OrcamentosPage";
 import OrcamentoNovo from "./pages/OrcamentoNovo";
@@ -19,7 +18,6 @@ function Router() {
       <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/madeiras" component={MadeirasPage} />
-        <Route path="/bitolas" component={BitolasPage} />
         <Route path="/clientes" component={ClientesPage} />
         <Route path="/orcamentos" component={OrcamentosPage} />
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />

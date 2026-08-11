@@ -23,7 +23,7 @@ import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, Users,
-  Package, Ruler, FileText,
+  Package, FileText,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -33,7 +33,6 @@ import { Button } from "./ui/button";
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
   { icon: Package, label: "Madeiras", path: "/madeiras" },
-  { icon: Ruler, label: "Bitolas", path: "/bitolas" },
   { icon: Users, label: "Clientes", path: "/clientes" },
   { icon: FileText, label: "Orçamentos", path: "/orcamentos" },
 ];

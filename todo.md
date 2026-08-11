@@ -16,3 +16,6 @@
 - [x] Permitir preenchimento livre de largura/espessura/comprimento na criação de orçamento
 - [x] Atualizar PDF para suportar dimensões livres e moeda em Reais
 - [x] Converter espessura e largura de milímetros para centímetros no formulário, cálculos, visualizações e PDF
+- [x] Remover aba Bitolas da navegação lateral e das rotas visíveis
+- [x] Adicionar opção de criar cliente em contexto no formulário de novo orçamento
+- [x] Validar o retorno de insertId para selecionar automaticamente o cliente criado em contexto

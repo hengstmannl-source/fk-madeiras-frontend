@@ -20,8 +20,8 @@ export const clienteRouter = router({
       observacoes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      await db.createCliente({ ...input, criadoPor: ctx.user.id });
-      return { success: true };
+      const created = await db.createCliente({ ...input, criadoPor: ctx.user.id });
+      return { success: true, id: created.id || null };
     }),
 
   update: protectedProcedure
