@@ -67,6 +67,10 @@ export function saldoAbertoTitulo(valorOriginal: string | number, desconto: stri
   return Math.max(0, valorLiquidoTitulo(valorOriginal, desconto, juros) - decimalParaNumero(valorBaixado));
 }
 
+export function podeCancelarTituloFinanceiro(valorBaixado: string | number | null | undefined): boolean {
+  return decimalParaNumero(valorBaixado) <= CENTAVOS_EPSILON;
+}
+
 export function classificarAlertaVencimento(input: {
   estado: EstadoTituloFinanceiro;
   dataVencimento: Date;

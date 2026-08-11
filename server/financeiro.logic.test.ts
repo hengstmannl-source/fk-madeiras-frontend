@@ -4,6 +4,7 @@ import {
   calcularParcelas,
   classificarAlertaVencimento,
   planejarAtualizacaoAlertas,
+  podeCancelarTituloFinanceiro,
   proximoVencimento,
   saldoAbertoTitulo,
 } from "./financeiro.logic";
@@ -29,6 +30,13 @@ describe("regras financeiras", () => {
 
   it("calcula o saldo em aberto considerando descontos e juros", () => {
     expect(saldoAbertoTitulo("100", "10", "5", "30")).toBe(65);
+  });
+
+  it("permite cancelar somente títulos sem baixas financeiras", () => {
+    expect(podeCancelarTituloFinanceiro("0")).toBe(true);
+    expect(podeCancelarTituloFinanceiro("0.004")).toBe(true);
+    expect(podeCancelarTituloFinanceiro("0.01")).toBe(false);
+    expect(podeCancelarTituloFinanceiro("25")).toBe(false);
   });
 
   it("classifica alertas de vencimento sem alertar títulos quitados", () => {

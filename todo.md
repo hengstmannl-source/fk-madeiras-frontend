@@ -71,3 +71,13 @@
 - [x] Testar a exclusão de vendas aprovadas e a unicidade da numeração sequencial
 - [x] Exibir explicitamente o número sequencial definitivo da venda na conta a receber vinculada
 - [x] Testar a apresentação do número definitivo da venda nos recebíveis após aprovação
+- [x] Permitir cancelar manualmente contas a receber já lançadas
+- [x] Permitir cancelar manualmente contas a pagar já lançadas
+- [x] Exigir confirmação antes de cancelar um título financeiro ativo
+- [x] Impedir cancelamento de títulos financeiros com pagamentos registrados
+- [x] Testar a remoção dos títulos cancelados das listas ativas de pagar e receber
+- [x] Testar o cancelamento manual e a exclusão dos títulos das consultas ativas de pagar e receber
+- [x] Validar na interface a confirmação e a remoção de um título após cancelamento manual
+- [x] Executar uma validação funcional da interface do Financeiro cancelando um título ativo, confirmando no diálogo e verificando que ele some da lista ativa após a atualização
+- [x] Adicionar um teste integrado para o fluxo de cancelamento manual com confirmação e atualização da listagem, se a infraestrutura permitir
+- [x] Configurar a infraestrutura mínima de teste de interface para cobrir o cancelamento manual sem depender de dados reais

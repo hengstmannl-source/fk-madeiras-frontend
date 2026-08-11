@@ -12,8 +12,12 @@ export default defineConfig({
       "@assets": path.resolve(templateRoot, "attached_assets"),
     },
   },
+  esbuild: {
+    jsx: "automatic",
+  },
   test: {
     environment: "node",
-    include: ["server/**/*.test.ts", "server/**/*.spec.ts"],
+    environmentMatchGlobs: [["client/**/*.test.tsx", "jsdom"]],
+    include: ["server/**/*.test.ts", "server/**/*.spec.ts", "client/**/*.test.tsx"],
   },
 });

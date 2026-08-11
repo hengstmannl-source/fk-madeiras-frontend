@@ -11,7 +11,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
+import { calcularEstadoTitulo, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -628,20 +628,28 @@ export async function atualizarEstadoTituloFinanceiro(titulo: any) {
 
 export async function listTitulosFinanceiros(
   filters?: { tipo?: TipoTituloFinanceiro; estado?: string; clienteId?: number; fornecedorId?: number },
-  dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any> },
+  dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[] },
 ) {
   const db = dependencias?.database ?? await getDb();
-  if (!db) return [];
+  if (!db && !dependencias?.titulos) return [];
   const conditions = [];
   if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
   if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado as any));
   else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
   if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
   if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
-  const titulos = await db.select().from(titulosFinanceiros)
+  const titulos = dependencias?.titulos ?? await db.select().from(titulosFinanceiros)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(titulosFinanceiros.dataVencimento));
-  return Promise.all(titulos.map((titulo: any) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
+  const titulosVisiveis = titulos.filter((titulo: any) => {
+    if (!filters?.estado && titulo.estado === "cancelado") return false;
+    if (filters?.estado && titulo.estado !== filters.estado) return false;
+    if (filters?.tipo && titulo.tipo !== filters.tipo) return false;
+    if (filters?.clienteId && titulo.clienteId !== filters.clienteId) return false;
+    if (filters?.fornecedorId && titulo.fornecedorId !== filters.fornecedorId) return false;
+    return true;
+  });
+  return Promise.all(titulosVisiveis.map((titulo: any) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
 }
 
 export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">) {
@@ -698,12 +706,12 @@ export async function conciliarBaixaFinanceira(id: number, conciliada: boolean) 
   return { success: true };
 }
 
-export async function cancelarTituloFinanceiro(id: number, userId: number) {
-  const db = await getDb();
+export async function cancelarTituloFinanceiro(id: number, userId: number, dependencias?: { database?: any; buscarTitulo?: (id: number) => Promise<any> }) {
+  const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(id);
+  const titulo = dependencias?.buscarTitulo ? await dependencias.buscarTitulo(id) : await getTituloFinanceiroById(id);
   if (!titulo) throw new Error("Título financeiro não encontrado");
-  if (decimalParaNumero(titulo.valorBaixado) > 0) throw new Error("Títulos com baixas devem ser regularizados por estorno antes do cancelamento");
+  if (!podeCancelarTituloFinanceiro(titulo.valorBaixado)) throw new Error("Títulos com baixas devem ser regularizados por estorno antes do cancelamento");
   await db.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: new Date(), canceladoPor: userId }).where(eq(titulosFinanceiros.id, id));
   return { success: true };
 }

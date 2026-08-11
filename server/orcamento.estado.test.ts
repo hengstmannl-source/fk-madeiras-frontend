@@ -60,6 +60,7 @@ describe("mudança de estado de orçamento", () => {
       id: 101,
       origem: "orcamento",
       descricao: "Venda VND-000123",
+      tipo: "receber",
       estado: "aberto",
       dataVencimento: new Date(2030, 0, 15),
     };
