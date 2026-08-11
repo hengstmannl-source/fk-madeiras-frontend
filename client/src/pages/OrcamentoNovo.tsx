@@ -19,6 +19,7 @@ import {
   centimetersToMillimeters,
   formatCurrency,
   formatDimensionCm,
+  formatMeasurement,
   parseDecimalInput,
 } from "@/lib/utils";
 import {
@@ -350,8 +351,8 @@ export default function OrcamentoNovo() {
               <Separator />
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div><p className="text-xs text-muted-foreground">Peças</p><p className="font-semibold text-sm">{totals.totalPecas}</p></div>
-                <div><p className="text-xs text-muted-foreground">M. Linear</p><p className="font-semibold text-sm">{totals.totalMetroLinear.toFixed(1)}m</p></div>
-                <div><p className="text-xs text-muted-foreground">Volume</p><p className="font-semibold text-sm">{totals.totalVolume.toFixed(3)}m³</p></div>
+                <div><p className="text-xs text-muted-foreground">M. Linear</p><p className="font-semibold text-sm">{formatMeasurement(totals.totalMetroLinear)} m</p></div>
+                <div><p className="text-xs text-muted-foreground">Volume</p><p className="font-semibold text-sm">{formatMeasurement(totals.totalVolume)} m³</p></div>
               </div>
               <Separator />
               <div className="space-y-2">

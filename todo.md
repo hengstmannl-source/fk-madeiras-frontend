@@ -31,3 +31,4 @@
 - [x] Gerar recibo de pagamento em PDF apenas para orçamentos quitados
 - [x] Proteger PDFs de orçamento e recibo com autenticação consistente com o sistema
 - [x] Testar que recibos só são acessíveis a utilizadores autenticados e para documentos quitados
+- [x] Limitar medidas lineares e volumes exibidos a no máximo três casas decimais

@@ -6,6 +6,7 @@ import {
   calculateVolume,
   calculateMetroLinear,
   formatCurrency,
+  formatMeasurement,
   formatNumber,
   parseDecimalInput,
 } from "../client/src/lib/utils";
@@ -58,6 +59,12 @@ describe("Cálculos de Orçamento FK Madeiras", () => {
     expect(formatNumber("1234.5")).toContain("1234,5");
     expect(formatNumber("0.5")).toContain("0,5");
     expect(formatNumber("100")).toContain("100");
+  });
+
+  it("limita a apresentação de medidas a três casas decimais", () => {
+    expect(formatMeasurement("204.5000")).toBe("204,5");
+    expect(formatMeasurement("0.2352")).toBe("0,235");
+    expect(formatMeasurement("0.2349")).toBe("0,235");
   });
 
   it("calcula com dimensões variadas", () => {

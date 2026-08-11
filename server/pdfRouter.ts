@@ -22,6 +22,15 @@ function formatDimensionCm(valueInMillimeters: string): string {
   }).format(num / 10);
 }
 
+function formatMeasurement(value: string): string {
+  const num = parseFloat(value);
+  if (!Number.isFinite(num)) return "0";
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(num);
+}
+
 function formatFormaPagamento(formaPagamento?: string | null): string {
   const formas: Record<string, string> = {
     pix: "PIX",
@@ -172,9 +181,9 @@ export async function registerPdfRoutes(app: any) {
       y -= 14;
       page.drawText(`Total de peças: ${data.orcamento.totalPecas}`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
       y -= 12;
-      page.drawText(`Total metro linear: ${data.orcamento.totalMetroLinear}m`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText(`Total metro linear: ${formatMeasurement(data.orcamento.totalMetroLinear)} m`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
       y -= 12;
-      page.drawText(`Volume total: ${data.orcamento.totalVolume}m³`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText(`Volume total: ${formatMeasurement(data.orcamento.totalVolume)} m³`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
 
       if (data.orcamento.observacoes) {
         y -= 20;

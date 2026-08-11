@@ -24,6 +24,16 @@ export function formatNumber(value: string | number | null | undefined): string 
   }).format(num || 0);
 }
 
+/** Formata medidas físicas sem zeros desnecessários e com no máximo três casas decimais. */
+export function formatMeasurement(value: string | number | null | undefined): string {
+  const num = typeof value === "string" ? parseFloat(value) : Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 3,
+  }).format(num);
+}
+
 /** Converte a dimensão introduzida em centímetros para a unidade interna em milímetros. */
 export function centimetersToMillimeters(value: number): number {
   return value * 10;

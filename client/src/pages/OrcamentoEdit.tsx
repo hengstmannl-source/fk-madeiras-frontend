@@ -8,7 +8,7 @@ import {
   ArrowLeft, FileText, Download, Send, CheckCircle2, XCircle, Clock, Loader2,
   Mail, Phone, MapPin, Package,
 } from "lucide-react";
-import { formatCurrency, formatDimensionCm } from "@/lib/utils";
+import { formatCurrency, formatDimensionCm, formatMeasurement } from "@/lib/utils";
 import { toast } from "sonner";
 
 const estadoColors: Record<string, string> = {
@@ -154,8 +154,8 @@ export default function OrcamentoEdit() {
               <Separator />
               <div className="grid grid-cols-3 gap-2 text-center">
                 <div><p className="text-xs text-muted-foreground">Peças</p><p className="font-semibold text-sm">{orcamento.totalPecas}</p></div>
-                <div><p className="text-xs text-muted-foreground">M. Linear</p><p className="font-semibold text-sm">{orcamento.totalMetroLinear}m</p></div>
-                <div><p className="text-xs text-muted-foreground">Volume</p><p className="font-semibold text-sm">{orcamento.totalVolume}m³</p></div>
+                <div><p className="text-xs text-muted-foreground">M. Linear</p><p className="font-semibold text-sm">{formatMeasurement(orcamento.totalMetroLinear)} m</p></div>
+                <div><p className="text-xs text-muted-foreground">Volume</p><p className="font-semibold text-sm">{formatMeasurement(orcamento.totalVolume)} m³</p></div>
               </div>
               {orcamento.vendedor && <div className="text-xs text-muted-foreground pt-2">Vendedor: {orcamento.vendedor}</div>}
             </CardContent>
