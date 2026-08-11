@@ -84,6 +84,9 @@ export const orcamentos = mysqlTable("orcamentos", {
   pagoEm: timestamp("pagoEm"),
   formaPagamento: varchar("formaPagamento", { length: 50 }),
   pagoPor: int("pagoPor"),
+  entregue: boolean("entregue").notNull().default(false),
+  entregueEm: timestamp("entregueEm"),
+  entreguePor: int("entreguePor"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -144,6 +147,111 @@ export const empresaConfiguracoes = mysqlTable("empresaConfiguracoes", {
 
 export type EmpresaConfiguracao = typeof empresaConfiguracoes.$inferSelect;
 export type InsertEmpresaConfiguracao = typeof empresaConfiguracoes.$inferInsert;
+
+// ─── Produção e estoque de madeira serrada ───
+export const plaquetas = mysqlTable("plaquetas", {
+  id: int("id").autoincrement().primaryKey(),
+  codigo: varchar("codigo", { length: 80 }).notNull().unique(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  volumeInicial: decimal("volumeInicial", { precision: 14, scale: 6 }).notNull(),
+  volumeDisponivel: decimal("volumeDisponivel", { precision: 14, scale: 6 }).notNull(),
+  dataEntrada: timestamp("dataEntrada").notNull(),
+  origem: varchar("origem", { length: 200 }),
+  localizacao: varchar("localizacao", { length: 200 }),
+  observacoes: text("observacoes"),
+  estado: mysqlEnum("estado", ["disponivel", "consumida", "cancelada"]).notNull().default("disponivel"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Plaqueta = typeof plaquetas.$inferSelect;
+export type InsertPlaqueta = typeof plaquetas.$inferInsert;
+
+export const romaneiosProducao = mysqlTable("romaneiosProducao", {
+  id: int("id").autoincrement().primaryKey(),
+  numero: varchar("numero", { length: 30 }).notNull().unique(),
+  plaquetaId: int("plaquetaId").notNull().unique(),
+  dataProducao: timestamp("dataProducao").notNull(),
+  fita: varchar("fita", { length: 100 }),
+  responsavel: varchar("responsavel", { length: 200 }),
+  observacoes: text("observacoes"),
+  estado: mysqlEnum("estado", ["rascunho", "confirmado", "cancelado"]).notNull().default("rascunho"),
+  confirmadoEm: timestamp("confirmadoEm"),
+  confirmadoPor: int("confirmadoPor"),
+  canceladoEm: timestamp("canceladoEm"),
+  canceladoPor: int("canceladoPor"),
+  motivoCancelamento: text("motivoCancelamento"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RomaneioProducao = typeof romaneiosProducao.$inferSelect;
+export type InsertRomaneioProducao = typeof romaneiosProducao.$inferInsert;
+
+export const itensRomaneioProducao = mysqlTable("itensRomaneioProducao", {
+  id: int("id").autoincrement().primaryKey(),
+  romaneioId: int("romaneioId").notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
+  largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }).notNull(),
+  quantidade: int("quantidade").notNull(),
+  metrosLineares: decimal("metrosLineares", { precision: 14, scale: 4 }).notNull(),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  observacoes: text("observacoes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ItemRomaneioProducao = typeof itensRomaneioProducao.$inferSelect;
+export type InsertItemRomaneioProducao = typeof itensRomaneioProducao.$inferInsert;
+
+export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
+  id: int("id").autoincrement().primaryKey(),
+  romaneioId: int("romaneioId").notNull(),
+  itemRomaneioId: int("itemRomaneioId").notNull().unique(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
+  largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }).notNull(),
+  quantidadeProduzida: int("quantidadeProduzida").notNull(),
+  quantidadeDisponivel: int("quantidadeDisponivel").notNull(),
+  metrosLineares: decimal("metrosLineares", { precision: 14, scale: 4 }).notNull(),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  estado: mysqlEnum("estado", ["disponivel", "esgotado", "cancelado"]).notNull().default("disponivel"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type LotePecasSerradas = typeof lotesPecasSerradas.$inferSelect;
+export type InsertLotePecasSerradas = typeof lotesPecasSerradas.$inferInsert;
+
+export const movimentacoesPlaquetas = mysqlTable("movimentacoesPlaquetas", {
+  id: int("id").autoincrement().primaryKey(),
+  plaquetaId: int("plaquetaId").notNull(),
+  romaneioId: int("romaneioId"),
+  tipo: mysqlEnum("tipo", ["entrada", "consumo", "estorno", "ajuste"]).notNull(),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  motivo: text("motivo"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type MovimentacaoPlaqueta = typeof movimentacoesPlaquetas.$inferSelect;
+
+export const movimentacoesEstoqueSerrado = mysqlTable("movimentacoesEstoqueSerrado", {
+  id: int("id").autoincrement().primaryKey(),
+  loteId: int("loteId").notNull(),
+  itemVendaId: int("itemVendaId"),
+  tipo: mysqlEnum("tipo", ["entrada_producao", "saida_entrega", "estorno_entrega", "ajuste"]).notNull(),
+  quantidade: int("quantidade").notNull(),
+  motivo: text("motivo"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type MovimentacaoEstoqueSerrado = typeof movimentacoesEstoqueSerrado.$inferSelect;
 
 // ─── Financeiro ───
 export const fornecedores = mysqlTable("fornecedores", {

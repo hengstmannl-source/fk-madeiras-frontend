@@ -9,6 +9,7 @@ import { orcamentoRouter } from "./routers/orcamento";
 import { dashboardRouter } from "./routers/dashboard";
 import { empresaRouter } from "./routers/empresa";
 import { financeiroRouter } from "./routers/financeiro";
+import { producaoRouter } from "./routers/producao";
 
 export const appRouter = router({
   system: systemRouter,
@@ -27,6 +28,7 @@ export const appRouter = router({
   dashboard: dashboardRouter,
   empresa: empresaRouter,
   financeiro: financeiroRouter,
+  producao: producaoRouter,
 });
 
 export type AppRouter = typeof appRouter;

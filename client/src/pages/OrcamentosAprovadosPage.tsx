@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, Download, Eye, FileText, Loader2, LockKeyhole, RotateCcw, Search } from "lucide-react";
+import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, Download, Eye, FileText, Loader2, LockKeyhole, RotateCcw, Search, Truck } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
@@ -38,11 +38,16 @@ export default function OrcamentosAprovadosPage() {
   const aprovados = trpc.orcamento.list.useQuery({ estado: "aprovado" });
   const clientes = trpc.cliente.list.useQuery();
   const registrarPagamento = trpc.orcamento.registrarPagamento.useMutation();
+  const entregarFisicamente = trpc.orcamento.entregarFisicamente.useMutation();
+  const estornarEntrega = trpc.orcamento.estornarEntrega.useMutation();
   const utils = trpc.useUtils();
   const [buscaCliente, setBuscaCliente] = useState("");
   const [dataInicial, setDataInicial] = useState("");
   const [dataFinal, setDataFinal] = useState("");
   const [pagamentoAlvo, setPagamentoAlvo] = useState<{ id: number; numero: string } | null>(null);
+  const [entregaAlvo, setEntregaAlvo] = useState<{ id: number; numero: string } | null>(null);
+  const [estornoEntregaAlvo, setEstornoEntregaAlvo] = useState<{ id: number; numero: string } | null>(null);
+  const [motivoEstornoEntrega, setMotivoEstornoEntrega] = useState("");
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("pix");
   const [dataPagamento, setDataPagamento] = useState(dataLocalDeHoje);
   const clienteMap = new Map(clientes.data?.map((cliente) => [cliente.id, cliente.nome]) ?? []);
@@ -71,9 +76,40 @@ export default function OrcamentosAprovadosPage() {
     if (!pagamentoAlvo) return;
     registrarPagamento.mutate({ id: pagamentoAlvo.id, formaPagamento, pagoEm: dataPagamento }, {
       onSuccess: () => {
-        toast.success("Pagamento registrado. A venda foi bloqueada.");
+        toast.success("Recebimento confirmado. Registre a entrega física para baixar o estoque.");
         setPagamentoAlvo(null);
         utils.orcamento.list.invalidate();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const invalidarEntrega = () => {
+    utils.orcamento.list.invalidate();
+    utils.orcamento.get.invalidate();
+    utils.producao.estoque.resumo.invalidate();
+  };
+
+  const confirmarEntrega = () => {
+    if (!entregaAlvo) return;
+    entregarFisicamente.mutate({ id: entregaAlvo.id }, {
+      onSuccess: (resultado) => {
+        toast.success(`Entrega registrada: ${resultado.pecasEntregues} peça(s) baixada(s) do estoque.`);
+        setEntregaAlvo(null);
+        invalidarEntrega();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const confirmarEstornoEntrega = () => {
+    if (!estornoEntregaAlvo || motivoEstornoEntrega.trim().length < 3) { toast.error("Informe o motivo do estorno da entrega"); return; }
+    estornarEntrega.mutate({ id: estornoEntregaAlvo.id, motivo: motivoEstornoEntrega.trim() }, {
+      onSuccess: (resultado) => {
+        toast.success(`Entrega estornada: ${resultado.pecasDevolvidas} peça(s) devolvida(s) ao estoque.`);
+        setEstornoEntregaAlvo(null);
+        setMotivoEstornoEntrega("");
+        invalidarEntrega();
       },
       onError: (erro) => toast.error(erro.message),
     });
@@ -109,15 +145,16 @@ export default function OrcamentosAprovadosPage() {
         {aprovados.isLoading ? <div className="p-10 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />A carregar...</div>
         : orcamentosFiltrados.length > 0 ? (
           <Table>
-            <TableHeader><TableRow className="bg-muted/50"><TableHead>Venda</TableHead><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Pagamento</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/50"><TableHead>Venda</TableHead><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Pagamento</TableHead><TableHead>Entrega</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
             <TableBody>{orcamentosFiltrados.map((orcamento) => (
               <TableRow key={orcamento.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium text-primary">{orcamento.numero ?? "Venda sem número"}</TableCell>
                 <TableCell>{clienteMap.get(orcamento.clienteId) ?? "—"}</TableCell>
                 <TableCell className="font-semibold">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(orcamento.total))}</TableCell>
                 <TableCell>{orcamento.pago ? <div className="space-y-1"><div className="flex items-center gap-2"><Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200">Pago</Badge>{orcamento.pagoEm && <span className="text-xs text-muted-foreground">{new Date(orcamento.pagoEm).toLocaleDateString("pt-BR")}</span>}</div><p className="text-xs text-muted-foreground">{descricaoFormaPagamento(orcamento.formaPagamento)}</p></div> : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pendente</Badge>}</TableCell>
+                <TableCell>{orcamento.entregue ? <div className="space-y-1"><Badge variant="outline" className="bg-sky-100 text-sky-800 border-sky-200">Entregue</Badge>{orcamento.entregueEm && <p className="text-xs text-muted-foreground">{new Date(orcamento.entregueEm).toLocaleDateString("pt-BR")}</p>}</div> : <Badge variant="outline" className={orcamento.pago ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-muted text-muted-foreground"}>{orcamento.pago ? "Aguardando entrega" : "Aguardando pagamento"}</Badge>}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{new Date(orcamento.createdAt).toLocaleDateString("pt-BR")}</TableCell>
-                <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver venda" onClick={() => setLocation(`/orcamentos/${orcamento.id}`)}><Eye className="h-4 w-4" /></Button>{!orcamento.pago && <Button size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo({ id: orcamento.id, numero: orcamento.numero ?? "Venda sem número" })}><CircleDollarSign className="h-4 w-4 mr-1.5" />Registrar pagamento</Button>}{orcamento.pago && <><Button variant="outline" size="sm" className="h-8" onClick={() => window.open(`/api/pdf/recibo/${orcamento.id}`, "_blank", "noopener,noreferrer")}><Download className="h-4 w-4 mr-1.5" />Recibo</Button><CheckCircle2 className="h-4 w-4 text-emerald-600 mx-1" /></>}</div></TableCell>
+                <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver venda" onClick={() => setLocation(`/orcamentos/${orcamento.id}`)}><Eye className="h-4 w-4" /></Button>{!orcamento.pago && <Button size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo({ id: orcamento.id, numero: orcamento.numero ?? "Venda sem número" })}><CircleDollarSign className="h-4 w-4 mr-1.5" />Registrar pagamento</Button>}{orcamento.pago && !orcamento.entregue && <Button size="sm" className="h-8 bg-sky-700 hover:bg-sky-800 text-white" disabled={entregarFisicamente.isPending} onClick={() => setEntregaAlvo({ id: orcamento.id, numero: orcamento.numero ?? "Venda sem número" })}><Truck className="h-4 w-4 mr-1.5" />Registrar entrega</Button>}{orcamento.pago && orcamento.entregue && <Button size="sm" variant="outline" className="h-8 text-destructive hover:text-destructive" disabled={estornarEntrega.isPending} onClick={() => { setEstornoEntregaAlvo({ id: orcamento.id, numero: orcamento.numero ?? "Venda sem número" }); setMotivoEstornoEntrega(""); }}><RotateCcw className="h-4 w-4 mr-1.5" />Estornar entrega</Button>}{orcamento.pago && <><Button variant="outline" size="sm" className="h-8" onClick={() => window.open(`/api/pdf/recibo/${orcamento.id}`, "_blank", "noopener,noreferrer")}><Download className="h-4 w-4 mr-1.5" />Recibo</Button><CheckCircle2 className="h-4 w-4 text-emerald-600 mx-1" /></>}</div></TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>
@@ -137,6 +174,10 @@ export default function OrcamentosAprovadosPage() {
           <DialogFooter><Button variant="outline" onClick={() => setPagamentoAlvo(null)}>Cancelar</Button><Button className="bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending || !dataPagamento} onClick={handleConfirmarPagamento}>{registrarPagamento.isPending ? "Registrando..." : "Confirmar pagamento"}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={Boolean(entregaAlvo)} onOpenChange={(aberto) => !aberto && setEntregaAlvo(null)}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Confirmar entrega física</DialogTitle><DialogDescription>A entrega de {entregaAlvo?.numero ?? ""} será registrada e as peças correspondentes serão baixadas do estoque produzido, usando os lotes mais antigos disponíveis.</DialogDescription></DialogHeader><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">Esta ação somente está disponível porque o recebimento da venda já foi confirmado.</div><DialogFooter><Button variant="outline" onClick={() => setEntregaAlvo(null)} disabled={entregarFisicamente.isPending}>Voltar</Button><Button className="bg-sky-700 hover:bg-sky-800" onClick={confirmarEntrega} disabled={entregarFisicamente.isPending}>{entregarFisicamente.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar entrega e baixa</Button></DialogFooter></DialogContent></Dialog>
+
+      <Dialog open={Boolean(estornoEntregaAlvo)} onOpenChange={(aberto) => !aberto && setEstornoEntregaAlvo(null)}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Estornar entrega física</DialogTitle><DialogDescription>As peças baixadas de {estornoEntregaAlvo?.numero ?? ""} retornarão aos lotes originais do estoque.</DialogDescription></DialogHeader><div className="space-y-2"><Label htmlFor="motivo-estorno-entrega">Motivo do estorno *</Label><Input id="motivo-estorno-entrega" value={motivoEstornoEntrega} onChange={(evento) => setMotivoEstornoEntrega(evento.target.value)} placeholder="Ex.: entrega devolvida pelo cliente" /></div><DialogFooter><Button variant="outline" onClick={() => setEstornoEntregaAlvo(null)} disabled={estornarEntrega.isPending}>Voltar</Button><Button variant="destructive" onClick={confirmarEstornoEntrega} disabled={estornarEntrega.isPending}>{estornarEntrega.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar estorno</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 }

@@ -145,6 +145,14 @@ export const orcamentoRouter = router({
       return db.registrarPagamentoOrcamento(input.id, ctx.user.id, input.formaPagamento, dataPagamento);
     }),
 
+  entregarFisicamente: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .mutation(({ ctx, input }) => db.entregarVendaFisicamente(input.id, ctx.user.id)),
+
+  estornarEntrega: protectedProcedure
+    .input(z.object({ id: z.number().int().positive(), motivo: z.string().trim().min(3, "Informe o motivo do estorno") }))
+    .mutation(({ ctx, input }) => db.estornarEntregaVenda(input.id, ctx.user.id, input.motivo)),
+
   duplicate: protectedProcedure
     .input(z.object({ id: z.number() }))
     .mutation(async ({ input }) => {

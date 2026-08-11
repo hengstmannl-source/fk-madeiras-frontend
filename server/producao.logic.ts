@@ -1,0 +1,155 @@
+export type ItemProducaoEntrada = {
+  madeiraNome: string;
+  espessura: string | number;
+  largura: string | number;
+  comprimento: string | number;
+  quantidade: number;
+};
+
+export type PlaquetaParaConfirmacao = {
+  codigo: string;
+  estado: "disponivel" | "consumida" | "cancelada";
+  volumeDisponivel: string | number;
+};
+
+function numero(valor: string | number): number {
+  const convertido = typeof valor === "string" ? Number(valor.replace(",", ".")) : valor;
+  return Number.isFinite(convertido) ? convertido : 0;
+}
+
+export function normalizarCodigoPlaqueta(codigo: string): string {
+  return codigo.trim().toLocaleUpperCase("pt-BR").replace(/\s+/g, "-");
+}
+
+export function calcularItemRomaneio(item: ItemProducaoEntrada) {
+  const espessura = numero(item.espessura);
+  const largura = numero(item.largura);
+  const comprimento = numero(item.comprimento);
+  const quantidade = Number(item.quantidade);
+  if (!item.madeiraNome.trim()) throw new Error("Informe a madeira produzida");
+  if (espessura <= 0 || largura <= 0 || comprimento <= 0 || !Number.isInteger(quantidade) || quantidade <= 0) {
+    throw new Error("Informe dimensões positivas e uma quantidade inteira para cada item produzido");
+  }
+  const metrosLineares = comprimento * quantidade;
+  const volume = (espessura * largura * metrosLineares) / 10_000;
+  return {
+    madeiraNome: item.madeiraNome.trim(),
+    espessura,
+    largura,
+    comprimento,
+    quantidade,
+    metrosLineares: Number(metrosLineares.toFixed(4)),
+    volume: Number(volume.toFixed(6)),
+  };
+}
+
+export function validarConfirmacaoRomaneio(input: {
+  plaqueta: PlaquetaParaConfirmacao | null | undefined;
+  itens: ItemProducaoEntrada[];
+}) {
+  if (!input.plaqueta) throw new Error("Selecione uma plaqueta para o romaneio");
+  if (input.plaqueta.estado !== "disponivel") {
+    throw new Error(`A plaqueta ${input.plaqueta.codigo} não está disponível para produção`);
+  }
+  if (!input.itens.length) throw new Error("Adicione ao menos uma peça produzida ao romaneio");
+  const itens = input.itens.map(calcularItemRomaneio);
+  const volumeProduzido = itens.reduce((total, item) => total + item.volume, 0);
+  const volumeDisponivel = numero(input.plaqueta.volumeDisponivel);
+  if (volumeProduzido > volumeDisponivel + 0.000001) {
+    throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o saldo da plaqueta (${volumeDisponivel.toFixed(6)} m³)`);
+  }
+  return {
+    itens,
+    totalPecas: itens.reduce((total, item) => total + item.quantidade, 0),
+    metrosLineares: Number(itens.reduce((total, item) => total + item.metrosLineares, 0).toFixed(4)),
+    volumeProduzido: Number(volumeProduzido.toFixed(6)),
+    volumeRemanescente: Number((volumeDisponivel - volumeProduzido).toFixed(6)),
+  };
+}
+
+export function agruparEstoquePecas(lotes: Array<{
+  madeiraNome: string;
+  espessura: string | number;
+  largura: string | number;
+  comprimento: string | number;
+  quantidadeDisponivel: number;
+  volume: string | number;
+}>) {
+  const grupos = new Map<string, { madeiraNome: string; espessura: number; largura: number; comprimento: number; quantidadeDisponivel: number; volumeDisponivel: number }>();
+  lotes.forEach((lote) => {
+    const espessura = numero(lote.espessura);
+    const largura = numero(lote.largura);
+    const comprimento = numero(lote.comprimento);
+    const chave = [lote.madeiraNome.trim().toLocaleUpperCase("pt-BR"), espessura, largura, comprimento].join("|");
+    const existente = grupos.get(chave) ?? { madeiraNome: lote.madeiraNome, espessura, largura, comprimento, quantidadeDisponivel: 0, volumeDisponivel: 0 };
+    existente.quantidadeDisponivel += lote.quantidadeDisponivel;
+    const volumeUnitario = numero(lote.volume) / Math.max(lote.quantidadeDisponivel, 1);
+    existente.volumeDisponivel += volumeUnitario * lote.quantidadeDisponivel;
+    grupos.set(chave, existente);
+  });
+  return Array.from(grupos.values()).map((grupo) => ({ ...grupo, volumeDisponivel: Number(grupo.volumeDisponivel.toFixed(6)) }));
+}
+
+export type ItemVendaParaEntrega = {
+  id: number;
+  madeiraNome: string;
+  espessura: string | number;
+  largura: string | number;
+  comprimento: string | number;
+  quantidade: number;
+};
+
+export type LoteParaEntrega = {
+  id: number;
+  madeiraNome: string;
+  espessura: string | number;
+  largura: string | number;
+  comprimento: string | number;
+  quantidadeDisponivel: number;
+  createdAt?: Date;
+};
+
+function chaveDimensao(item: Pick<ItemVendaParaEntrega, "madeiraNome" | "espessura" | "largura" | "comprimento">): string {
+  return [
+    item.madeiraNome.trim().toLocaleUpperCase("pt-BR"),
+    numero(item.espessura).toFixed(2),
+    numero(item.largura).toFixed(2),
+    numero(item.comprimento).toFixed(2),
+  ].join("|");
+}
+
+export function alocarPecasParaEntrega(itens: ItemVendaParaEntrega[], lotes: LoteParaEntrega[]) {
+  const lotesPorDimensao = new Map<string, LoteParaEntrega[]>();
+  [...lotes]
+    .filter((lote) => lote.quantidadeDisponivel > 0)
+    .sort((a, b) => (a.createdAt?.getTime() ?? 0) - (b.createdAt?.getTime() ?? 0) || a.id - b.id)
+    .forEach((lote) => {
+      const chave = chaveDimensao(lote);
+      const disponiveis = lotesPorDimensao.get(chave) ?? [];
+      disponiveis.push(lote);
+      lotesPorDimensao.set(chave, disponiveis);
+    });
+
+  const consumoLocal = new Map<number, number>();
+  const alocacoes: Array<{ itemVendaId: number; loteId: number; quantidade: number }> = [];
+  for (const item of itens) {
+    if (!Number.isInteger(item.quantidade) || item.quantidade <= 0) throw new Error("A quantidade do item de venda precisa ser um número inteiro positivo");
+    let restante = item.quantidade;
+    const disponiveis = lotesPorDimensao.get(chaveDimensao(item)) ?? [];
+    for (const lote of disponiveis) {
+      const jaConsumido = consumoLocal.get(lote.id) ?? 0;
+      const saldo = Math.max(0, lote.quantidadeDisponivel - jaConsumido);
+      if (!saldo) continue;
+      const quantidade = Math.min(restante, saldo);
+      alocacoes.push({ itemVendaId: item.id, loteId: lote.id, quantidade });
+      consumoLocal.set(lote.id, jaConsumido + quantidade);
+      restante -= quantidade;
+      if (!restante) break;
+    }
+    if (restante) {
+      const descricao = `${item.madeiraNome} ${numero(item.espessura)}×${numero(item.largura)}×${numero(item.comprimento)} m`;
+      throw new Error(`Estoque insuficiente para entregar ${item.quantidade} peça(s) de ${descricao}`);
+    }
+  }
+  return alocacoes;
+}

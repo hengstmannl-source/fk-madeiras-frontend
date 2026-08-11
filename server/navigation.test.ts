@@ -10,7 +10,9 @@ describe("navegação principal", () => {
   it("organiza financeiro e vendas com as opções prioritárias", () => {
     expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber"]);
     expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados"]);
-    expect(dashboardNavigation.futuros.map((item) => item.label)).toEqual(["Estoque", "Produção", "Diesel"]);
+    expect(dashboardNavigation.producao.map((item) => item.label)).toEqual(["Produção", "Estoque"]);
+    expect(dashboardNavigation.producao.every((item) => !item.disabled)).toBe(true);
+    expect(dashboardNavigation.futuros.map((item) => item.label)).toEqual(["Diesel"]);
   });
 
   it("informa que os módulos futuros ainda não estão disponíveis", () => {
@@ -26,9 +28,7 @@ describe("navegação principal", () => {
     for (const item of dashboardNavigation.futuros) handleNavigationItemClick(item, navigate, notify);
     expect(navigate).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledTimes(dashboardNavigation.futuros.length);
-    expect(notify).toHaveBeenNthCalledWith(1, getFutureModuleMessage("Estoque"));
-    expect(notify).toHaveBeenNthCalledWith(2, getFutureModuleMessage("Produção"));
-    expect(notify).toHaveBeenNthCalledWith(3, getFutureModuleMessage("Diesel"));
+    expect(notify).toHaveBeenNthCalledWith(1, getFutureModuleMessage("Diesel"));
   });
 
   it("mantém a barra lateral recolhível no desktop e ativa o cabeçalho de navegação no mobile", () => {

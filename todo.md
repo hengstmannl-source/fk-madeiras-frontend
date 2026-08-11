@@ -102,15 +102,20 @@
 - [x] Integrar a validação CSV ao procedimento real antes de qualquer gravação financeira
 - [x] Testar a recusa integral de arquivos inválidos e a prevenção de gravação parcial
 - [x] Analisar a planilha de produção atual e documentar seus campos, fórmulas e rotinas operacionais
-- [ ] Definir o cadastro e a movimentação de plaquetas como matéria-prima disponível em estoque
-- [ ] Modelar o romaneio diário de madeira serrada e a geração rastreável de peças em estoque
-- [ ] Integrar a reserva e baixa de peças de madeira serrada à aprovação e exclusão de vendas
-- [ ] Propor indicadores e relatórios para produção, rendimento, perdas e saldos por lote
-- [ ] Impedir reutilização de plaquetas com identificação única e histórico de consumo
-- [ ] Vincular cada romaneio a uma única plaqueta de matéria-prima
-- [ ] Registrar a saída de peças somente na entrega física confirmada com o recebimento
-- [ ] Iniciar o estoque somente por novas entradas manuais, sem importar plaquetas históricas da planilha
-- [ ] Implementar schema e persistência de plaquetas com identificador único, estado, saldo e histórico de consumo
-- [ ] Criar entidades e fluxo de romaneio vinculando exatamente uma plaqueta por produção, com validações e testes
-- [ ] Implementar estoque de peças serradas e etapa de entrega física para baixar peças apenas após o recebimento confirmado
-- [ ] Criar entradas manuais iniciais de plaquetas e peças, sem importar automaticamente dados históricos da planilha
+- [x] Definir o cadastro e a movimentação de plaquetas como matéria-prima disponível em estoque
+- [x] Modelar o romaneio diário de madeira serrada e a geração rastreável de peças em estoque
+- [x] Integrar a baixa e o estorno de peças à entrega física vinculada ao recebimento confirmado, sem reservar estoque na aprovação da venda
+- [x] Registrar entrega física de venda somente após o recebimento confirmado
+- [x] Alocar automaticamente peças produzidas por dimensão e baixar os lotes na entrega
+- [x] Estornar a entrega de venda com devolução rastreável de peças aos lotes originais
+- [x] Exibir a ação e o estado de entrega física nas vendas aprovadas
+- [x] Corrigir o acesso por URL à tela de vendas aprovadas para validar a entrega física no fluxo real
+- [x] Propor indicadores e relatórios para produção, rendimento, perdas e saldos por lote
+- [x] Impedir reutilização de plaquetas com identificação única e histórico de consumo
+- [x] Vincular cada romaneio a uma única plaqueta de matéria-prima
+- [x] Registrar a saída de peças somente na entrega física confirmada com o recebimento
+- [x] Iniciar o estoque somente por novas entradas manuais, sem importar plaquetas históricas da planilha
+- [x] Implementar schema e persistência de plaquetas com identificador único, estado, saldo e histórico de consumo
+- [x] Criar entidades e fluxo de romaneio vinculando exatamente uma plaqueta por produção, com validações e testes
+- [x] Implementar estoque de peças serradas e etapa de entrega física para baixar peças apenas após o recebimento confirmado
+- [x] Criar entradas manuais iniciais de plaquetas, sem importar automaticamente dados históricos da planilha

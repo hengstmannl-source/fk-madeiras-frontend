@@ -5,6 +5,7 @@ import {
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
+  plaquetas, romaneiosProducao, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -13,6 +14,7 @@ import {
 import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
+import { alocarPecasParaEntrega, agruparEstoquePecas, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1084,4 +1086,223 @@ export async function getDashboardStats() {
   // Recent orcamentos (last 5)
   const recent = allOrcamentos.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
   return { totalOrcamentos, totalAprovados, totalRascunhos, totalEnviados, totalRejeitados, totalValor, totalClientes, totalMadeiras, recent };
+}
+
+// ─── Produção e estoque de madeira serrada ───
+export async function listPlaquetas() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt));
+}
+
+export async function createPlaqueta(data: {
+  codigo: string;
+  madeiraNome: string;
+  volumeInicial: string;
+  dataEntrada: Date;
+  origem?: string | null;
+  localizacao?: string | null;
+  observacoes?: string | null;
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const codigo = normalizarCodigoPlaqueta(data.codigo);
+  const volumeInicial = Number(String(data.volumeInicial).replace(",", "."));
+  if (!codigo || !data.madeiraNome.trim() || !Number.isFinite(volumeInicial) || volumeInicial <= 0) {
+    throw new Error("Informe código, madeira e volume inicial válidos para a plaqueta");
+  }
+  const existente = await db.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, codigo)).limit(1);
+  if (existente[0]) throw new Error(`A plaqueta ${codigo} já está cadastrada`);
+  const result = await db.insert(plaquetas).values({
+    codigo,
+    madeiraNome: data.madeiraNome.trim(),
+    volumeInicial: volumeInicial.toFixed(6),
+    volumeDisponivel: volumeInicial.toFixed(6),
+    dataEntrada: data.dataEntrada,
+    origem: data.origem?.trim() || null,
+    localizacao: data.localizacao?.trim() || null,
+    observacoes: data.observacoes?.trim() || null,
+    estado: "disponivel",
+    criadoPor: data.criadoPor,
+  });
+  const id = getInsertedId(result as MysqlInsertResult);
+  await db.insert(movimentacoesPlaquetas).values({ plaquetaId: id, tipo: "entrada", volume: volumeInicial.toFixed(6), motivo: "Entrada manual de plaqueta", criadoPor: data.criadoPor });
+  return { id, codigo };
+}
+
+export async function listRomaneiosProducao() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: romaneiosProducao.id,
+    numero: romaneiosProducao.numero,
+    dataProducao: romaneiosProducao.dataProducao,
+    fita: romaneiosProducao.fita,
+    responsavel: romaneiosProducao.responsavel,
+    estado: romaneiosProducao.estado,
+    observacoes: romaneiosProducao.observacoes,
+    plaquetaId: romaneiosProducao.plaquetaId,
+    plaquetaCodigo: plaquetas.codigo,
+    madeiraNome: plaquetas.madeiraNome,
+    volumePlaqueta: plaquetas.volumeInicial,
+    confirmadoEm: romaneiosProducao.confirmadoEm,
+  }).from(romaneiosProducao)
+    .innerJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id))
+    .orderBy(desc(romaneiosProducao.dataProducao), desc(romaneiosProducao.id));
+}
+
+export async function listItensRomaneioProducao(romaneioId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(itensRomaneioProducao).where(eq(itensRomaneioProducao.romaneioId, romaneioId)).orderBy(itensRomaneioProducao.id);
+}
+
+export async function confirmarRomaneioProducao(data: {
+  plaquetaId: number;
+  dataProducao: Date;
+  fita?: string | null;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  itens: ItemProducaoEntrada[];
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, data.plaquetaId)).limit(1))[0];
+    const calculo = validarConfirmacaoRomaneio({ plaqueta, itens: data.itens });
+    const numeroTemporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
+    const insercaoRomaneio = await tx.insert(romaneiosProducao).values({
+      numero: numeroTemporario,
+      plaquetaId: data.plaquetaId,
+      dataProducao: data.dataProducao,
+      fita: data.fita?.trim() || null,
+      responsavel: data.responsavel?.trim() || null,
+      observacoes: data.observacoes?.trim() || null,
+      estado: "confirmado",
+      confirmadoEm: new Date(),
+      confirmadoPor: data.criadoPor,
+      criadoPor: data.criadoPor,
+    });
+    const romaneioId = getInsertedId(insercaoRomaneio as MysqlInsertResult);
+    const numero = `ROM-${String(romaneioId).padStart(6, "0")}`;
+    await tx.update(romaneiosProducao).set({ numero }).where(eq(romaneiosProducao.id, romaneioId));
+
+    await tx.update(plaquetas).set({ volumeDisponivel: "0.000000", estado: "consumida" }).where(eq(plaquetas.id, data.plaquetaId));
+    await tx.insert(movimentacoesPlaquetas).values({
+      plaquetaId: data.plaquetaId,
+      romaneioId,
+      tipo: "consumo",
+      volume: String(plaqueta.volumeDisponivel),
+      motivo: `Consumo no romaneio ${numero}`,
+      criadoPor: data.criadoPor,
+    });
+
+    for (const item of calculo.itens) {
+      const dimensoes = {
+        madeiraNome: item.madeiraNome,
+        espessura: item.espessura.toFixed(2),
+        largura: item.largura.toFixed(2),
+        comprimento: item.comprimento.toFixed(2),
+      };
+      const insercaoItem = await tx.insert(itensRomaneioProducao).values({
+        romaneioId,
+        ...dimensoes,
+        quantidade: item.quantidade,
+        metrosLineares: item.metrosLineares.toFixed(4),
+        volume: item.volume.toFixed(6),
+      });
+      const itemRomaneioId = getInsertedId(insercaoItem as MysqlInsertResult);
+      const insercaoLote = await tx.insert(lotesPecasSerradas).values({
+        romaneioId,
+        itemRomaneioId,
+        ...dimensoes,
+        quantidadeProduzida: item.quantidade,
+        quantidadeDisponivel: item.quantidade,
+        metrosLineares: item.metrosLineares.toFixed(4),
+        volume: item.volume.toFixed(6),
+        estado: "disponivel",
+      });
+      const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
+      await tx.insert(movimentacoesEstoqueSerrado).values({ loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Entrada do romaneio ${numero}`, criadoPor: data.criadoPor });
+    }
+    return { id: romaneioId, numero, ...calculo };
+  });
+}
+
+export async function getResumoEstoqueSerrado() {
+  const db = await getDb();
+  if (!db) return [];
+  const lotes = await db.select().from(lotesPecasSerradas);
+  return agruparEstoquePecas(lotes.filter((lote) => lote.estado === "disponivel" && lote.quantidadeDisponivel > 0));
+}
+
+export async function entregarVendaFisicamente(vendaId: number, userId: number, dependencias?: { database?: any }) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const venda = (await tx.select().from(orcamentos).where(eq(orcamentos.id, vendaId)).limit(1))[0];
+    if (!venda) throw new Error("Venda não encontrada");
+    if (venda.estado !== "aprovado") throw new Error("Somente vendas aprovadas podem ser entregues");
+    if (!venda.pago) throw new Error("Confirme o recebimento antes de registrar a entrega física");
+    if (venda.entregue) throw new Error("Esta venda já possui entrega física registrada");
+
+    const [itens, lotes] = await Promise.all([
+      tx.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId)),
+      tx.select().from(lotesPecasSerradas),
+    ]);
+    const alocacoes = alocarPecasParaEntrega(itens, lotes);
+    const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
+    for (const alocacao of alocacoes) {
+      const lote = lotesPorId.get(alocacao.loteId);
+      if (!lote) throw new Error("Lote de peças não encontrado durante a entrega");
+      const saldo = Number(lote.quantidadeDisponivel) - alocacao.quantidade;
+      if (saldo < 0) throw new Error("O saldo do lote foi alterado durante a confirmação. Revise o estoque e tente novamente.");
+      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: saldo === 0 ? "esgotado" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
+      await tx.insert(movimentacoesEstoqueSerrado).values({
+        loteId: lote.id,
+        itemVendaId: alocacao.itemVendaId,
+        tipo: "saida_entrega",
+        quantidade: alocacao.quantidade,
+        motivo: `Entrega física da venda ${venda.numero ?? venda.id}`,
+        criadoPor: userId,
+      });
+    }
+    const entregueEm = new Date();
+    await tx.update(orcamentos).set({ entregue: true, entregueEm, entreguePor: userId }).where(eq(orcamentos.id, vendaId));
+    await tx.insert(historicoAlteracoes).values({
+      orcamentoId: vendaId,
+      usuarioId: userId,
+      tipo: "alteracao" as any,
+      detalhes: JSON.stringify({ acao: "entrega_fisica_confirmada", entregueEm: entregueEm.toISOString(), alocacoes }),
+    });
+    return { success: true, entregueEm, pecasEntregues: alocacoes.reduce((total, alocacao) => total + alocacao.quantidade, 0) };
+  });
+}
+
+export async function estornarEntregaVenda(vendaId: number, userId: number, motivo: string, dependencias?: { database?: any }) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  if (motivo.trim().length < 3) throw new Error("Informe o motivo do estorno da entrega");
+  return db.transaction(async (tx: any) => {
+    const venda = (await tx.select().from(orcamentos).where(eq(orcamentos.id, vendaId)).limit(1))[0];
+    if (!venda?.entregue) throw new Error("Esta venda não possui entrega física para estornar");
+    const itens = await tx.select({ id: itensOrcamento.id }).from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId));
+    const idsItens = new Set(itens.map((item: any) => item.id));
+    const saidas = (await tx.select().from(movimentacoesEstoqueSerrado)).filter((movimento: any) => movimento.tipo === "saida_entrega" && movimento.itemVendaId && idsItens.has(movimento.itemVendaId));
+    if (!saidas.length) throw new Error("Não foram encontradas peças baixadas para esta entrega");
+    const lotes = await tx.select().from(lotesPecasSerradas);
+    const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
+    for (const saida of saidas) {
+      const lote = lotesPorId.get(saida.loteId);
+      if (!lote) throw new Error("Lote de peças não encontrado durante o estorno");
+      const saldo = Number(lote.quantidadeDisponivel) + saida.quantidade;
+      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
+      await tx.insert(movimentacoesEstoqueSerrado).values({ loteId: lote.id, itemVendaId: saida.itemVendaId, tipo: "estorno_entrega", quantidade: saida.quantidade, motivo: motivo.trim(), criadoPor: userId });
+    }
+    await tx.update(orcamentos).set({ entregue: false, entregueEm: null, entreguePor: null }).where(eq(orcamentos.id, vendaId));
+    await tx.insert(historicoAlteracoes).values({ orcamentoId: vendaId, usuarioId: userId, tipo: "alteracao" as any, detalhes: JSON.stringify({ acao: "entrega_fisica_estornada", motivo: motivo.trim() }) });
+    return { success: true, pecasDevolvidas: saidas.reduce((total: number, saida: any) => total + saida.quantidade, 0) };
+  });
 }

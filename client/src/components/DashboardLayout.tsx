@@ -59,9 +59,11 @@ export const dashboardNavigation = {
     { icon: Users, label: "Clientes", path: "/clientes" },
     { icon: Building2, label: "Empresa", path: "/empresa" },
   ],
+  producao: [
+    { icon: Factory, label: "Produção", path: "/producao" },
+    { icon: Warehouse, label: "Estoque", path: "/producao?aba=estoque" },
+  ],
   futuros: [
-    { icon: Warehouse, label: "Estoque", path: "/futuro/estoque", disabled: true },
-    { icon: Factory, label: "Produção", path: "/futuro/producao", disabled: true },
     { icon: Fuel, label: "Diesel", path: "/futuro/diesel", disabled: true },
   ],
 } satisfies Record<string, NavigationItem[]>;
@@ -72,7 +74,7 @@ export function getNavigationPresentation(isMobile: boolean) {
   return {
     collapsible: "icon" as const,
     showMobileHeader: isMobile,
-    groups: ["Financeiro", "Vendas", "Gestão", "Em breve"],
+    groups: ["Financeiro", "Vendas", "Gestão", "Produção", "Em breve"],
   };
 }
 
@@ -220,6 +222,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
             <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} navigate={setLocation} renderPrincipal />
             <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} navigate={setLocation} />
             <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} navigate={setLocation} />
+            <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} navigate={setLocation} />
             <NavigationGroup label="Em breve" items={dashboardNavigation.futuros} location={location} navigate={setLocation} />
           </SidebarContent>
 
