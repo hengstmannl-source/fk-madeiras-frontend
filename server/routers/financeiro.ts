@@ -14,6 +14,12 @@ function dataLocal(data: string): Date {
   return new Date(ano, mes - 1, dia, 12, 0, 0);
 }
 
+function fimDoDiaLocal(data: string): Date {
+  const resultado = dataLocal(data);
+  resultado.setHours(23, 59, 59, 999);
+  return resultado;
+}
+
 function adicionarMeses(data: Date, meses: number): Date {
   const proxima = new Date(data);
   proxima.setMonth(proxima.getMonth() + meses);
@@ -114,6 +120,19 @@ export const financeiroRouter = router({
     list: protectedProcedure.query(() => db.listAlertasFinanceiros()),
   }),
 
+  relatorios: router({
+    fluxoCaixa: protectedProcedure.input(z.object({
+      dataInicio: DataFinanceiraSchema,
+      dataFim: DataFinanceiraSchema,
+    }).refine((periodo) => periodo.dataInicio <= periodo.dataFim, {
+      message: "A data inicial não pode ser posterior à data final",
+      path: ["dataFim"],
+    })).query(({ input }) => db.getRelatorioFluxoCaixa({
+      dataInicio: dataLocal(input.dataInicio),
+      dataFim: fimDoDiaLocal(input.dataFim),
+    })),
+  }),
+
   titulos: router({
     list: protectedProcedure.input(z.object({
       tipo: TipoTituloSchema.optional(),
@@ -175,6 +194,10 @@ export const financeiroRouter = router({
     })),
     conciliarBaixa: protectedProcedure.input(z.object({ id: z.number().int().positive(), conciliada: z.boolean() }))
       .mutation(({ input }) => db.conciliarBaixaFinanceira(input.id, input.conciliada)),
+    estornarBaixa: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      motivo: z.string().trim().min(3, "Informe o motivo do estorno").max(2000),
+    })).mutation(({ ctx, input }) => db.estornarBaixaFinanceira(input.id, ctx.user.id, input.motivo)),
     cancelar: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => db.cancelarTituloFinanceiro(input.id, ctx.user.id)),
   }),

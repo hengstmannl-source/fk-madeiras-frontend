@@ -1,4 +1,4 @@
-import { eq, and, desc, ne } from "drizzle-orm";
+import { eq, and, asc, desc, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -11,7 +11,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -689,6 +689,10 @@ export async function listBaixasFinanceiras(tituloId: number) {
     observacoes: baixasFinanceiras.observacoes,
     conciliada: baixasFinanceiras.conciliada,
     conciliadaEm: baixasFinanceiras.conciliadaEm,
+    estornada: baixasFinanceiras.estornada,
+    estornadaEm: baixasFinanceiras.estornadaEm,
+    estornadaPor: baixasFinanceiras.estornadaPor,
+    motivoEstorno: baixasFinanceiras.motivoEstorno,
     criadoPor: baixasFinanceiras.criadoPor,
     createdAt: baixasFinanceiras.createdAt,
     contaNome: contasFinanceiras.nome,
@@ -704,6 +708,75 @@ export async function conciliarBaixaFinanceira(id: number, conciliada: boolean) 
   if (!db) throw new Error("Database not available");
   await db.update(baixasFinanceiras).set({ conciliada, conciliadaEm: conciliada ? new Date() : null }).where(eq(baixasFinanceiras.id, id));
   return { success: true };
+}
+
+export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFim: Date }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const fim = new Date(periodo.dataFim);
+  fim.setHours(23, 59, 59, 999);
+  const [contas, movimentos] = await Promise.all([
+    db.select({ saldoInicial: contasFinanceiras.saldoInicial }).from(contasFinanceiras),
+    db.select({
+      id: baixasFinanceiras.id,
+      tituloId: baixasFinanceiras.tituloId,
+      tipo: titulosFinanceiros.tipo,
+      descricao: titulosFinanceiros.descricao,
+      valor: baixasFinanceiras.valor,
+      dataBaixa: baixasFinanceiras.dataBaixa,
+      formaPagamento: baixasFinanceiras.formaPagamento,
+      estornada: baixasFinanceiras.estornada,
+      contaNome: contasFinanceiras.nome,
+    }).from(baixasFinanceiras)
+      .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
+      .leftJoin(contasFinanceiras, eq(baixasFinanceiras.contaFinanceiraId, contasFinanceiras.id))
+      .where(and(eq(baixasFinanceiras.estornada, false), lte(baixasFinanceiras.dataBaixa, fim)))
+      .orderBy(asc(baixasFinanceiras.dataBaixa), asc(baixasFinanceiras.id)),
+  ]);
+  const saldoInicialContas = contas.reduce((total, conta) => total + decimalParaNumero(conta.saldoInicial), 0);
+  return calcularRelatorioFluxoCaixa({ ...periodo, saldoInicialContas, movimentos });
+}
+
+export async function estornarBaixaFinanceira(
+  id: number,
+  userId: number,
+  motivo: string,
+  dependencias?: { database?: any; buscarBaixa?: (id: number) => Promise<any>; buscarTitulo?: (id: number) => Promise<any>; agora?: Date },
+) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const baixa = dependencias?.buscarBaixa
+    ? await dependencias.buscarBaixa(id)
+    : (await db.select().from(baixasFinanceiras).where(eq(baixasFinanceiras.id, id)).limit(1))[0];
+  if (!baixa) throw new Error("Baixa financeira não encontrada");
+  if (!podeEstornarBaixa(baixa.estornada)) throw new Error("Esta baixa já foi estornada e não pode ser revertida novamente");
+
+  const titulo = dependencias?.buscarTitulo
+    ? await dependencias.buscarTitulo(baixa.tituloId)
+    : await getTituloFinanceiroById(baixa.tituloId);
+  if (!titulo) throw new Error("Título financeiro não encontrado para a baixa selecionada");
+  if (titulo.estado === "cancelado") throw new Error("Não é possível estornar uma baixa de título cancelado");
+
+  const novoValorBaixado = Math.max(0, decimalParaNumero(titulo.valorBaixado) - decimalParaNumero(baixa.valor)).toFixed(2);
+  const novoEstado = calcularEstadoTitulo({
+    valorOriginal: titulo.valorOriginal,
+    desconto: titulo.desconto,
+    juros: titulo.juros,
+    valorBaixado: novoValorBaixado,
+    dataVencimento: titulo.dataVencimento,
+  });
+  const estornadaEm = dependencias?.agora ?? new Date();
+
+  await db.update(baixasFinanceiras).set({
+    estornada: true,
+    estornadaEm,
+    estornadaPor: userId,
+    motivoEstorno: motivo.trim(),
+    conciliada: false,
+    conciliadaEm: null,
+  }).where(eq(baixasFinanceiras.id, id));
+  await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
+  return { success: true, tituloId: titulo.id, estado: novoEstado, valorBaixado: novoValorBaixado };
 }
 
 export async function cancelarTituloFinanceiro(id: number, userId: number, dependencias?: { database?: any; buscarTitulo?: (id: number) => Promise<any> }) {

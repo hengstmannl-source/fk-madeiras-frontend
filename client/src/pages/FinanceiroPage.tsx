@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { formatCurrency, formatReceivableSaleReference } from "@/lib/utils";
@@ -12,11 +12,20 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import {
   ArrowDownToLine, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
-  CircleAlert, CircleDollarSign, Landmark, Loader2, Plus, RefreshCw, Tags, WalletCards,
+  CircleAlert, CircleDollarSign, Landmark, Loader2, Plus, RefreshCw, RotateCcw, Tags, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 
 const hoje = () => new Date().toISOString().slice(0, 10);
+const primeiroDiaDoMes = () => {
+  const data = new Date();
+  data.setDate(1);
+  return data.toISOString().slice(0, 10);
+};
+
+export function abaFinanceiraDaUrl(search: string): "fluxo" | "lancamentos" {
+  return new URLSearchParams(search).get("aba") === "fluxo" ? "fluxo" : "lancamentos";
+}
 const valorInicialLancamento = () => ({
   tipo: "receber" as "receber" | "pagar",
   descricao: "",
@@ -76,7 +85,7 @@ function StatusBadge({ estado }: { estado: string }) {
 export default function FinanceiroPage() {
   const utils = trpc.useUtils();
   const search = useSearch();
-  const [aba, setAba] = useState<"lancamentos" | "recorrencias" | "fornecedores" | "categorias" | "contas">("lancamentos");
+  const [aba, setAba] = useState<"lancamentos" | "fluxo" | "recorrencias" | "fornecedores" | "categorias" | "contas">(() => abaFinanceiraDaUrl(search));
   const [lancamentoAberto, setLancamentoAberto] = useState(false);
   const [baixaAberta, setBaixaAberta] = useState(false);
   const [fornecedorAberto, setFornecedorAberto] = useState(false);
@@ -86,6 +95,13 @@ export default function FinanceiroPage() {
   const [tituloSelecionado, setTituloSelecionado] = useState<any>(null);
   const [tituloBaixas, setTituloBaixas] = useState<any>(null);
   const [tituloParaCancelar, setTituloParaCancelar] = useState<any>(null);
+  const [baixaParaEstornar, setBaixaParaEstornar] = useState<any>(null);
+  const [motivoEstorno, setMotivoEstorno] = useState("");
+  const [periodoFluxo, setPeriodoFluxo] = useState({ dataInicio: primeiroDiaDoMes(), dataFim: hoje() });
+
+  useEffect(() => {
+    if (abaFinanceiraDaUrl(search) === "fluxo") setAba("fluxo");
+  }, [search]);
   const [lancamento, setLancamento] = useState(valorInicialLancamento);
   const [baixa, setBaixa] = useState({ contaFinanceiraId: "", valor: "", dataBaixa: hoje(), formaPagamento: "pix", observacoes: "" });
   const [fornecedor, setFornecedor] = useState({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" });
@@ -99,6 +115,7 @@ export default function FinanceiroPage() {
   const contas = trpc.financeiro.contas.list.useQuery();
   const recorrencias = trpc.financeiro.recorrencias.list.useQuery();
   const alertas = trpc.financeiro.alertas.list.useQuery();
+  const fluxoCaixa = trpc.financeiro.relatorios.fluxoCaixa.useQuery(periodoFluxo);
   const baixasTitulo = trpc.financeiro.titulos.baixas.useQuery(
     { tituloId: tituloBaixas?.id ?? 0 },
     { enabled: Boolean(tituloBaixas) },
@@ -112,7 +129,9 @@ export default function FinanceiroPage() {
   const criarConta = trpc.financeiro.contas.create.useMutation();
   const criarRecorrencia = trpc.financeiro.recorrencias.create.useMutation();
   const conciliarBaixa = trpc.financeiro.titulos.conciliarBaixa.useMutation();
+  const estornarBaixa = trpc.financeiro.titulos.estornarBaixa.useMutation();
   const cancelarTitulo = trpc.financeiro.titulos.cancelar.useMutation();
+  const maiorFluxoDiario = useMemo(() => Math.max(...(fluxoCaixa.data?.dias ?? []).flatMap((dia: any) => [Number(dia.entradas), Number(dia.saidas)]), 1), [fluxoCaixa.data]);
 
   const resumo = useMemo(() => {
     const dados = titulos.data ?? [];
@@ -151,6 +170,7 @@ export default function FinanceiroPage() {
     utils.financeiro.contas.list.invalidate();
     utils.financeiro.recorrencias.list.invalidate();
     utils.financeiro.alertas.list.invalidate();
+    utils.financeiro.relatorios.fluxoCaixa.invalidate();
     if (tituloBaixas) utils.financeiro.titulos.baixas.invalidate({ tituloId: tituloBaixas.id });
   };
 
@@ -218,6 +238,23 @@ export default function FinanceiroPage() {
     });
   };
 
+  const confirmarEstorno = () => {
+    if (!baixaParaEstornar || motivoEstorno.trim().length < 3) {
+      toast.error("Informe o motivo do estorno");
+      return;
+    }
+    estornarBaixa.mutate({ id: baixaParaEstornar.id, motivo: motivoEstorno.trim() }, {
+      onSuccess: () => {
+        toast.success("Baixa estornada e título recalculado com sucesso");
+        setBaixaParaEstornar(null);
+        setMotivoEstorno("");
+        invalidarFinanceiro();
+        baixasTitulo.refetch();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
   const salvarFornecedor = () => criarFornecedor.mutate({ ...fornecedor, email: fornecedor.email || null, contacto: fornecedor.contacto || null, documento: fornecedor.documento || null, endereco: fornecedor.endereco || null, observacoes: fornecedor.observacoes || null }, {
     onSuccess: () => { toast.success("Fornecedor cadastrado"); utils.financeiro.fornecedores.list.invalidate(); setFornecedorAberto(false); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); },
     onError: (erro) => toast.error(erro.message),
@@ -251,7 +288,7 @@ export default function FinanceiroPage() {
 
   const carregando = titulos.isLoading || categorias.isLoading || contas.isLoading || fornecedores.isLoading || recorrencias.isLoading;
   const abas = [
-    ["lancamentos", "Lançamentos", WalletCards], ["fornecedores", "Fornecedores", Building2],
+    ["lancamentos", "Lançamentos", WalletCards], ["fluxo", "Fluxo de caixa", CircleDollarSign], ["fornecedores", "Fornecedores", Building2],
     ["recorrencias", "Recorrências", RefreshCw], ["categorias", "Categorias", Tags], ["contas", "Contas", Landmark],
   ] as const;
 
@@ -298,6 +335,16 @@ export default function FinanceiroPage() {
         </section>
       )}
 
+      {aba === "fluxo" && (
+        <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b bg-muted/20 px-5 py-4 md:flex-row md:items-end md:justify-between">
+            <div><h2 className="font-semibold">Relatório de fluxo de caixa</h2><p className="mt-0.5 text-xs text-muted-foreground">Movimentações efetivadas por baixas, organizadas pelo período selecionado.</p></div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-end"><div className="space-y-1"><Label htmlFor="fluxo-inicio" className="text-xs">Data inicial</Label><Input id="fluxo-inicio" aria-label="Data inicial do fluxo de caixa" type="date" value={periodoFluxo.dataInicio} onChange={(e) => setPeriodoFluxo({ ...periodoFluxo, dataInicio: e.target.value })} /></div><div className="space-y-1"><Label htmlFor="fluxo-fim" className="text-xs">Data final</Label><Input id="fluxo-fim" aria-label="Data final do fluxo de caixa" type="date" value={periodoFluxo.dataFim} onChange={(e) => setPeriodoFluxo({ ...periodoFluxo, dataFim: e.target.value })} /></div><Button variant="outline" onClick={() => fluxoCaixa.refetch()} disabled={fluxoCaixa.isFetching}><RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${fluxoCaixa.isFetching ? "animate-spin" : ""}`} />Atualizar</Button></div>
+          </div>
+          {fluxoCaixa.isLoading ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />Calculando fluxo de caixa...</div> : fluxoCaixa.data ? <div className="space-y-6 p-5"><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><ResumoCard label="Saldo de abertura" valor={fluxoCaixa.data.saldoAbertura} icon={<Landmark className="h-5 w-5" />} color="text-slate-700 bg-slate-100" descricao="Antes do período" /><ResumoCard label="Entradas" valor={fluxoCaixa.data.entradas} icon={<ArrowDownToLine className="h-5 w-5" />} color="text-emerald-700 bg-emerald-50" descricao="Recebimentos efetivados" /><ResumoCard label="Saídas" valor={fluxoCaixa.data.saidas} icon={<ArrowUpFromLine className="h-5 w-5" />} color="text-rose-700 bg-rose-50" descricao="Pagamentos efetivados" /><ResumoCard label="Resultado líquido" valor={fluxoCaixa.data.saldoLiquido} icon={<CircleDollarSign className="h-5 w-5" />} color={fluxoCaixa.data.saldoLiquido >= 0 ? "text-primary bg-primary/10" : "text-rose-700 bg-rose-50"} descricao="Entradas menos saídas" /><ResumoCard label="Saldo final" valor={fluxoCaixa.data.saldoFinal} icon={<WalletCards className="h-5 w-5" />} color="text-primary bg-primary/10" descricao="Após as movimentações" /></div><div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]"><div className="rounded-lg border bg-muted/10 p-4"><div className="mb-4 flex items-center justify-between"><div><h3 className="text-sm font-semibold">Evolução diária</h3><p className="text-xs text-muted-foreground">Entradas e saídas efetivadas a cada dia.</p></div><Badge variant="outline">{fluxoCaixa.data.quantidadeMovimentos} movimentações</Badge></div><div className="space-y-3">{fluxoCaixa.data.dias.map((dia: any) => <div key={dia.data} className="grid grid-cols-[74px_1fr_96px] items-center gap-3 text-xs"><span className="text-muted-foreground">{formatarDataFinanceira(dia.data)}</span><div className="space-y-1"><div className="h-1.5 overflow-hidden rounded-full bg-emerald-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${(Number(dia.entradas) / maiorFluxoDiario) * 100}%` }} /></div><div className="h-1.5 overflow-hidden rounded-full bg-rose-100"><div className="h-full rounded-full bg-rose-500" style={{ width: `${(Number(dia.saidas) / maiorFluxoDiario) * 100}%` }} /></div></div><span className={`text-right font-medium ${dia.saldoLiquido >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{dia.saldoLiquido >= 0 ? "+" : ""}{formatCurrency(dia.saldoLiquido)}</span></div>)}</div></div><div className="overflow-hidden rounded-lg border"><div className="border-b bg-muted/30 px-4 py-3"><h3 className="text-sm font-semibold">Movimentações do período</h3></div>{fluxoCaixa.data.movimentos.length ? <Table><TableHeader><TableRow className="bg-muted/20"><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Conta</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{fluxoCaixa.data.movimentos.map((movimento: any) => <TableRow key={movimento.id}><TableCell className="whitespace-nowrap text-xs">{formatarDataFinanceira(movimento.dataBaixa)}</TableCell><TableCell><p className="text-sm font-medium">{movimento.descricao}</p><p className="text-xs text-muted-foreground">{movimento.formaPagamento}</p></TableCell><TableCell className="text-sm text-muted-foreground">{movimento.contaNome ?? "—"}</TableCell><TableCell className={`text-right font-semibold ${movimento.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{movimento.tipo === "receber" ? "+" : "−"}{formatCurrency(movimento.valor)}</TableCell></TableRow>)}</TableBody></Table> : <p className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma baixa efetivada no período selecionado.</p>}</div></div></div> : null}
+        </section>
+      )}
+
       {aba === "recorrencias" && (
         <section className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
           <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/20"><div><h2 className="font-semibold">Lançamentos recorrentes</h2><p className="text-xs text-muted-foreground mt-0.5">O sistema gera os próximos títulos diariamente, respeitando a regra configurada.</p></div><Button size="sm" onClick={() => setRecorrenciaAberta(true)}><Plus className="h-3.5 w-3.5 mr-1.5" />Nova recorrência</Button></div>
@@ -315,7 +362,9 @@ export default function FinanceiroPage() {
 
       <Dialog open={baixaAberta} onOpenChange={setBaixaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Registrar baixa</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloSelecionado?.descricao}</p><p className="text-muted-foreground mt-1">Saldo em aberto: <strong className="text-foreground">{formatCurrency(tituloSelecionado ? saldoTitulo(tituloSelecionado) : 0)}</strong></p></div><div className="space-y-2"><Label>Conta financeira *</Label><Select value={baixa.contaFinanceiraId} onValueChange={(valor) => setBaixa({ ...baixa, contaFinanceiraId: valor })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{(contas.data ?? []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>)}</SelectContent></Select></div><div className="grid grid-cols-2 gap-3"><Campo label="Valor (R$) *" value={baixa.valor} onChange={(valor) => setBaixa({ ...baixa, valor })} /><Campo label="Data da baixa" type="date" value={baixa.dataBaixa} onChange={(valor) => setBaixa({ ...baixa, dataBaixa: valor })} /></div><CampoSelect label="Forma de pagamento" value={baixa.formaPagamento} onValueChange={(valor) => setBaixa({ ...baixa, formaPagamento: valor })} opcoes={[["pix", "PIX"], ["dinheiro", "Dinheiro"], ["transferencia", "Transferência"], ["boleto", "Boleto"], ["cartao_credito", "Cartão de crédito"], ["cartao_debito", "Cartão de débito"], ["outro", "Outro"]]} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={baixa.observacoes} onChange={(e) => setBaixa({ ...baixa, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarBaixa} disabled={registrarBaixa.isPending}>{registrarBaixa.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Confirmar baixa</Button></div></DialogContent></Dialog>
 
-      <Dialog open={Boolean(tituloBaixas)} onOpenChange={(aberto) => !aberto && setTituloBaixas(null)}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Baixas e conciliação</DialogTitle></DialogHeader><div className="space-y-3"><div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloBaixas?.descricao}</p><p className="text-muted-foreground mt-1">Marque como conciliada após conferir a movimentação na conta financeira.</p></div>{baixasTitulo.isLoading ? <div className="py-8 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />Carregando baixas...</div> : baixasTitulo.data?.length ? <div className="divide-y rounded-lg border">{baixasTitulo.data.map((item: any) => <div key={item.id} className="flex items-center justify-between gap-3 p-3"><div><p className="font-medium text-sm">{formatCurrency(item.valor)} · {item.formaPagamento}</p><p className="text-xs text-muted-foreground">{item.contaNome ?? "Conta não encontrada"} · {formatarDataFinanceira(item.dataBaixa)}</p><p className="text-xs text-muted-foreground">{item.conciliada ? "Conciliada" : "Pendente de conciliação"}</p></div><Button size="sm" variant={item.conciliada ? "outline" : "default"} disabled={conciliarBaixa.isPending} onClick={() => conciliarBaixa.mutate({ id: item.id, conciliada: !item.conciliada }, { onSuccess: () => { toast.success(item.conciliada ? "Conciliação desfeita" : "Baixa conciliada"); baixasTitulo.refetch(); } })}>{item.conciliada ? "Desconciliar" : "Conciliar"}</Button></div>)}</div> : <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma baixa encontrada.</p>}</div></DialogContent></Dialog>
+      <Dialog open={Boolean(tituloBaixas)} onOpenChange={(aberto) => !aberto && setTituloBaixas(null)}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Baixas e conciliação</DialogTitle></DialogHeader><div className="space-y-3"><div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloBaixas?.descricao}</p><p className="text-muted-foreground mt-1">Concilie após conferir a movimentação; estornos preservam a baixa original para auditoria.</p></div>{baixasTitulo.isLoading ? <div className="py-8 text-center text-sm text-muted-foreground"><Loader2 className="h-5 w-5 animate-spin mx-auto mb-2" />Carregando baixas...</div> : baixasTitulo.data?.length ? <div className="divide-y rounded-lg border">{baixasTitulo.data.map((item: any) => { const estornada = Boolean(item.estornada); return <div key={item.id} className={`flex items-center justify-between gap-3 p-3 ${estornada ? "bg-muted/30" : ""}`}><div><div className="flex items-center gap-2"><p className={`font-medium text-sm ${estornada ? "line-through text-muted-foreground" : ""}`}>{formatCurrency(item.valor)} · {item.formaPagamento}</p>{estornada && <Badge variant="outline" className="border-slate-300 bg-slate-100 text-slate-600">Estornada</Badge>}</div><p className="text-xs text-muted-foreground">{item.contaNome ?? "Conta não encontrada"} · {formatarDataFinanceira(item.dataBaixa)}</p><p className="text-xs text-muted-foreground">{estornada ? `Estornada em ${formatarDataFinanceira(item.estornadaEm)}${item.motivoEstorno ? ` · ${item.motivoEstorno}` : ""}` : item.conciliada ? "Conciliada" : "Pendente de conciliação"}</p></div><div className="flex gap-2">{!estornada && <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" onClick={() => { setBaixaParaEstornar(item); setMotivoEstorno(""); }}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Estornar</Button>}<Button size="sm" variant={item.conciliada ? "outline" : "default"} disabled={estornada || conciliarBaixa.isPending} onClick={() => conciliarBaixa.mutate({ id: item.id, conciliada: !item.conciliada }, { onSuccess: () => { toast.success(item.conciliada ? "Conciliação desfeita" : "Baixa conciliada"); baixasTitulo.refetch(); } })}>{item.conciliada ? "Desconciliar" : "Conciliar"}</Button></div></div>; })}</div> : <p className="py-8 text-center text-sm text-muted-foreground">Nenhuma baixa encontrada.</p>}</div></DialogContent></Dialog>
+
+      <Dialog open={Boolean(baixaParaEstornar)} onOpenChange={(aberto) => !aberto && setBaixaParaEstornar(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Estornar baixa financeira</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-medium">{baixaParaEstornar && formatCurrency(baixaParaEstornar.valor)} · {baixaParaEstornar?.formaPagamento}</p><p className="mt-1">O título será recalculado e a baixa permanecerá registrada como estornada para auditoria.</p></div><div className="space-y-2"><Label htmlFor="motivo-estorno">Motivo do estorno *</Label><Textarea id="motivo-estorno" value={motivoEstorno} onChange={(e) => setMotivoEstorno(e.target.value)} placeholder="Ex.: pagamento lançado em duplicidade" rows={3} /></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setBaixaParaEstornar(null)} disabled={estornarBaixa.isPending}>Voltar</Button><Button variant="destructive" onClick={confirmarEstorno} disabled={estornarBaixa.isPending}>{estornarBaixa.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar estorno</Button></div></div></DialogContent></Dialog>
 
       <Dialog open={fornecedorAberto} onOpenChange={setFornecedorAberto}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Novo fornecedor</DialogTitle></DialogHeader><div className="space-y-3"><Campo label="Nome *" value={fornecedor.nome} onChange={(valor) => setFornecedor({ ...fornecedor, nome: valor })} /><div className="grid grid-cols-2 gap-3"><Campo label="Contato" value={fornecedor.contacto} onChange={(valor) => setFornecedor({ ...fornecedor, contacto: valor })} /><Campo label="Documento" value={fornecedor.documento} onChange={(valor) => setFornecedor({ ...fornecedor, documento: valor })} /></div><Campo label="E-mail" type="email" value={fornecedor.email} onChange={(valor) => setFornecedor({ ...fornecedor, email: valor })} /><Campo label="Endereço" value={fornecedor.endereco} onChange={(valor) => setFornecedor({ ...fornecedor, endereco: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={fornecedor.observacoes} onChange={(e) => setFornecedor({ ...fornecedor, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarFornecedor} disabled={criarFornecedor.isPending}>Salvar fornecedor</Button></div></DialogContent></Dialog>
 

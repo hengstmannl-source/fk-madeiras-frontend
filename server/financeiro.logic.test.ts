@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   calcularEstadoTitulo,
+  calcularRelatorioFluxoCaixa,
   calcularParcelas,
   classificarAlertaVencimento,
   planejarAtualizacaoAlertas,
   podeCancelarTituloFinanceiro,
+  podeEstornarBaixa,
   proximoVencimento,
   saldoAbertoTitulo,
 } from "./financeiro.logic";
@@ -37,6 +39,42 @@ describe("regras financeiras", () => {
     expect(podeCancelarTituloFinanceiro("0.004")).toBe(true);
     expect(podeCancelarTituloFinanceiro("0.01")).toBe(false);
     expect(podeCancelarTituloFinanceiro("25")).toBe(false);
+  });
+
+  it("permite estornar uma baixa somente uma vez", () => {
+    expect(podeEstornarBaixa(false)).toBe(true);
+    expect(podeEstornarBaixa(0)).toBe(true);
+    expect(podeEstornarBaixa(true)).toBe(false);
+    expect(podeEstornarBaixa(1)).toBe(false);
+  });
+
+  it("apura entradas, saídas e saldo acumulado somente para o período informado", () => {
+    const relatorio = calcularRelatorioFluxoCaixa({
+      dataInicio: new Date(2026, 7, 1, 12),
+      dataFim: new Date(2026, 7, 3, 12),
+      saldoInicialContas: "100.00",
+      movimentos: [
+        { id: 1, tipo: "receber", valor: "20.00", dataBaixa: new Date(2026, 6, 31, 12) },
+        { id: 2, tipo: "receber", valor: "50.00", dataBaixa: new Date(2026, 7, 1, 12) },
+        { id: 3, tipo: "pagar", valor: "10.00", dataBaixa: new Date(2026, 7, 1, 12) },
+        { id: 4, tipo: "pagar", valor: "30.00", dataBaixa: new Date(2026, 7, 3, 12) },
+        { id: 5, tipo: "receber", valor: "999.00", dataBaixa: new Date(2026, 7, 2, 12), estornada: true },
+      ],
+    });
+
+    expect(relatorio).toMatchObject({
+      saldoAbertura: 120,
+      entradas: 50,
+      saidas: 40,
+      saldoLiquido: 10,
+      saldoFinal: 130,
+      quantidadeMovimentos: 3,
+    });
+    expect(relatorio.dias).toEqual([
+      { data: "2026-08-01", entradas: 50, saidas: 10, saldoLiquido: 40, saldoAcumulado: 160 },
+      { data: "2026-08-02", entradas: 0, saidas: 0, saldoLiquido: 0, saldoAcumulado: 160 },
+      { data: "2026-08-03", entradas: 0, saidas: 30, saldoLiquido: -30, saldoAcumulado: 130 },
+    ]);
   });
 
   it("classifica alertas de vencimento sem alertar títulos quitados", () => {

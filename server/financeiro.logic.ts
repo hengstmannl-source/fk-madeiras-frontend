@@ -2,6 +2,17 @@ export type EstadoTituloFinanceiro = "aberto" | "parcial" | "quitado" | "vencido
 export type FrequenciaFinanceira = "semanal" | "mensal" | "trimestral" | "semestral" | "anual";
 export type TipoAlertaFinanceiro = "vence_em_breve" | "vencido";
 
+export type MovimentoFluxoCaixa = {
+  id: number;
+  tipo: "receber" | "pagar";
+  valor: string | number;
+  dataBaixa: Date;
+  estornada?: boolean | number | null;
+  descricao?: string | null;
+  contaNome?: string | null;
+  formaPagamento?: string | null;
+};
+
 const CENTAVOS_EPSILON = 0.005;
 
 export function decimalParaNumero(valor: string | number | null | undefined): number {
@@ -69,6 +80,92 @@ export function saldoAbertoTitulo(valorOriginal: string | number, desconto: stri
 
 export function podeCancelarTituloFinanceiro(valorBaixado: string | number | null | undefined): boolean {
   return decimalParaNumero(valorBaixado) <= CENTAVOS_EPSILON;
+}
+
+export function podeEstornarBaixa(estornada: boolean | number | null | undefined): boolean {
+  return !Boolean(estornada);
+}
+
+function inicioDoDia(data: Date): Date {
+  const resultado = new Date(data);
+  resultado.setHours(0, 0, 0, 0);
+  return resultado;
+}
+
+function fimDoDia(data: Date): Date {
+  const resultado = new Date(data);
+  resultado.setHours(23, 59, 59, 999);
+  return resultado;
+}
+
+function chaveData(data: Date): string {
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
+
+export function calcularRelatorioFluxoCaixa(input: {
+  dataInicio: Date;
+  dataFim: Date;
+  saldoInicialContas: string | number;
+  movimentos: MovimentoFluxoCaixa[];
+}) {
+  const inicio = inicioDoDia(input.dataInicio);
+  const fim = fimDoDia(input.dataFim);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || inicio > fim) {
+    throw new Error("Informe um período de fluxo de caixa válido");
+  }
+
+  const movimentosValidos = input.movimentos.filter((movimento) => !Boolean(movimento.estornada));
+  const calcularLiquido = (movimentos: MovimentoFluxoCaixa[]) => movimentos.reduce((total, movimento) => (
+    total + (movimento.tipo === "receber" ? decimalParaNumero(movimento.valor) : -decimalParaNumero(movimento.valor))
+  ), 0);
+  const movimentosAnteriores = movimentosValidos.filter((movimento) => new Date(movimento.dataBaixa) < inicio);
+  const movimentosPeriodo = movimentosValidos
+    .filter((movimento) => {
+      const data = new Date(movimento.dataBaixa);
+      return data >= inicio && data <= fim;
+    })
+    .sort((a, b) => new Date(a.dataBaixa).getTime() - new Date(b.dataBaixa).getTime() || a.id - b.id);
+  const saldoAbertura = decimalParaNumero(input.saldoInicialContas) + calcularLiquido(movimentosAnteriores);
+  const entradas = movimentosPeriodo
+    .filter((movimento) => movimento.tipo === "receber")
+    .reduce((total, movimento) => total + decimalParaNumero(movimento.valor), 0);
+  const saidas = movimentosPeriodo
+    .filter((movimento) => movimento.tipo === "pagar")
+    .reduce((total, movimento) => total + decimalParaNumero(movimento.valor), 0);
+  const porDia = new Map<string, { entradas: number; saidas: number }>();
+  movimentosPeriodo.forEach((movimento) => {
+    const chave = chaveData(new Date(movimento.dataBaixa));
+    const acumulado = porDia.get(chave) ?? { entradas: 0, saidas: 0 };
+    if (movimento.tipo === "receber") acumulado.entradas += decimalParaNumero(movimento.valor);
+    else acumulado.saidas += decimalParaNumero(movimento.valor);
+    porDia.set(chave, acumulado);
+  });
+
+  let saldoAcumulado = saldoAbertura;
+  const dias = [] as Array<{ data: string; entradas: number; saidas: number; saldoLiquido: number; saldoAcumulado: number }>;
+  for (let cursor = new Date(inicio); cursor <= fim; cursor.setDate(cursor.getDate() + 1)) {
+    const data = chaveData(cursor);
+    const valores = porDia.get(data) ?? { entradas: 0, saidas: 0 };
+    const saldoLiquido = valores.entradas - valores.saidas;
+    saldoAcumulado += saldoLiquido;
+    dias.push({ data, ...valores, saldoLiquido, saldoAcumulado });
+  }
+
+  return {
+    dataInicio: chaveData(inicio),
+    dataFim: chaveData(fim),
+    saldoAbertura,
+    entradas,
+    saidas,
+    saldoLiquido: entradas - saidas,
+    saldoFinal: saldoAbertura + entradas - saidas,
+    quantidadeMovimentos: movimentosPeriodo.length,
+    dias,
+    movimentos: movimentosPeriodo,
+  };
 }
 
 export function classificarAlertaVencimento(input: {

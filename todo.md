@@ -81,3 +81,13 @@
 - [x] Executar uma validação funcional da interface do Financeiro cancelando um título ativo, confirmando no diálogo e verificando que ele some da lista ativa após a atualização
 - [x] Adicionar um teste integrado para o fluxo de cancelamento manual com confirmação e atualização da listagem, se a infraestrutura permitir
 - [x] Configurar a infraestrutura mínima de teste de interface para cobrir o cancelamento manual sem depender de dados reais
+- [x] Modelar o estorno de baixas com trilha de auditoria, impedindo reversões duplicadas
+- [x] Atualizar títulos e saldos financeiros após o estorno de uma baixa
+- [x] Expor a operação de estorno com validações na API financeira
+- [x] Adicionar ação de estorno com confirmação no histórico de baixas
+- [x] Criar relatório de fluxo de caixa com filtros de período específico
+- [x] Exibir entradas, saídas, saldo líquido e evolução diária no relatório de fluxo de caixa
+- [x] Cobrir regras de estorno e relatório de período com testes automatizados
+- [x] Validar visualmente os filtros e indicadores do relatório de fluxo de caixa na interface financeira
+- [x] Cobrir a confirmação, motivo obrigatório e atualização visual do estorno com teste de interface
+- [x] Permitir abrir diretamente a aba de fluxo de caixa pela URL para facilitar revisão e compartilhamento do relatório

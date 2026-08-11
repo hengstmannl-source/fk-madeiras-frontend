@@ -235,6 +235,10 @@ export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
   observacoes: text("observacoes"),
   conciliada: boolean("conciliada").notNull().default(false),
   conciliadaEm: timestamp("conciliadaEm"),
+  estornada: boolean("estornada").notNull().default(false),
+  estornadaEm: timestamp("estornadaEm"),
+  estornadaPor: int("estornadaPor"),
+  motivoEstorno: text("motivoEstorno"),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
