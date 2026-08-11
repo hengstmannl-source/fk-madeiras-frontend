@@ -26,3 +26,8 @@
 - [x] Corrigir a linha indevida acima das informações da tabela de itens no PDF
 - [x] Criar aba de Orçamentos Aprovados com registro de pagamento
 - [x] Bloquear alteração e exclusão de orçamento pago, exigindo dupla confirmação para desbloqueio excepcional
+- [x] Adicionar filtros por período e nome do cliente na aba de Orçamentos Aprovados
+- [x] Registrar forma de pagamento e data exata de quitação do orçamento
+- [x] Gerar recibo de pagamento em PDF apenas para orçamentos quitados
+- [x] Proteger PDFs de orçamento e recibo com autenticação consistente com o sistema
+- [x] Testar que recibos só são acessíveis a utilizadores autenticados e para documentos quitados

@@ -1,6 +1,7 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { getEmpresaConfiguracao, getOrcamentoWithItems, listClientes } from "./db";
 import { storageGetSignedUrl } from "./storage";
+import { sdk } from "./_core/sdk";
 
 // Format number as BRL currency (pt-BR: 1.234,56)
 function formatBRL(value: string): string {
@@ -19,6 +20,30 @@ function formatDimensionCm(valueInMillimeters: string): string {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(num / 10);
+}
+
+function formatFormaPagamento(formaPagamento?: string | null): string {
+  const formas: Record<string, string> = {
+    pix: "PIX",
+    dinheiro: "Dinheiro",
+    cartao_credito: "Cartão de crédito",
+    cartao_debito: "Cartão de débito",
+    transferencia: "Transferência bancária",
+    boleto: "Boleto",
+    outro: "Outro",
+  };
+  return formas[formaPagamento ?? ""] ?? "Não informada";
+}
+
+async function requirePdfAuthentication(req: any, res: any) {
+  try {
+    const user = await sdk.authenticateRequest(req);
+    if (user) return true;
+  } catch {
+    // O mesmo retorno é usado para sessão ausente ou inválida.
+  }
+  res.status(401).json({ error: "Autenticação necessária para aceder a este documento" });
+  return false;
 }
 
 async function loadCompanyLogo(pdfDoc: PDFDocument) {
@@ -42,6 +67,7 @@ async function loadCompanyLogo(pdfDoc: PDFDocument) {
 export async function registerPdfRoutes(app: any) {
   app.get("/api/pdf/orcamento/:id", async (req: any, res: any) => {
     try {
+      if (!(await requirePdfAuthentication(req, res))) return;
       const id = parseInt(req.params.id);
       if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
@@ -169,6 +195,84 @@ export async function registerPdfRoutes(app: any) {
     } catch (err: any) {
       console.error("PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar PDF" });
+    }
+  });
+
+  app.get("/api/pdf/recibo/:id", async (req: any, res: any) => {
+    try {
+      if (!(await requirePdfAuthentication(req, res))) return;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+
+      const data = await getOrcamentoWithItems(id);
+      if (!data) return res.status(404).json({ error: "Orçamento não encontrado" });
+      if (!data.orcamento.pago || !data.orcamento.pagoEm) {
+        return res.status(400).json({ error: "O recibo só está disponível para orçamentos quitados" });
+      }
+
+      const clientes = await listClientes();
+      const cliente = clientes.find((item: any) => item.id === data.orcamento.clienteId);
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([595, 842]);
+      const { width, height } = page.getSize();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const logo = await loadCompanyLogo(pdfDoc);
+      const logoDimensions = logo?.scaleToFit(118, 54);
+      const headerX = logoDimensions ? 50 + logoDimensions.width + 16 : 50;
+
+      if (logoDimensions) {
+        page.drawImage(logo!, { x: 50, y: height - 50 - logoDimensions.height, width: logoDimensions.width, height: logoDimensions.height });
+      }
+
+      let y = height - 55;
+      page.drawText("FK MADEIRAS", { x: headerX, y, size: 24, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
+      y -= 20;
+      page.drawText("Comprovante de quitação", { x: headerX, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
+      y -= 76;
+
+      page.drawRectangle({ x: 50, y: y - 54, width: width - 100, height: 64, color: rgb(0.95, 0.93, 0.89) });
+      page.drawText("RECIBO DE PAGAMENTO", { x: 66, y: y - 2, size: 17, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
+      page.drawText(`Referente ao orçamento ${data.orcamento.numero}`, { x: 66, y: y - 23, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Recibo nº REC-${data.orcamento.numero}`, { x: 66, y: y - 41, size: 9, font, color: rgb(0.45, 0.45, 0.45) });
+      y -= 96;
+
+      page.drawText("DECLARAÇÃO DE QUITAÇÃO", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
+      y -= 24;
+      const nomeCliente = cliente?.nome ?? "Cliente";
+      page.drawText(`Recebemos de ${nomeCliente} o valor abaixo indicado, referente ao orçamento mencionado.`, { x: 50, y, size: 10, font, maxWidth: width - 100, lineHeight: 14 });
+      y -= 62;
+
+      page.drawText("VALOR RECEBIDO", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
+      y -= 23;
+      page.drawText(`R$ ${formatBRL(data.orcamento.total)}`, { x: 50, y, size: 24, font: boldFont, color: rgb(0.15, 0.42, 0.26) });
+      y -= 54;
+
+      const dataPagamento = new Date(data.orcamento.pagoEm).toLocaleDateString("pt-BR");
+      page.drawLine({ start: { x: 50, y }, end: { x: width - 50, y }, thickness: 0.8, color: rgb(0.82, 0.79, 0.73) });
+      y -= 28;
+      page.drawText("Cliente", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText(nomeCliente, { x: 180, y, size: 10, font });
+      y -= 25;
+      page.drawText("Forma de pagamento", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText(formatFormaPagamento(data.orcamento.formaPagamento), { x: 180, y, size: 10, font });
+      y -= 25;
+      page.drawText("Data de pagamento", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText(dataPagamento, { x: 180, y, size: 10, font });
+      y -= 68;
+
+      page.drawLine({ start: { x: 50, y }, end: { x: 270, y }, thickness: 0.8, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText("FK Madeiras", { x: 50, y: y - 16, size: 9, font, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText("Documento gerado eletronicamente.", { x: 50, y: 40, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 180, y: 40, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+
+      const pdfBytes = await pdfDoc.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="recibo-${data.orcamento.numero}.pdf"`);
+      res.send(Buffer.from(pdfBytes));
+    } catch (err: any) {
+      console.error("Receipt PDF generation error:", err);
+      res.status(500).json({ error: "Erro ao gerar recibo de pagamento" });
     }
   });
 }

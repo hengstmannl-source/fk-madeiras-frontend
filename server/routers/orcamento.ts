@@ -18,6 +18,22 @@ export const ItemSchema = z.object({
   orcamentoId: z.number().optional(),
 });
 
+export const FormaPagamentoSchema = z.enum([
+  "pix",
+  "dinheiro",
+  "cartao_credito",
+  "cartao_debito",
+  "transferencia",
+  "boleto",
+  "outro",
+]);
+
+export const RegistroPagamentoSchema = z.object({
+  id: z.number(),
+  formaPagamento: FormaPagamentoSchema.default("outro"),
+  pagoEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data de pagamento válida").default(() => new Date().toISOString().slice(0, 10)),
+});
+
 export const orcamentoRouter = router({
   list: protectedProcedure
     .input(z.object({
@@ -94,9 +110,11 @@ export const orcamentoRouter = router({
     }),
 
   registrarPagamento: protectedProcedure
-    .input(z.object({ id: z.number() }))
+    .input(RegistroPagamentoSchema)
     .mutation(async ({ ctx, input }) => {
-      return db.registrarPagamentoOrcamento(input.id, ctx.user.id);
+      const [ano, mes, dia] = input.pagoEm.split("-").map(Number);
+      const dataPagamento = new Date(ano, mes - 1, dia, 12, 0, 0);
+      return db.registrarPagamentoOrcamento(input.id, ctx.user.id, input.formaPagamento, dataPagamento);
     }),
 
   duplicate: protectedProcedure

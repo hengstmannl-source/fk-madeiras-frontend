@@ -1,11 +1,37 @@
 import { trpc } from "@/lib/trpc";
+import { useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BadgeCheck, CheckCircle2, CircleDollarSign, Eye, FileText, Loader2, LockKeyhole } from "lucide-react";
+import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, Download, Eye, FileText, Loader2, LockKeyhole, RotateCcw, Search } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+
+const FORMAS_PAGAMENTO = [
+  ["pix", "PIX"],
+  ["dinheiro", "Dinheiro"],
+  ["cartao_credito", "Cartão de crédito"],
+  ["cartao_debito", "Cartão de débito"],
+  ["transferencia", "Transferência bancária"],
+  ["boleto", "Boleto"],
+  ["outro", "Outro"],
+] as const;
+
+type FormaPagamento = (typeof FORMAS_PAGAMENTO)[number][0];
+
+function dataLocalDeHoje() {
+  const hoje = new Date();
+  return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+}
+
+function descricaoFormaPagamento(forma?: string | null) {
+  return FORMAS_PAGAMENTO.find(([valor]) => valor === forma)?.[1] ?? "Não informada";
+}
 
 export default function OrcamentosAprovadosPage() {
   const [, setLocation] = useLocation();
@@ -13,13 +39,40 @@ export default function OrcamentosAprovadosPage() {
   const clientes = trpc.cliente.list.useQuery();
   const registrarPagamento = trpc.orcamento.registrarPagamento.useMutation();
   const utils = trpc.useUtils();
+  const [buscaCliente, setBuscaCliente] = useState("");
+  const [dataInicial, setDataInicial] = useState("");
+  const [dataFinal, setDataFinal] = useState("");
+  const [pagamentoAlvo, setPagamentoAlvo] = useState<{ id: number; numero: string } | null>(null);
+  const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("pix");
+  const [dataPagamento, setDataPagamento] = useState(dataLocalDeHoje);
   const clienteMap = new Map(clientes.data?.map((cliente) => [cliente.id, cliente.nome]) ?? []);
 
-  const handleRegistrarPagamento = (id: number, numero: string) => {
-    if (!confirm(`Registrar o pagamento do orçamento ${numero}? Após essa ação, ele ficará bloqueado para alterações e exclusão.`)) return;
-    registrarPagamento.mutate({ id }, {
+  const orcamentosFiltrados = useMemo(() => {
+    const termo = buscaCliente.trim().toLocaleLowerCase("pt-BR");
+    const inicio = dataInicial ? new Date(`${dataInicial}T00:00:00`) : undefined;
+    const fim = dataFinal ? new Date(`${dataFinal}T23:59:59.999`) : undefined;
+
+    return (aprovados.data ?? []).filter((orcamento) => {
+      const nomeCliente = clienteMap.get(orcamento.clienteId) ?? "";
+      const dataOrcamento = new Date(orcamento.createdAt);
+      return (!termo || nomeCliente.toLocaleLowerCase("pt-BR").includes(termo))
+        && (!inicio || dataOrcamento >= inicio)
+        && (!fim || dataOrcamento <= fim);
+    });
+  }, [aprovados.data, buscaCliente, clienteMap, dataFinal, dataInicial]);
+
+  const handleLimparFiltros = () => {
+    setBuscaCliente("");
+    setDataInicial("");
+    setDataFinal("");
+  };
+
+  const handleConfirmarPagamento = () => {
+    if (!pagamentoAlvo) return;
+    registrarPagamento.mutate({ id: pagamentoAlvo.id, formaPagamento, pagoEm: dataPagamento }, {
       onSuccess: () => {
         toast.success("Pagamento registrado. O orçamento foi bloqueado.");
+        setPagamentoAlvo(null);
         utils.orcamento.list.invalidate();
       },
       onError: (erro) => toast.error(erro.message),
@@ -39,24 +92,51 @@ export default function OrcamentosAprovadosPage() {
         </Card>
       </div>
 
+      <Card className="border-border/60 shadow-sm">
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 mb-4"><Search className="h-4 w-4 text-primary" /><h2 className="text-sm font-semibold">Filtros de busca</h2></div>
+          <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_1fr_auto] md:items-end">
+            <div className="space-y-2"><Label htmlFor="cliente-aprovado">Nome do cliente</Label><Input id="cliente-aprovado" value={buscaCliente} onChange={(event) => setBuscaCliente(event.target.value)} placeholder="Pesquisar por cliente" /></div>
+            <div className="space-y-2"><Label htmlFor="data-inicial">Data inicial</Label><Input id="data-inicial" type="date" value={dataInicial} onChange={(event) => setDataInicial(event.target.value)} /></div>
+            <div className="space-y-2"><Label htmlFor="data-final">Data final</Label><Input id="data-final" type="date" value={dataFinal} onChange={(event) => setDataFinal(event.target.value)} /></div>
+            <Button variant="outline" className="w-full md:w-auto" onClick={handleLimparFiltros}><RotateCcw className="h-4 w-4 mr-2" />Limpar</Button>
+          </div>
+          <p className="mt-3 text-xs text-muted-foreground"><CalendarDays className="inline h-3.5 w-3.5 mr-1" />O período considera a data de criação do orçamento.</p>
+        </CardContent>
+      </Card>
+
       <div className="rounded-xl border border-border/50 bg-white shadow-sm overflow-hidden">
         {aprovados.isLoading ? <div className="p-10 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />A carregar...</div>
-        : aprovados.data && aprovados.data.length > 0 ? (
+        : orcamentosFiltrados.length > 0 ? (
           <Table>
             <TableHeader><TableRow className="bg-muted/50"><TableHead>Orçamento</TableHead><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Pagamento</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
-            <TableBody>{aprovados.data.map((orcamento) => (
+            <TableBody>{orcamentosFiltrados.map((orcamento) => (
               <TableRow key={orcamento.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium text-primary">{orcamento.numero}</TableCell>
                 <TableCell>{clienteMap.get(orcamento.clienteId) ?? "—"}</TableCell>
                 <TableCell className="font-semibold">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(orcamento.total))}</TableCell>
-                <TableCell>{orcamento.pago ? <div className="flex items-center gap-2"><Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200">Pago</Badge>{orcamento.pagoEm && <span className="text-xs text-muted-foreground">{new Date(orcamento.pagoEm).toLocaleDateString("pt-BR")}</span>}</div> : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pendente</Badge>}</TableCell>
+                <TableCell>{orcamento.pago ? <div className="space-y-1"><div className="flex items-center gap-2"><Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200">Pago</Badge>{orcamento.pagoEm && <span className="text-xs text-muted-foreground">{new Date(orcamento.pagoEm).toLocaleDateString("pt-BR")}</span>}</div><p className="text-xs text-muted-foreground">{descricaoFormaPagamento(orcamento.formaPagamento)}</p></div> : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pendente</Badge>}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{new Date(orcamento.createdAt).toLocaleDateString("pt-BR")}</TableCell>
-                <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver orçamento" onClick={() => setLocation(`/orcamentos/${orcamento.id}`)}><Eye className="h-4 w-4" /></Button>{!orcamento.pago && <Button size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending} onClick={() => handleRegistrarPagamento(orcamento.id, orcamento.numero)}><CircleDollarSign className="h-4 w-4 mr-1.5" />Registrar pagamento</Button>}{orcamento.pago && <CheckCircle2 className="h-4 w-4 text-emerald-600 mx-2" />}</div></TableCell>
+                <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver orçamento" onClick={() => setLocation(`/orcamentos/${orcamento.id}`)}><Eye className="h-4 w-4" /></Button>{!orcamento.pago && <Button size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo({ id: orcamento.id, numero: orcamento.numero })}><CircleDollarSign className="h-4 w-4 mr-1.5" />Registrar pagamento</Button>}{orcamento.pago && <><Button variant="outline" size="sm" className="h-8" onClick={() => window.open(`/api/pdf/recibo/${orcamento.id}`, "_blank", "noopener,noreferrer")}><Download className="h-4 w-4 mr-1.5" />Recibo</Button><CheckCircle2 className="h-4 w-4 text-emerald-600 mx-1" /></>}</div></TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>
-        ) : <div className="p-14 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhum orçamento aprovado encontrado.</p></div>}
+        ) : <div className="p-14 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhum orçamento aprovado encontrado para os filtros selecionados.</p></div>}
       </div>
+
+      <Dialog open={Boolean(pagamentoAlvo)} onOpenChange={(aberto) => !aberto && setPagamentoAlvo(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Registrar pagamento</DialogTitle>
+            <DialogDescription>Informe a forma e a data exata da quitação de {pagamentoAlvo?.numero ?? ""}. Após confirmar, o orçamento será bloqueado.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            <div className="space-y-2"><Label htmlFor="forma-pagamento">Forma de pagamento</Label><Select value={formaPagamento} onValueChange={(valor) => setFormaPagamento(valor as FormaPagamento)}><SelectTrigger id="forma-pagamento"><SelectValue /></SelectTrigger><SelectContent>{FORMAS_PAGAMENTO.map(([valor, rotulo]) => <SelectItem key={valor} value={valor}>{rotulo}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label htmlFor="data-pagamento">Data de pagamento</Label><Input id="data-pagamento" type="date" value={dataPagamento} onChange={(event) => setDataPagamento(event.target.value)} /></div>
+          </div>
+          <DialogFooter><Button variant="outline" onClick={() => setPagamentoAlvo(null)}>Cancelar</Button><Button className="bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending || !dataPagamento} onClick={handleConfirmarPagamento}>{registrarPagamento.isPending ? "Registrando..." : "Confirmar pagamento"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

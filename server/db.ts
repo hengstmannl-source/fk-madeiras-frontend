@@ -322,7 +322,7 @@ export async function updateOrcamentoEstado(id: number, novoEstado: "rascunho" |
   return { success: true };
 }
 
-export async function registrarPagamentoOrcamento(id: number, userId: number) {
+export async function registrarPagamentoOrcamento(id: number, userId: number, formaPagamento: string, pagoEm: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const orcamento = await getOrcamentoById(id);
@@ -330,15 +330,14 @@ export async function registrarPagamentoOrcamento(id: number, userId: number) {
   if (orcamento.estado !== "aprovado") throw new Error("Apenas orçamentos aprovados podem ser marcados como pagos");
   if (orcamento.pago) throw new Error("Este orçamento já foi registrado como pago");
 
-  const pagoEm = new Date();
-  await db.update(orcamentos).set({ pago: true, pagoEm, pagoPor: userId }).where(eq(orcamentos.id, id));
+  await db.update(orcamentos).set({ pago: true, pagoEm, formaPagamento, pagoPor: userId }).where(eq(orcamentos.id, id));
   await db.insert(historicoAlteracoes).values({
     orcamentoId: id,
     usuarioId: userId,
     tipo: "alteracao" as any,
-    detalhes: JSON.stringify({ acao: "pagamento_registrado", pagoEm: pagoEm.toISOString() }),
+    detalhes: JSON.stringify({ acao: "pagamento_registrado", formaPagamento, pagoEm: pagoEm.toISOString() }),
   });
-  return { success: true, pagoEm };
+  return { success: true, pagoEm, formaPagamento };
 }
 
 export async function duplicateOrcamento(id: number) {
@@ -369,6 +368,7 @@ export async function duplicateOrcamento(id: number) {
     criadoPor: orcamento.criadoPor,
     pago: false,
     pagoEm: null,
+    formaPagamento: null,
     pagoPor: null,
   };
   const novosItens: Omit<InsertItemOrcamento, "id">[] = itens.map(i => ({

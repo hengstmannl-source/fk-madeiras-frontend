@@ -80,6 +80,7 @@ export const orcamentos = mysqlTable("orcamentos", {
   dataValidade: timestamp("dataValidade"),
   pago: boolean("pago").notNull().default(false),
   pagoEm: timestamp("pagoEm"),
+  formaPagamento: varchar("formaPagamento", { length: 50 }),
   pagoPor: int("pagoPor"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

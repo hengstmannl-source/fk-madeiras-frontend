@@ -1,0 +1,1 @@
+ALTER TABLE `orcamentos` ADD `formaPagamento` varchar(50);

@@ -36,6 +36,13 @@
       "when": 1786459295303,
       "tag": "0004_large_warbound",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1786460158034,
+      "tag": "0005_lumpy_abomination",
+      "breakpoints": true
     }
   ]
 }
