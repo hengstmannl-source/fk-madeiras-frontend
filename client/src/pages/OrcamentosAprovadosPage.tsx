@@ -71,7 +71,7 @@ export default function OrcamentosAprovadosPage() {
     if (!pagamentoAlvo) return;
     registrarPagamento.mutate({ id: pagamentoAlvo.id, formaPagamento, pagoEm: dataPagamento }, {
       onSuccess: () => {
-        toast.success("Pagamento registrado. O orçamento foi bloqueado.");
+        toast.success("Pagamento registrado. A venda foi bloqueada.");
         setPagamentoAlvo(null);
         utils.orcamento.list.invalidate();
       },
@@ -84,7 +84,7 @@ export default function OrcamentosAprovadosPage() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="flex items-center gap-2 text-primary mb-2"><BadgeCheck className="h-4 w-4" /><span className="text-xs font-semibold uppercase tracking-wider">Financeiro</span></div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Orçamentos Aprovados</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Vendas Aprovadas</h1>
           <p className="text-sm text-muted-foreground mt-1">Registre pagamentos e acompanhe documentos já quitados.</p>
         </div>
         <Card className="border-emerald-200 bg-emerald-50 shadow-none">
@@ -101,7 +101,7 @@ export default function OrcamentosAprovadosPage() {
             <div className="space-y-2"><Label htmlFor="data-final">Data final</Label><Input id="data-final" type="date" value={dataFinal} onChange={(event) => setDataFinal(event.target.value)} /></div>
             <Button variant="outline" className="w-full md:w-auto" onClick={handleLimparFiltros}><RotateCcw className="h-4 w-4 mr-2" />Limpar</Button>
           </div>
-          <p className="mt-3 text-xs text-muted-foreground"><CalendarDays className="inline h-3.5 w-3.5 mr-1" />O período considera a data de criação do orçamento.</p>
+          <p className="mt-3 text-xs text-muted-foreground"><CalendarDays className="inline h-3.5 w-3.5 mr-1" />O período considera a data de criação da venda.</p>
         </CardContent>
       </Card>
 
@@ -109,7 +109,7 @@ export default function OrcamentosAprovadosPage() {
         {aprovados.isLoading ? <div className="p-10 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />A carregar...</div>
         : orcamentosFiltrados.length > 0 ? (
           <Table>
-            <TableHeader><TableRow className="bg-muted/50"><TableHead>Orçamento</TableHead><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Pagamento</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow className="bg-muted/50"><TableHead>Venda</TableHead><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Pagamento</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
             <TableBody>{orcamentosFiltrados.map((orcamento) => (
               <TableRow key={orcamento.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium text-primary">{orcamento.numero}</TableCell>
@@ -117,18 +117,18 @@ export default function OrcamentosAprovadosPage() {
                 <TableCell className="font-semibold">{new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(orcamento.total))}</TableCell>
                 <TableCell>{orcamento.pago ? <div className="space-y-1"><div className="flex items-center gap-2"><Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200">Pago</Badge>{orcamento.pagoEm && <span className="text-xs text-muted-foreground">{new Date(orcamento.pagoEm).toLocaleDateString("pt-BR")}</span>}</div><p className="text-xs text-muted-foreground">{descricaoFormaPagamento(orcamento.formaPagamento)}</p></div> : <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">Pendente</Badge>}</TableCell>
                 <TableCell className="text-sm text-muted-foreground">{new Date(orcamento.createdAt).toLocaleDateString("pt-BR")}</TableCell>
-                <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver orçamento" onClick={() => setLocation(`/orcamentos/${orcamento.id}`)}><Eye className="h-4 w-4" /></Button>{!orcamento.pago && <Button size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo({ id: orcamento.id, numero: orcamento.numero })}><CircleDollarSign className="h-4 w-4 mr-1.5" />Registrar pagamento</Button>}{orcamento.pago && <><Button variant="outline" size="sm" className="h-8" onClick={() => window.open(`/api/pdf/recibo/${orcamento.id}`, "_blank", "noopener,noreferrer")}><Download className="h-4 w-4 mr-1.5" />Recibo</Button><CheckCircle2 className="h-4 w-4 text-emerald-600 mx-1" /></>}</div></TableCell>
+                <TableCell className="text-right"><div className="flex items-center justify-end gap-1"><Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver venda" onClick={() => setLocation(`/orcamentos/${orcamento.id}`)}><Eye className="h-4 w-4" /></Button>{!orcamento.pago && <Button size="sm" className="h-8 bg-emerald-700 hover:bg-emerald-800 text-white" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo({ id: orcamento.id, numero: orcamento.numero })}><CircleDollarSign className="h-4 w-4 mr-1.5" />Registrar pagamento</Button>}{orcamento.pago && <><Button variant="outline" size="sm" className="h-8" onClick={() => window.open(`/api/pdf/recibo/${orcamento.id}`, "_blank", "noopener,noreferrer")}><Download className="h-4 w-4 mr-1.5" />Recibo</Button><CheckCircle2 className="h-4 w-4 text-emerald-600 mx-1" /></>}</div></TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>
-        ) : <div className="p-14 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhum orçamento aprovado encontrado para os filtros selecionados.</p></div>}
+        ) : <div className="p-14 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhuma venda aprovada encontrada para os filtros selecionados.</p></div>}
       </div>
 
       <Dialog open={Boolean(pagamentoAlvo)} onOpenChange={(aberto) => !aberto && setPagamentoAlvo(null)}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Registrar pagamento</DialogTitle>
-            <DialogDescription>Informe a forma e a data exata da quitação de {pagamentoAlvo?.numero ?? ""}. Após confirmar, o orçamento será bloqueado.</DialogDescription>
+            <DialogDescription>Informe a forma e a data exata da quitação de {pagamentoAlvo?.numero ?? ""}. Após confirmar, a venda será bloqueada.</DialogDescription>
           </DialogHeader>
           <div className="grid gap-4 py-2">
             <div className="space-y-2"><Label htmlFor="forma-pagamento">Forma de pagamento</Label><Select value={formaPagamento} onValueChange={(valor) => setFormaPagamento(valor as FormaPagamento)}><SelectTrigger id="forma-pagamento"><SelectValue /></SelectTrigger><SelectContent>{FORMAS_PAGAMENTO.map(([valor, rotulo]) => <SelectItem key={valor} value={valor}>{rotulo}</SelectItem>)}</SelectContent></Select></div>

@@ -380,7 +380,7 @@ export async function duplicateOrcamento(id: number) {
   const ano = now.getFullYear();
   const mes = String(now.getMonth() + 1).padStart(2, "0");
   const random = Math.floor(Math.random() * 9000 + 1000);
-  const novoNumero = `ORC-${ano}${mes}-${random}`;
+  const novoNumero = `VND-${ano}${mes}-${random}`;
   const novoOrc: InsertOrcamento = {
     numero: novoNumero,
     clienteId: orcamento.clienteId,
@@ -395,6 +395,8 @@ export async function duplicateOrcamento(id: number) {
     observacoes: orcamento.observacoes,
     vendedor: orcamento.vendedor,
     criadoPor: orcamento.criadoPor,
+    dataVencimento: orcamento.dataVencimento,
+    competencia: orcamento.competencia,
     pago: false,
     pagoEm: null,
     formaPagamento: null,
@@ -430,6 +432,7 @@ export type CriarTituloFinanceiroInput = {
   valorOriginal: string;
   dataEmissao: Date;
   dataVencimento: Date;
+  competencia?: Date | null;
   criadoPor: number;
   clienteId?: number | null;
   fornecedorId?: number | null;
@@ -563,6 +566,7 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
     valorBaixado: "0",
     dataEmissao: input.dataEmissao,
     dataVencimento: input.dataVencimento,
+    competencia: input.competencia ?? null,
     estado: calcularEstadoTitulo({ valorOriginal: input.valorOriginal, dataVencimento: input.dataVencimento }),
     observacoes: input.observacoes ?? null,
     criadoPor: input.criadoPor,
@@ -672,7 +676,7 @@ export async function cancelarTituloFinanceiro(id: number, userId: number) {
   return { success: true };
 }
 
-export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento = new Date()) {
+export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento?: Date) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const orcamento = await getOrcamentoById(orcamentoId);
@@ -684,16 +688,48 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
   const criacao = await createTituloFinanceiro({
     tipo: "receber",
     origem: "orcamento",
-    descricao: `Orçamento ${orcamento.numero}`,
+    descricao: `Venda ${orcamento.numero}`,
     clienteId: orcamento.clienteId,
     orcamentoId,
     categoriaId,
     valorOriginal: orcamento.total,
     dataEmissao: new Date(),
-    dataVencimento,
+    dataVencimento: orcamento.dataVencimento ?? dataVencimento ?? new Date(),
+    competencia: orcamento.competencia,
     criadoPor: userId,
   });
   return getTituloFinanceiroById(criacao.id);
+}
+
+export async function atualizarDatasOrcamento(
+  id: number,
+  datas: { dataVencimento: Date; competencia: Date },
+  confirmacaoDupla = false,
+  database?: any,
+) {
+  const db = database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  await validarAlteracaoOrcamento(id, confirmacaoDupla, db);
+  await db.update(orcamentos).set(datas).where(eq(orcamentos.id, id));
+
+  const titulo = await db.select().from(titulosFinanceiros)
+    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, id))).limit(1);
+  if (titulo[0]) {
+    const estado = calcularEstadoTitulo({
+      valorOriginal: titulo[0].valorOriginal,
+      desconto: titulo[0].desconto,
+      juros: titulo[0].juros,
+      valorBaixado: titulo[0].valorBaixado,
+      dataVencimento: datas.dataVencimento,
+      cancelado: titulo[0].estado === "cancelado",
+    });
+    await db.update(titulosFinanceiros).set({
+      dataVencimento: datas.dataVencimento,
+      competencia: datas.competencia,
+      estado,
+    }).where(eq(titulosFinanceiros.id, titulo[0].id));
+  }
+  return { success: true, tituloAtualizado: Boolean(titulo[0]) };
 }
 
 export async function listRecorrenciasFinanceiras() {

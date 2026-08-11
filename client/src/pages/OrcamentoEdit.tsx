@@ -1,8 +1,11 @@
 import { useParams, useLocation } from "wouter";
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
   ArrowLeft, FileText, Download, Send, CheckCircle2, XCircle, Clock, Loader2,
@@ -10,6 +13,13 @@ import {
 } from "lucide-react";
 import { formatCurrency, formatDimensionCm, formatMeasurement } from "@/lib/utils";
 import { toast } from "sonner";
+
+function dataParaInput(data?: Date | string | null) {
+  if (!data) return "";
+  const valor = new Date(data);
+  const deslocamento = valor.getTimezoneOffset() * 60_000;
+  return new Date(valor.getTime() - deslocamento).toISOString().slice(0, 10);
+}
 
 const estadoColors: Record<string, string> = {
   rascunho: "bg-stone-100 text-stone-600 border-stone-200",
@@ -24,16 +34,25 @@ export default function OrcamentoEdit() {
   const orcamentoId = parseInt(id || "0");
   const orc = trpc.orcamento.get.useQuery({ id: orcamentoId }, { enabled: orcamentoId > 0 });
   const updateEstado = trpc.orcamento.updateEstado.useMutation();
+  const atualizarDatas = trpc.orcamento.atualizarDatas.useMutation();
   const utils = trpc.useUtils();
+  const [dataVencimento, setDataVencimento] = useState("");
+  const [competencia, setCompetencia] = useState("");
 
   // Fetch cliente details
   const clientes = trpc.cliente.list.useQuery();
   const cliente = clientes.data?.find(c => c.id === orc.data?.orcamento.clienteId);
 
+  useEffect(() => {
+    if (!orc.data?.orcamento) return;
+    setDataVencimento(dataParaInput(orc.data.orcamento.dataVencimento));
+    setCompetencia(dataParaInput(orc.data.orcamento.competencia));
+  }, [orc.data?.orcamento.dataVencimento, orc.data?.orcamento.competencia]);
+
   const handleEstado = (estado: string) => {
     const pago = Boolean(orc.data?.orcamento.pago);
-    if (pago && !confirm("Este orçamento está pago e bloqueado. Deseja iniciar uma alteração excepcional?")) return;
-    if (pago && !confirm("Confirma novamente a alteração do estado de um orçamento pago?")) return;
+    if (pago && !confirm("Esta venda está quitada e bloqueada. Deseja iniciar uma alteração excepcional?")) return;
+    if (pago && !confirm("Confirma novamente a alteração do estado de uma venda quitada?")) return;
     updateEstado.mutate({ id: orcamentoId, estado: estado as any, confirmacaoDupla: pago }, {
       onSuccess: () => { toast.success(`Estado atualizado para "${estado}"`); utils.orcamento.get.invalidate({ id: orcamentoId }); },
       onError: (err) => toast.error(err.message),
@@ -44,12 +63,30 @@ export default function OrcamentoEdit() {
     window.open(`/api/pdf/orcamento/${orcamentoId}`, "_blank");
   };
 
+  const handleAtualizarDatas = () => {
+    if (!dataVencimento || !competencia) {
+      toast.error("Informe vencimento e competência");
+      return;
+    }
+    const pago = Boolean(orc.data?.orcamento.pago);
+    if (pago && !confirm("Esta venda está quitada. Deseja alterar as datas mesmo assim?")) return;
+    if (pago && !confirm("Confirme novamente a alteração excepcional de uma venda quitada.")) return;
+    atualizarDatas.mutate({ id: orcamentoId, dataVencimento, competencia, confirmacaoDupla: pago }, {
+      onSuccess: ({ tituloAtualizado }) => {
+        toast.success(tituloAtualizado ? "Datas da venda e do recebível atualizadas" : "Datas da venda atualizadas");
+        utils.orcamento.get.invalidate({ id: orcamentoId });
+        utils.financeiro.titulos.list.invalidate();
+      },
+      onError: (err) => toast.error(err.message),
+    });
+  };
+
   if (orc.isLoading) {
     return <div className="max-w-7xl mx-auto p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />A carregar...</div>;
   }
 
   if (!orc.data) {
-    return <div className="max-w-7xl mx-auto p-8 text-center text-muted-foreground">Orçamento não encontrado</div>;
+    return <div className="max-w-7xl mx-auto p-8 text-center text-muted-foreground">Venda não encontrada</div>;
   }
 
   const { orcamento, itens } = orc.data;
@@ -95,6 +132,20 @@ export default function OrcamentoEdit() {
                   {cliente.nif && <p className="text-sm text-muted-foreground">NIF: {cliente.nif}</p>}
                 </div>
               ) : <p className="text-sm text-muted-foreground">Cliente não encontrado</p>}
+            </CardContent>
+          </Card>
+
+          <Card className="border border-border/50 shadow-sm">
+            <CardHeader className="pb-3"><CardTitle className="text-base font-semibold">Datas financeiras</CardTitle></CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2"><Label>Vencimento</Label><Input type="date" value={dataVencimento} onChange={(event) => setDataVencimento(event.target.value)} /></div>
+                <div className="space-y-2"><Label>Competência</Label><Input type="date" value={competencia} onChange={(event) => setCompetencia(event.target.value)} /></div>
+              </div>
+              <Button onClick={handleAtualizarDatas} disabled={atualizarDatas.isPending} className="w-full sm:w-auto">
+                {atualizarDatas.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Atualizar datas
+              </Button>
+              <p className="text-xs text-muted-foreground">Ao existir um recebível vinculado, seu vencimento e competência são atualizados automaticamente.</p>
             </CardContent>
           </Card>
 

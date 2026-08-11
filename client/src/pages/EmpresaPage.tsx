@@ -79,7 +79,7 @@ export default function EmpresaPage() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Empresa</h1>
-        <p className="text-sm text-muted-foreground mt-1">Personalize a identidade visual aplicada aos seus orçamentos.</p>
+        <p className="text-sm text-muted-foreground mt-1">Personalize a identidade visual aplicada às suas vendas.</p>
       </div>
 
       <Card className="border border-border/50 shadow-sm overflow-hidden">
@@ -91,7 +91,7 @@ export default function EmpresaPage() {
               </div>
               <div>
                 <h2 className="font-semibold text-foreground">Logótipo no PDF</h2>
-                <p className="text-sm text-muted-foreground mt-1">Envie uma imagem PNG ou JPG de até 2 MB. Ela será exibida automaticamente no cabeçalho de novos PDFs de orçamento.</p>
+                <p className="text-sm text-muted-foreground mt-1">Envie uma imagem PNG ou JPG de até 2 MB. Ela será exibida automaticamente no cabeçalho dos novos PDFs de venda.</p>
               </div>
             </div>
           </div>

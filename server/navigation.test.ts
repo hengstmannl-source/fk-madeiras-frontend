@@ -9,7 +9,7 @@ describe("navegação principal", () => {
 
   it("organiza financeiro e vendas com as opções prioritárias", () => {
     expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber"]);
-    expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Orçamentos", "Aprovados"]);
+    expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados"]);
     expect(dashboardNavigation.futuros.map((item) => item.label)).toEqual(["Estoque", "Produção", "Diesel"]);
   });
 

@@ -52,7 +52,7 @@ export const dashboardNavigation = {
     { icon: ArrowDownToLine, label: "Contas a receber", path: "/financeiro?tipo=receber" },
   ],
   vendas: [
-    { icon: FileText, label: "Orçamentos", path: "/orcamentos" },
+    { icon: FileText, label: "Vendas", path: "/orcamentos" },
     { icon: BadgeCheck, label: "Aprovados", path: "/orcamentos/aprovados" },
   ],
   gestao: [
@@ -118,7 +118,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               FK Madeiras
             </h1>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Sistema de gestão de orçamentos de madeira serrada
+              Sistema de gestão de vendas e financeiro para madeireira
             </p>
           </div>
           <Button

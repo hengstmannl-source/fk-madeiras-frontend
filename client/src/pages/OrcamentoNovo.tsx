@@ -44,6 +44,11 @@ interface ItemOrcamento {
   valorTotal: string;
 }
 
+function dataLocalParaInput(data = new Date()) {
+  const deslocamento = data.getTimezoneOffset() * 60_000;
+  return new Date(data.getTime() - deslocamento).toISOString().slice(0, 10);
+}
+
 export default function OrcamentoNovo() {
   const [, setLocation] = useLocation();
   const clientes = trpc.cliente.list.useQuery();
@@ -57,6 +62,8 @@ export default function OrcamentoNovo() {
   const [frete, setFrete] = useState("0");
   const [observacoes, setObservacoes] = useState("");
   const [vendedor, setVendedor] = useState("");
+  const [dataVencimento, setDataVencimento] = useState(() => dataLocalParaInput());
+  const [competencia, setCompetencia] = useState(() => dataLocalParaInput());
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
 
   const clienteSelecionado = clientes.data?.find((cliente) => cliente.id === Number(clienteId));
@@ -170,9 +177,11 @@ export default function OrcamentoNovo() {
       totalVolume: String(totals.totalVolume.toFixed(4)),
       observacoes: observacoes || undefined,
       vendedor: vendedor || undefined,
+      dataVencimento,
+      competencia,
       itens,
     }, {
-      onSuccess: () => { toast.success(estado === "enviado" ? "Orçamento enviado!" : "Orçamento guardado!"); utils.orcamento.list.invalidate(); setLocation("/orcamentos"); },
+      onSuccess: () => { toast.success(estado === "enviado" ? "Venda enviada!" : "Venda salva!"); utils.orcamento.list.invalidate(); setLocation("/orcamentos"); },
       onError: (err: any) => toast.error(err.message),
     });
   };
@@ -182,8 +191,8 @@ export default function OrcamentoNovo() {
       <div className="flex items-center justify-between">
         <div>
           <Button variant="ghost" onClick={() => setLocation("/orcamentos")} className="mb-2 -ml-2"><ArrowLeft className="h-4 w-4 mr-1" />Voltar</Button>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Novo Orçamento</h1>
-          <p className="text-sm text-muted-foreground mt-1">Criar orçamento de madeira serrada</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Nova Venda</h1>
+          <p className="text-sm text-muted-foreground mt-1">Registre a venda de madeira serrada e programe o recebimento</p>
         </div>
       </div>
 
@@ -193,7 +202,7 @@ export default function OrcamentoNovo() {
           {/* Cliente */}
           <Card className="border border-border/50 shadow-sm">
             <CardContent className="p-5">
-              <h3 className="font-semibold text-sm mb-4">Dados do Cliente</h3>
+              <h3 className="font-semibold text-sm mb-4">Dados da Venda</h3>
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label>Cliente *</Label>
@@ -251,9 +260,19 @@ export default function OrcamentoNovo() {
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Vendedor</Label>
-                  <Input value={vendedor} onChange={(e) => setVendedor(e.target.value)} placeholder="Nome do vendedor" className="bg-white" />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="space-y-2">
+                    <Label>Vendedor</Label>
+                    <Input value={vendedor} onChange={(e) => setVendedor(e.target.value)} placeholder="Nome do vendedor" className="bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Vencimento *</Label>
+                    <Input type="date" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} className="bg-white" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Competência *</Label>
+                    <Input type="date" value={competencia} onChange={(e) => setCompetencia(e.target.value)} className="bg-white" />
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -306,7 +325,7 @@ export default function OrcamentoNovo() {
           {itens.length > 0 && (
             <Card className="border border-border/50 shadow-sm">
               <CardContent className="p-5">
-                <h3 className="font-semibold text-sm mb-4">Itens do Orçamento ({itens.length})</h3>
+                <h3 className="font-semibold text-sm mb-4">Itens da Venda ({itens.length})</h3>
                 <div className="space-y-2">
                   {itens.map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/30">
@@ -331,7 +350,7 @@ export default function OrcamentoNovo() {
         <div className="space-y-4">
           <Card className="border border-border/50 shadow-sm sticky top-6">
             <CardContent className="p-5 space-y-4">
-              <h3 className="font-semibold text-sm">Resumo</h3>
+              <h3 className="font-semibold text-sm">Resumo da Venda</h3>
               <Separator />
               <div className="space-y-3">
                 <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-medium">{formatCurrency(String(totals.subtotal))}</span></div>
@@ -360,10 +379,10 @@ export default function OrcamentoNovo() {
               </div>
               <div className="flex gap-2 pt-2">
                 <Button variant="outline" onClick={() => handleSave("rascunho")} disabled={!clienteId || itens.length === 0} className="flex-1">
-                  <Save className="h-4 w-4 mr-2" />Rascunho
+                  <Save className="h-4 w-4 mr-2" />Salvar venda
                 </Button>
                 <Button onClick={() => handleSave("enviado")} disabled={!clienteId || itens.length === 0} className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Send className="h-4 w-4 mr-2" />Enviar
+                  <Send className="h-4 w-4 mr-2" />Enviar venda
                 </Button>
               </div>
             </CardContent>

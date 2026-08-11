@@ -43,14 +43,14 @@ export default function OrcamentosPage() {
   };
 
   const handleDelete = (orcamento: { id: number; pago: boolean }) => {
-    if (!confirm("Eliminar este orçamento?")) return;
-    if (orcamento.pago && !confirm("Este orçamento está pago e bloqueado. Confirma novamente que deseja eliminá-lo?")) return;
-    remove.mutate({ id: orcamento.id, confirmacaoDupla: orcamento.pago }, { onSuccess: () => { toast.success("Orçamento eliminado"); utils.orcamento.list.invalidate(); }, onError: (err) => toast.error(err.message) });
+    if (!confirm("Excluir esta venda?")) return;
+    if (orcamento.pago && !confirm("Esta venda está quitada e bloqueada. Confirma novamente que deseja excluí-la?")) return;
+    remove.mutate({ id: orcamento.id, confirmacaoDupla: orcamento.pago }, { onSuccess: () => { toast.success("Venda excluída"); utils.orcamento.list.invalidate(); }, onError: (err) => toast.error(err.message) });
   };
 
   const handleDuplicate = (id: number) => {
     duplicate.mutate({ id }, {
-      onSuccess: (data: any) => { toast.success("Orçamento duplicado"); utils.orcamento.list.invalidate(); if (data?.id) setLocation(`/orcamentos/${data.id}`); },
+      onSuccess: (data: any) => { toast.success("Venda duplicada"); utils.orcamento.list.invalidate(); if (data?.id) setLocation(`/orcamentos/${data.id}`); },
       onError: (err) => toast.error(err.message),
     });
   };
@@ -59,11 +59,11 @@ export default function OrcamentosPage() {
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Orçamentos</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gestão de orçamentos de madeira serrada</p>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Vendas</h1>
+          <p className="text-sm text-muted-foreground mt-1">Gestão de vendas de madeira serrada</p>
         </div>
         <Button onClick={() => setLocation("/orcamentos/novo")} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-          <Plus className="h-4 w-4 mr-2" />Novo Orçamento
+          <Plus className="h-4 w-4 mr-2" />Nova Venda
         </Button>
       </div>
 
@@ -86,7 +86,7 @@ export default function OrcamentosPage() {
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">Nº Orçamento</TableHead>
+                <TableHead className="font-semibold">Nº Venda</TableHead>
                 <TableHead className="font-semibold">Cliente</TableHead>
                 <TableHead className="font-semibold">Estado</TableHead>
                 <TableHead className="font-semibold">Total</TableHead>
@@ -116,7 +116,7 @@ export default function OrcamentosPage() {
             </TableBody>
           </Table>
         ) : (
-          <div className="p-12 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhum orçamento encontrado</p></div>
+          <div className="p-12 text-center text-muted-foreground"><FileText className="h-10 w-10 mx-auto mb-3 opacity-30" /><p className="text-sm">Nenhuma venda encontrada</p></div>
         )}
       </div>
     </div>

@@ -60,3 +60,8 @@
 - [x] Validar a nova estrutura de navegação em telas desktop e mobile
 - [x] Testar a indisponibilidade segura dos módulos futuros na barra lateral
 - [x] Testar o clique em Estoque, Produção e Diesel sem navegação para rotas indisponíveis
+- [x] Renomear a experiência comercial de Orçamentos para Vendas, preservando os documentos e dados existentes
+- [x] Permitir informar vencimento e competência ao criar uma venda
+- [x] Permitir editar vencimento e competência depois do lançamento da venda
+- [x] Sincronizar a alteração de vencimento da venda com a conta a receber vinculada
+- [x] Testar criação e atualização de datas de vendas e recebíveis vinculados

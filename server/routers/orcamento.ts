@@ -34,6 +34,13 @@ export const RegistroPagamentoSchema = z.object({
   pagoEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data de pagamento válida").default(() => new Date().toISOString().slice(0, 10)),
 });
 
+const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
+
+function parseDataFinanceira(data: string) {
+  const [ano, mes, dia] = data.split("-").map(Number);
+  return new Date(ano, mes - 1, dia, 12, 0, 0);
+}
+
 export const orcamentoRouter = router({
   list: protectedProcedure
     .input(z.object({
@@ -63,6 +70,8 @@ export const orcamentoRouter = router({
       totalVolume: z.string(),
       observacoes: z.string().optional(),
       vendedor: z.string().optional(),
+      dataVencimento: DataFinanceiraSchema.optional(),
+      competencia: DataFinanceiraSchema.optional(),
       itens: z.array(ItemSchema),
     }))
     .mutation(async ({ ctx, input }) => {
@@ -86,6 +95,8 @@ export const orcamentoRouter = router({
           observacoes: input.observacoes ?? null,
           vendedor: input.vendedor ?? null,
           criadoPor: ctx.user.id,
+          dataVencimento: input.dataVencimento ? parseDataFinanceira(input.dataVencimento) : now,
+          competencia: input.competencia ? parseDataFinanceira(input.competencia) : now,
         },
         input.itens
       );
@@ -109,6 +120,20 @@ export const orcamentoRouter = router({
       return { success: true };
     }),
 
+  atualizarDatas: protectedProcedure
+    .input(z.object({
+      id: z.number(),
+      dataVencimento: DataFinanceiraSchema,
+      competencia: DataFinanceiraSchema,
+      confirmacaoDupla: z.boolean().default(false),
+    }))
+    .mutation(async ({ input }) => {
+      return db.atualizarDatasOrcamento(input.id, {
+        dataVencimento: parseDataFinanceira(input.dataVencimento),
+        competencia: parseDataFinanceira(input.competencia),
+      }, input.confirmacaoDupla);
+    }),
+
   delete: protectedProcedure
     .input(z.object({ id: z.number(), confirmacaoDupla: z.boolean().default(false) }))
     .mutation(async ({ input }) => {
@@ -119,8 +144,7 @@ export const orcamentoRouter = router({
   registrarPagamento: protectedProcedure
     .input(RegistroPagamentoSchema)
     .mutation(async ({ ctx, input }) => {
-      const [ano, mes, dia] = input.pagoEm.split("-").map(Number);
-      const dataPagamento = new Date(ano, mes - 1, dia, 12, 0, 0);
+      const dataPagamento = parseDataFinanceira(input.pagoEm);
       return db.registrarPagamentoOrcamento(input.id, ctx.user.id, input.formaPagamento, dataPagamento);
     }),
 
