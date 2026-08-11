@@ -65,3 +65,9 @@
 - [x] Permitir editar vencimento e competência depois do lançamento da venda
 - [x] Sincronizar a alteração de vencimento da venda com a conta a receber vinculada
 - [x] Testar criação e atualização de datas de vendas e recebíveis vinculados
+- [x] Retirar ou cancelar a conta a receber vinculada quando uma venda aprovada for excluída
+- [x] Gerar um número sequencial, único e definitivo somente na aprovação da venda
+- [x] Exibir a numeração definitiva em vendas, recebíveis e documentos após a aprovação
+- [x] Testar a exclusão de vendas aprovadas e a unicidade da numeração sequencial
+- [x] Exibir explicitamente o número sequencial definitivo da venda na conta a receber vinculada
+- [x] Testar a apresentação do número definitivo da venda nos recebíveis após aprovação

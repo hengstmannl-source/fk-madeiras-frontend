@@ -98,7 +98,7 @@ export default function OrcamentosPage() {
             <TableBody>
               {orcamentos.data.map((o) => (
                 <TableRow key={o.id} className="hover:bg-muted/30">
-                  <TableCell className="font-medium text-primary">{o.numero}</TableCell>
+                  <TableCell className="font-medium text-primary">{o.numero ?? "Aguardando aprovação"}</TableCell>
                   <TableCell>{clienteMap.get(o.clienteId) || "—"}</TableCell>
                   <TableCell><div className="flex items-center gap-2"><Badge variant="outline" className={`text-xs ${estadoColors[o.estado] ?? ""}`}>{o.estado}</Badge>{o.pago && <Badge variant="outline" className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">pago</Badge>}</div></TableCell>
                   <TableCell className="font-semibold">{formatCurrency(o.total)}</TableCell>

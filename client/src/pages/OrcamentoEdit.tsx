@@ -97,7 +97,7 @@ export default function OrcamentoEdit() {
         <div>
           <Button variant="ghost" onClick={() => setLocation("/orcamentos")} className="mb-2 -ml-2"><ArrowLeft className="h-4 w-4 mr-1" />Voltar</Button>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">{orcamento.numero}</h1>
+            <h1 className="text-2xl font-bold tracking-tight text-foreground">{orcamento.numero ?? "Venda aguardando aprovação"}</h1>
             <Badge variant="outline" className={`text-xs ${estadoColors[orcamento.estado] ?? ""}`}>{orcamento.estado}</Badge>
             {orcamento.pago && <Badge variant="outline" className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">pago e bloqueado</Badge>}
           </div>

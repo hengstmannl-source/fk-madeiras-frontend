@@ -76,15 +76,12 @@ export const orcamentoRouter = router({
     }))
     .mutation(async ({ ctx, input }) => {
       const now = new Date();
-      const ano = now.getFullYear();
-      const mes = String(now.getMonth() + 1).padStart(2, "0");
-      const seq = Math.floor(Math.random() * 9000 + 1000);
-      const numero = `ORC-${ano}${mes}-${seq}`;
+      const estadoInicial = input.estado === "aprovado" ? "rascunho" : input.estado;
       const orcamento = await db.createOrcamento(
         {
-          numero,
+          numero: null,
           clienteId: input.clienteId,
-          estado: input.estado,
+          estado: estadoInicial,
           desconto: input.desconto,
           frete: input.frete,
           subtotal: input.subtotal,
@@ -101,7 +98,7 @@ export const orcamentoRouter = router({
         input.itens
       );
       if (input.estado === "aprovado") {
-        await db.criarTituloReceberDeOrcamento(orcamento.id, ctx.user.id);
+        await db.updateOrcamentoEstado(orcamento.id, "aprovado", ctx.user.id);
       }
       return orcamento;
     }),
@@ -136,8 +133,8 @@ export const orcamentoRouter = router({
 
   delete: protectedProcedure
     .input(z.object({ id: z.number(), confirmacaoDupla: z.boolean().default(false) }))
-    .mutation(async ({ input }) => {
-      await db.deleteOrcamento(input.id, input.confirmacaoDupla);
+    .mutation(async ({ ctx, input }) => {
+      await db.deleteOrcamento(input.id, input.confirmacaoDupla, ctx.user.id);
       return { success: true };
     }),
 

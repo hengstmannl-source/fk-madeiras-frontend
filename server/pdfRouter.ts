@@ -109,11 +109,11 @@ export async function registerPdfRoutes(app: any) {
       // Header - Company name
       page.drawText("FK MADEIRAS", { x: headerX, y, size: 24, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
       y -= 20;
-      page.drawText("Sistema de Orçamentos", { x: headerX, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
+      page.drawText("Sistema de Vendas", { x: headerX, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
 
-      // Orçamento number and date
+      // Número e data da venda
       y -= 48;
-      page.drawText(`Orçamento: ${data.orcamento.numero}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.2, 0.15, 0.05) });
+      page.drawText(`Venda: ${data.orcamento.numero ?? "Aguardando aprovação"}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.2, 0.15, 0.05) });
       y -= 18;
       page.drawText(`Data: ${new Date(data.orcamento.createdAt).toLocaleDateString("pt-BR")}`, { x: 50, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
 
@@ -135,7 +135,7 @@ export async function registerPdfRoutes(app: any) {
 
       // Items table
       y -= 30;
-      page.drawText("ITENS DO ORÇAMENTO", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
+      page.drawText("ITENS DA VENDA", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
       y -= 20;
 
       // Table header
@@ -194,12 +194,12 @@ export async function registerPdfRoutes(app: any) {
 
       // Footer
       const footerY = 40;
-      page.drawText("FK Madeiras — Sistema de Orçamentos", { x: 50, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
+      page.drawText("FK Madeiras — Sistema de Vendas", { x: 50, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
       page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 250, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
 
       const pdfBytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="orcamento-${data.orcamento.numero}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="venda-${data.orcamento.numero ?? data.orcamento.id}.pdf"`);
       res.send(Buffer.from(pdfBytes));
     } catch (err: any) {
       console.error("PDF generation error:", err);
@@ -214,9 +214,9 @@ export async function registerPdfRoutes(app: any) {
       if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
       const data = await getOrcamentoWithItems(id);
-      if (!data) return res.status(404).json({ error: "Orçamento não encontrado" });
+      if (!data) return res.status(404).json({ error: "Venda não encontrada" });
       if (!data.orcamento.pago || !data.orcamento.pagoEm) {
-        return res.status(400).json({ error: "O recibo só está disponível para orçamentos quitados" });
+        return res.status(400).json({ error: "O recibo só está disponível para vendas quitadas" });
       }
 
       const clientes = await listClientes();
@@ -242,14 +242,14 @@ export async function registerPdfRoutes(app: any) {
 
       page.drawRectangle({ x: 50, y: y - 54, width: width - 100, height: 64, color: rgb(0.95, 0.93, 0.89) });
       page.drawText("RECIBO DE PAGAMENTO", { x: 66, y: y - 2, size: 17, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      page.drawText(`Referente ao orçamento ${data.orcamento.numero}`, { x: 66, y: y - 23, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
-      page.drawText(`Recibo nº REC-${data.orcamento.numero}`, { x: 66, y: y - 41, size: 9, font, color: rgb(0.45, 0.45, 0.45) });
+      page.drawText(`Referente à venda ${data.orcamento.numero ?? data.orcamento.id}`, { x: 66, y: y - 23, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Recibo nº REC-${data.orcamento.numero ?? data.orcamento.id}`, { x: 66, y: y - 41, size: 9, font, color: rgb(0.45, 0.45, 0.45) });
       y -= 96;
 
       page.drawText("DECLARAÇÃO DE QUITAÇÃO", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
       y -= 24;
       const nomeCliente = cliente?.nome ?? "Cliente";
-      page.drawText(`Recebemos de ${nomeCliente} o valor abaixo indicado, referente ao orçamento mencionado.`, { x: 50, y, size: 10, font, maxWidth: width - 100, lineHeight: 14 });
+      page.drawText(`Recebemos de ${nomeCliente} o valor abaixo indicado, referente à venda mencionada.`, { x: 50, y, size: 10, font, maxWidth: width - 100, lineHeight: 14 });
       y -= 62;
 
       page.drawText("VALOR RECEBIDO", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
@@ -277,7 +277,7 @@ export async function registerPdfRoutes(app: any) {
 
       const pdfBytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="recibo-${data.orcamento.numero}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="recibo-${data.orcamento.numero ?? data.orcamento.id}.pdf"`);
       res.send(Buffer.from(pdfBytes));
     } catch (err: any) {
       console.error("Receipt PDF generation error:", err);

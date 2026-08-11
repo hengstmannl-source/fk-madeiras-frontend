@@ -64,7 +64,7 @@ export type InsertCliente = typeof clientes.$inferInsert;
 
 export const orcamentos = mysqlTable("orcamentos", {
   id: int("id").autoincrement().primaryKey(),
-  numero: varchar("numero", { length: 20 }).notNull().unique(),
+  numero: varchar("numero", { length: 20 }).unique(),
   clienteId: int("clienteId").notNull(),
   estado: mysqlEnum("estado", ["rascunho", "enviado", "aprovado", "rejeitado"]).notNull().default("rascunho"),
   desconto: decimal("desconto", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -90,6 +90,16 @@ export const orcamentos = mysqlTable("orcamentos", {
 
 export type Orcamento = typeof orcamentos.$inferSelect;
 export type InsertOrcamento = typeof orcamentos.$inferInsert;
+
+/** Sequência imutável usada exclusivamente para numerar vendas aprovadas. */
+export const sequenciasVendas = mysqlTable("sequenciasVendas", {
+  id: int("id").autoincrement().primaryKey(),
+  orcamentoId: int("orcamentoId").notNull().unique(),
+  numero: varchar("numero", { length: 20 }).notNull().unique(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type SequenciaVenda = typeof sequenciasVendas.$inferSelect;
 
 export const itensOrcamento = mysqlTable("itensOrcamento", {
   id: int("id").autoincrement().primaryKey(),

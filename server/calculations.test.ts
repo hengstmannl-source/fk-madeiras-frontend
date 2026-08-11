@@ -8,6 +8,7 @@ import {
   formatCurrency,
   formatMeasurement,
   formatNumber,
+  formatReceivableSaleReference,
   parseDecimalInput,
 } from "../client/src/lib/utils";
 import {
@@ -65,6 +66,11 @@ describe("Cálculos de Orçamento FK Madeiras", () => {
     expect(formatMeasurement("204.5000")).toBe("204,5");
     expect(formatMeasurement("0.2352")).toBe("0,235");
     expect(formatMeasurement("0.2349")).toBe("0,235");
+  });
+
+  it("exibe explicitamente o número da venda no recebível vinculado", () => {
+    expect(formatReceivableSaleReference("orcamento", "Venda VND-000001")).toBe("Venda vinculada · VND-000001");
+    expect(formatReceivableSaleReference("manual", "Frete emergencial")).toBe("Lançamento não programado");
   });
 
   it("calcula com dimensões variadas", () => {

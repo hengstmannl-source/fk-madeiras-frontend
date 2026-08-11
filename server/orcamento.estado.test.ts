@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { atualizarDatasOrcamento, updateOrcamentoEstado } from "./db";
+import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
+import { formatReceivableSaleReference } from "../client/src/lib/utils";
 
 function criarBancoDeOrcamentoFalso() {
   const historicos: any[] = [];
@@ -39,16 +40,71 @@ describe("mudança de estado de orçamento", () => {
   it("aprova o orçamento, grava o histórico e cria o recebível", async () => {
     const { db, historicos } = criarBancoDeOrcamentoFalso();
     const criarTituloReceber = vi.fn().mockResolvedValue({ id: 101 });
+    const atribuirNumero = vi.fn().mockResolvedValue("VND-000123");
 
-    await updateOrcamentoEstado(150001, "aprovado", 1, false, { database: db, criarTituloReceber });
+    await updateOrcamentoEstado(150001, "aprovado", 1, false, { database: db, criarTituloReceber, atribuirNumero });
 
     expect(historicos[0]).toMatchObject({
       orcamentoId: 150001,
       usuarioId: 1,
       tipo: "estado",
-      detalhes: JSON.stringify({ novoEstado: "aprovado" }),
+      detalhes: JSON.stringify({ novoEstado: "aprovado", numero: "VND-000123" }),
     });
+    expect(atribuirNumero).toHaveBeenCalledWith(150001);
     expect(criarTituloReceber).toHaveBeenCalledWith(150001, 1);
+  });
+
+  it("apresenta o número definitivo da venda no recebível listado após a aprovação", async () => {
+    const { db } = criarBancoDeOrcamentoFalso();
+    const tituloAprovado = {
+      id: 101,
+      origem: "orcamento",
+      descricao: "Venda VND-000123",
+      estado: "aberto",
+      dataVencimento: new Date(2030, 0, 15),
+    };
+    const criarTituloReceber = vi.fn().mockResolvedValue(tituloAprovado);
+
+    await updateOrcamentoEstado(150001, "aprovado", 1, false, {
+      database: db,
+      criarTituloReceber,
+      atribuirNumero: vi.fn().mockResolvedValue("VND-000123"),
+    });
+
+    const bancoFinanceiro = {
+      select: vi.fn(() => ({
+        from: () => ({
+          where: () => ({ orderBy: async () => [tituloAprovado] }),
+        }),
+      })),
+    };
+    const recebiveis = await listTitulosFinanceiros({ tipo: "receber" }, { database: bancoFinanceiro, atualizarEstado: async (titulo) => titulo });
+
+    expect(criarTituloReceber).toHaveBeenCalledWith(150001, 1);
+    expect(recebiveis).toHaveLength(1);
+    expect(formatReceivableSaleReference(recebiveis[0].origem, recebiveis[0].descricao)).toBe("Venda vinculada · VND-000123");
+  });
+
+  it("reserva uma numeração sequencial única ao aprovar a venda", async () => {
+    const atualizacoes: any[] = [];
+    const db = {
+      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 150001, numero: null }] }) }) })),
+      insert: vi.fn(() => ({ values: async () => [{ insertId: 42 }] })),
+      update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
+    };
+    await expect(atribuirNumeroVendaAprovada(150001, db)).resolves.toBe("VND-000042");
+    expect(atualizacoes).toEqual([{ numero: "VND-000042" }, { numero: "VND-000042" }]);
+  });
+
+  it("cancela o recebível sem baixa antes de excluir uma venda aprovada", async () => {
+    const atualizacoes: any[] = [];
+    const db = {
+      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 101, valorBaixado: "0" }] }) }) })),
+      update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
+    };
+    await expect(cancelarRecebivelDeVendaExcluida(150001, 1, db)).resolves.toMatchObject({ cancelado: true, tituloId: 101 });
+    expect(atualizacoes[0]).toMatchObject({ estado: "cancelado", canceladoPor: 1 });
+    expect(atualizacoes[1]).toHaveProperty("resolvidoEm");
   });
 
   it("atualiza vencimento e competência da venda e do recebível vinculado", async () => {

@@ -34,6 +34,12 @@ export function formatMeasurement(value: string | number | null | undefined): st
   }).format(num);
 }
 
+export function formatReceivableSaleReference(origem: string | null | undefined, descricao: string | null | undefined): string {
+  if (origem !== "orcamento") return "Lançamento não programado";
+  const numeroVenda = descricao?.match(/^Venda\s+(.+)$/i)?.[1]?.trim();
+  return numeroVenda ? `Venda vinculada · ${numeroVenda}` : "Venda vinculada";
+}
+
 /** Converte a dimensão introduzida em centímetros para a unidade interna em milímetros. */
 export function centimetersToMillimeters(value: number): number {
   return value * 10;

@@ -1,9 +1,9 @@
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
-  fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros,
+  fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
@@ -305,13 +305,44 @@ export async function updateOrcamento(id: number, data: Partial<InsertOrcamento>
   return { success: true };
 }
 
-export async function deleteOrcamento(id: number, confirmacaoDupla = false) {
+export async function cancelarRecebivelDeVendaExcluida(orcamentoId: number, userId: number, database?: any) {
+  const db = database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const titulo = await db.select().from(titulosFinanceiros)
+    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, orcamentoId))).limit(1);
+  if (!titulo[0]) return { cancelado: false };
+  if (decimalParaNumero(titulo[0].valorBaixado) > 0) {
+    throw new Error("A venda possui recebimentos registrados e não pode ser excluída. Regularize as baixas primeiro.");
+  }
+  const resolvidoEm = new Date();
+  await db.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: resolvidoEm, canceladoPor: userId }).where(eq(titulosFinanceiros.id, titulo[0].id));
+  await db.update(alertasFinanceiros).set({ resolvidoEm }).where(eq(alertasFinanceiros.tituloId, titulo[0].id));
+  return { cancelado: true, tituloId: titulo[0].id };
+}
+
+export async function deleteOrcamento(id: number, confirmacaoDupla = false, userId?: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await validarAlteracaoOrcamento(id, confirmacaoDupla);
+  if (userId) await cancelarRecebivelDeVendaExcluida(id, userId, db);
   await db.delete(itensOrcamento).where(eq(itensOrcamento.orcamentoId, id));
   await db.delete(orcamentos).where(eq(orcamentos.id, id));
   return { success: true };
+}
+
+export async function atribuirNumeroVendaAprovada(orcamentoId: number, database?: any) {
+  const db = database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const venda = await db.select().from(orcamentos).where(eq(orcamentos.id, orcamentoId)).limit(1);
+  if (!venda[0]) throw new Error("Venda não encontrada");
+  if (venda[0].numero) return venda[0].numero;
+
+  const reserva = await db.insert(sequenciasVendas).values({ orcamentoId, numero: `PENDENTE-${orcamentoId}` });
+  const sequenciaId = getInsertedId(reserva as MysqlInsertResult);
+  const numero = `VND-${String(sequenciaId).padStart(6, "0")}`;
+  await db.update(sequenciasVendas).set({ numero }).where(eq(sequenciasVendas.id, sequenciaId));
+  await db.update(orcamentos).set({ numero }).where(eq(orcamentos.id, orcamentoId));
+  return numero;
 }
 
 export async function updateOrcamentoEstado(
@@ -319,18 +350,21 @@ export async function updateOrcamentoEstado(
   novoEstado: "rascunho" | "enviado" | "aprovado" | "rejeitado",
   userId?: number,
   confirmacaoDupla = false,
-  dependencias?: { database?: any; criarTituloReceber?: (orcamentoId: number, usuarioId: number) => Promise<unknown> },
+  dependencias?: { database?: any; criarTituloReceber?: (orcamentoId: number, usuarioId: number) => Promise<unknown>; atribuirNumero?: (orcamentoId: number) => Promise<string> },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   await validarAlteracaoOrcamento(id, confirmacaoDupla, db);
+  const numeroAprovado = novoEstado === "aprovado"
+    ? await (dependencias?.atribuirNumero ?? ((orcamentoId: number) => atribuirNumeroVendaAprovada(orcamentoId, db)))(id)
+    : undefined;
   await db.update(orcamentos).set({ estado: novoEstado }).where(eq(orcamentos.id, id));
   if (userId) {
     await db.insert(historicoAlteracoes).values({
       orcamentoId: id,
       usuarioId: userId,
       tipo: "estado" as any,
-      detalhes: JSON.stringify({ novoEstado }),
+      detalhes: JSON.stringify({ novoEstado, numero: numeroAprovado }),
     });
   }
   if (novoEstado === "aprovado" && userId) {
@@ -375,14 +409,8 @@ export async function duplicateOrcamento(id: number) {
   const data = await getOrcamentoWithItems(id);
   if (!data) throw new Error("Orçamento não encontrado");
   const { orcamento, itens } = data;
-  // Generate new number
-  const now = new Date();
-  const ano = now.getFullYear();
-  const mes = String(now.getMonth() + 1).padStart(2, "0");
-  const random = Math.floor(Math.random() * 9000 + 1000);
-  const novoNumero = `VND-${ano}${mes}-${random}`;
   const novoOrc: InsertOrcamento = {
-    numero: novoNumero,
+    numero: null,
     clienteId: orcamento.clienteId,
     estado: "rascunho",
     desconto: orcamento.desconto,
@@ -598,18 +626,22 @@ export async function atualizarEstadoTituloFinanceiro(titulo: any) {
   return { ...titulo, estado: novoEstado };
 }
 
-export async function listTitulosFinanceiros(filters?: { tipo?: TipoTituloFinanceiro; estado?: string; clienteId?: number; fornecedorId?: number }) {
-  const db = await getDb();
+export async function listTitulosFinanceiros(
+  filters?: { tipo?: TipoTituloFinanceiro; estado?: string; clienteId?: number; fornecedorId?: number },
+  dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any> },
+) {
+  const db = dependencias?.database ?? await getDb();
   if (!db) return [];
   const conditions = [];
   if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
   if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado as any));
+  else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
   if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
   if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
   const titulos = await db.select().from(titulosFinanceiros)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(titulosFinanceiros.dataVencimento));
-  return Promise.all(titulos.map(atualizarEstadoTituloFinanceiro));
+  return Promise.all(titulos.map((titulo: any) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
 }
 
 export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">) {

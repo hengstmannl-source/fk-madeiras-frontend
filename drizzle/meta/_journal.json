@@ -78,6 +78,13 @@
       "when": 1786475050911,
       "tag": "0010_add_vencimento_vendas",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1786475780720,
+      "tag": "0011_short_war_machine",
+      "breakpoints": true
     }
   ]
 }

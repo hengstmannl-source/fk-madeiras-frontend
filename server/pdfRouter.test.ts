@@ -33,7 +33,7 @@ describe("rotas de PDF protegidas", () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining("Autenticação") }));
   });
 
-  it("rejeita recibo de orçamento ainda não quitado", async () => {
+  it("rejeita recibo de venda ainda não quitada", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
       orcamento: { pago: false, pagoEm: null },
@@ -44,6 +44,6 @@ describe("rotas de PDF protegidas", () => {
     await routes["/api/pdf/recibo/:id"]!({ params: { id: "1" } }, res);
 
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining("quitados") }));
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining("quitadas") }));
   });
 });
