@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   calcularEstadoTitulo,
   calcularParcelas,
+  classificarAlertaVencimento,
+  planejarAtualizacaoAlertas,
   proximoVencimento,
   saldoAbertoTitulo,
 } from "./financeiro.logic";
@@ -27,5 +29,20 @@ describe("regras financeiras", () => {
 
   it("calcula o saldo em aberto considerando descontos e juros", () => {
     expect(saldoAbertoTitulo("100", "10", "5", "30")).toBe(65);
+  });
+
+  it("classifica alertas de vencimento sem alertar títulos quitados", () => {
+    const hoje = new Date(2026, 7, 11);
+    expect(classificarAlertaVencimento({ estado: "vencido", dataVencimento: new Date(2026, 7, 10), diasAntecedencia: 7, agora: hoje })).toBe("vencido");
+    expect(classificarAlertaVencimento({ estado: "aberto", dataVencimento: new Date(2026, 7, 16), diasAntecedencia: 7, agora: hoje })).toBe("vence_em_breve");
+    expect(classificarAlertaVencimento({ estado: "aberto", dataVencimento: new Date(2026, 7, 20), diasAntecedencia: 7, agora: hoje })).toBeNull();
+    expect(classificarAlertaVencimento({ estado: "quitado", dataVencimento: new Date(2026, 7, 11), diasAntecedencia: 7, agora: hoje })).toBeNull();
+  });
+
+  it("planeja alertas idempotentes e resolve alertas que deixaram de valer", () => {
+    expect(planejarAtualizacaoAlertas("vence_em_breve", [])).toEqual({ criar: "vence_em_breve", resolver: [] });
+    expect(planejarAtualizacaoAlertas("vence_em_breve", ["vence_em_breve"])).toEqual({ criar: null, resolver: [] });
+    expect(planejarAtualizacaoAlertas("vencido", ["vence_em_breve"])).toEqual({ criar: "vencido", resolver: ["vence_em_breve"] });
+    expect(planejarAtualizacaoAlertas(null, ["vence_em_breve", "vencido"])).toEqual({ criar: null, resolver: ["vence_em_breve", "vencido"] });
   });
 });

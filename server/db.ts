@@ -4,14 +4,14 @@ import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros,
-  baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras,
+  baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, decimalParaNumero, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
+import { calcularEstadoTitulo, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -728,8 +728,70 @@ export async function configurarProcessamentoFinanceiro(taskUid: string) {
   return { success: true };
 }
 
-export async function processarRecorrenciasFinanceiras(agora = new Date()) {
+export async function listAlertasFinanceiros() {
   const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: alertasFinanceiros.id,
+    tituloId: alertasFinanceiros.tituloId,
+    tipo: alertasFinanceiros.tipo,
+    mensagem: alertasFinanceiros.mensagem,
+    criadoEm: alertasFinanceiros.criadoEm,
+    descricao: titulosFinanceiros.descricao,
+    valorOriginal: titulosFinanceiros.valorOriginal,
+    dataVencimento: titulosFinanceiros.dataVencimento,
+    tipoTitulo: titulosFinanceiros.tipo,
+  }).from(alertasFinanceiros)
+    .innerJoin(titulosFinanceiros, eq(alertasFinanceiros.tituloId, titulosFinanceiros.id))
+    .where(eq(alertasFinanceiros.estado, "ativo"))
+    .orderBy(desc(alertasFinanceiros.createdAt));
+}
+
+export async function processarAlertasFinanceiros(agora = new Date(), database?: any) {
+  const db = database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const configuracao = (await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.id, 1)).limit(1))[0];
+  const diasAntecedencia = configuracao?.alertaDiasAntecedencia ?? 7;
+  const titulos = await db.select().from(titulosFinanceiros);
+  let alertasCriados = 0;
+  let alertasResolvidos = 0;
+
+  for (const titulo of titulos) {
+    const estado = calcularEstadoTitulo({
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      valorBaixado: titulo.valorBaixado,
+      dataVencimento: titulo.dataVencimento,
+      cancelado: titulo.estado === "cancelado",
+      agora,
+    });
+    if (estado !== titulo.estado) {
+      await db.update(titulosFinanceiros).set({ estado }).where(eq(titulosFinanceiros.id, titulo.id));
+    }
+    const tipoAtual = classificarAlertaVencimento({ estado, dataVencimento: titulo.dataVencimento, diasAntecedencia, agora });
+    const ativos = await db.select().from(alertasFinanceiros).where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.estado, "ativo")));
+    const plano = planejarAtualizacaoAlertas(tipoAtual, ativos.map((alerta: { tipo: "vence_em_breve" | "vencido" }) => alerta.tipo));
+
+    if (plano.resolver.length) {
+      await db.update(alertasFinanceiros).set({ estado: "resolvido", resolvidoEm: agora })
+        .where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.estado, "ativo")));
+      alertasResolvidos += plano.resolver.length;
+    }
+    if (plano.criar) {
+      const vencimentoFormatado = titulo.dataVencimento.toLocaleDateString("pt-BR");
+      const mensagem = plano.criar === "vencido"
+        ? `${titulo.descricao} está vencido desde ${vencimentoFormatado}.`
+        : `${titulo.descricao} vence em ${vencimentoFormatado}.`;
+      await db.insert(alertasFinanceiros).values({ tituloId: titulo.id, tipo: plano.criar, mensagem, estado: "ativo" });
+      alertasCriados += 1;
+    }
+  }
+  return { alertasCriados, alertasResolvidos };
+}
+
+export async function processarRecorrenciasFinanceiras(agora = new Date(), database?: any) {
+  const db = database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const recorrencias = await db.select().from(recorrenciasFinanceiras).where(eq(recorrenciasFinanceiras.ativa, true));
   let titulosGerados = 0;
@@ -768,8 +830,9 @@ export async function processarRecorrenciasFinanceiras(agora = new Date()) {
     }
   }
 
+  const alertas = await processarAlertasFinanceiros(agora, db);
   await db.update(configuracoesFinanceiras).set({ ultimoProcessamentoEm: agora }).where(eq(configuracoesFinanceiras.id, 1));
-  return { titulosGerados, recorrenciasAnalisadas: recorrencias.length };
+  return { titulosGerados, recorrenciasAnalisadas: recorrencias.length, ...alertas };
 }
 
 // ─── Dashboard ───

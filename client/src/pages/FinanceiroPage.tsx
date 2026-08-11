@@ -95,6 +95,7 @@ export default function FinanceiroPage() {
   const fornecedores = trpc.financeiro.fornecedores.list.useQuery();
   const contas = trpc.financeiro.contas.list.useQuery();
   const recorrencias = trpc.financeiro.recorrencias.list.useQuery();
+  const alertas = trpc.financeiro.alertas.list.useQuery();
   const baixasTitulo = trpc.financeiro.titulos.baixas.useQuery(
     { tituloId: tituloBaixas?.id ?? 0 },
     { enabled: Boolean(tituloBaixas) },
@@ -141,6 +142,7 @@ export default function FinanceiroPage() {
     utils.financeiro.fornecedores.list.invalidate();
     utils.financeiro.contas.list.invalidate();
     utils.financeiro.recorrencias.list.invalidate();
+    utils.financeiro.alertas.list.invalidate();
     if (tituloBaixas) utils.financeiro.titulos.baixas.invalidate({ tituloId: tituloBaixas.id });
   };
 
@@ -253,6 +255,8 @@ export default function FinanceiroPage() {
         <ListaCompromissos titulo="Títulos vencidos" descricao="Pendências que exigem atenção" titulos={compromissos.vencidos} classe="border-rose-200" vazio="Nenhum título vencido" />
         <ListaCompromissos titulo="Próximos 30 dias" descricao="Vencimentos previstos para o período" titulos={compromissos.proximos} classe="border-amber-200" vazio="Nenhum compromisso próximo" />
       </div>
+
+      {alertas.data?.length ? <section className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm overflow-hidden"><div className="flex items-center gap-2 border-b border-amber-200 px-5 py-4"><CircleAlert className="h-5 w-5 text-amber-700" /><div><h2 className="font-semibold text-sm text-amber-950">Alertas automáticos</h2><p className="text-xs text-amber-800">Gerados diariamente a partir dos vencimentos em aberto.</p></div><Badge className="ml-auto bg-amber-100 text-amber-800 hover:bg-amber-100">{alertas.data.length}</Badge></div><div className="divide-y divide-amber-100">{alertas.data.slice(0, 5).map((alerta: any) => <div key={alerta.id} className="flex items-center justify-between gap-4 px-5 py-3"><div><p className="text-sm font-medium text-amber-950">{alerta.mensagem}</p><p className="mt-0.5 text-xs text-amber-800">{alerta.tipo === "vencido" ? "Vencido" : "Próximo do vencimento"} · {formatCurrency(alerta.valorOriginal)}</p></div><Badge variant="outline" className="border-amber-300 bg-white text-amber-800">{alerta.tipo === "vencido" ? "Atenção" : "Acompanhar"}</Badge></div>)}</div></section> : null}
 
       <div className="flex items-center gap-1 overflow-x-auto border-b border-border">
         {abas.map(([id, label, Icon]) => <button key={id} onClick={() => setAba(id)} className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${aba === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}><Icon className="h-4 w-4" />{label}</button>)}

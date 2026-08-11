@@ -262,3 +262,18 @@ export const configuracoesFinanceiras = mysqlTable("configuracoesFinanceiras", {
 });
 
 export type ConfiguracaoFinanceira = typeof configuracoesFinanceiras.$inferSelect;
+
+export const alertasFinanceiros = mysqlTable("alertasFinanceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  tituloId: int("tituloId").notNull(),
+  tipo: mysqlEnum("tipo", ["vence_em_breve", "vencido"]).notNull(),
+  mensagem: varchar("mensagem", { length: 500 }).notNull(),
+  estado: mysqlEnum("estado", ["ativo", "resolvido"]).notNull().default("ativo"),
+  criadoEm: timestamp("criadoEm").defaultNow().notNull(),
+  resolvidoEm: timestamp("resolvidoEm"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type AlertaFinanceiro = typeof alertasFinanceiros.$inferSelect;
+export type InsertAlertaFinanceiro = typeof alertasFinanceiros.$inferInsert;

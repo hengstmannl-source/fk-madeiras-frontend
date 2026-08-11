@@ -40,7 +40,12 @@
 - [x] Implementar contas a pagar e receber com vencimento, status e lançamento manual
 - [x] Permitir lançamentos não programados de contas a pagar e receber para ocorrências excepcionais
 - [x] Suportar parcelamento e pagamentos parciais com histórico de baixas
-- [ ] Implementar lançamentos recorrentes e alertas automáticos de vencimento
+- [x] Implementar lançamentos recorrentes e alertas automáticos de vencimento
+- [x] Gerar e persistir alertas de vencimento durante o processamento financeiro diário
+- [x] Testar a criação e atualização automática de alertas pelo processamento agendado
+- [x] Testar a criação, transição e resolução de alertas persistidos pelo processamento diário
+- [x] Testar que o processamento diário de recorrências aciona a atualização de alertas financeiros
+- [x] Testar a rota agendada protegida e o retorno das contagens de alertas financeiros
 - [x] Permitir conciliação manual das baixas financeiras por conta de movimentação
 - [x] Criar painel financeiro com fluxo de caixa, vencidos e compromissos futuros
 - [x] Exibir a conta financeira associada a cada baixa na conciliação manual

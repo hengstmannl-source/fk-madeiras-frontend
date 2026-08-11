@@ -1,5 +1,6 @@
 export type EstadoTituloFinanceiro = "aberto" | "parcial" | "quitado" | "vencido" | "cancelado";
 export type FrequenciaFinanceira = "semanal" | "mensal" | "trimestral" | "semestral" | "anual";
+export type TipoAlertaFinanceiro = "vence_em_breve" | "vencido";
 
 const CENTAVOS_EPSILON = 0.005;
 
@@ -64,4 +65,31 @@ export function proximoVencimento(data: Date, frequencia: FrequenciaFinanceira):
 
 export function saldoAbertoTitulo(valorOriginal: string | number, desconto: string | number, juros: string | number, valorBaixado: string | number): number {
   return Math.max(0, valorLiquidoTitulo(valorOriginal, desconto, juros) - decimalParaNumero(valorBaixado));
+}
+
+export function classificarAlertaVencimento(input: {
+  estado: EstadoTituloFinanceiro;
+  dataVencimento: Date;
+  diasAntecedencia: number;
+  agora?: Date;
+}): TipoAlertaFinanceiro | null {
+  if (input.estado === "vencido") return "vencido";
+  if (!["aberto", "parcial"].includes(input.estado)) return null;
+
+  const agora = input.agora ?? new Date();
+  const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const inicioVencimento = new Date(
+    input.dataVencimento.getFullYear(),
+    input.dataVencimento.getMonth(),
+    input.dataVencimento.getDate(),
+  );
+  const diasRestantes = Math.round((inicioVencimento.getTime() - inicioHoje.getTime()) / 86_400_000);
+  return diasRestantes >= 0 && diasRestantes <= input.diasAntecedencia ? "vence_em_breve" : null;
+}
+
+export function planejarAtualizacaoAlertas(tipoAtual: TipoAlertaFinanceiro | null, alertasAtivos: TipoAlertaFinanceiro[]) {
+  return {
+    criar: tipoAtual !== null && !alertasAtivos.includes(tipoAtual) ? tipoAtual : null,
+    resolver: alertasAtivos.filter((tipo) => tipo !== tipoAtual),
+  };
 }

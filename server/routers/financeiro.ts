@@ -110,6 +110,10 @@ export const financeiroRouter = router({
     }),
   }),
 
+  alertas: router({
+    list: protectedProcedure.query(() => db.listAlertasFinanceiros()),
+  }),
+
   titulos: router({
     list: protectedProcedure.input(z.object({
       tipo: TipoTituloSchema.optional(),
