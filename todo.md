@@ -53,3 +53,10 @@
 - [x] Corrigir a gravação do histórico de alterações ao enviar ou aprovar um orçamento
 - [x] Testar os fluxos de envio e aprovação após a correção do histórico
 - [x] Testar as transições de envio e aprovação registrando histórico de estado sem erro
+- [x] Reorganizar a barra lateral para priorizar Dashboard financeiro e Financeiro
+- [x] Agrupar contas a pagar e contas a receber como subopções do módulo Financeiro
+- [x] Agrupar Orçamentos e Aprovados como subopções de Vendas
+- [x] Preparar opções visuais de Estoque, Produção e Diesel como módulos futuros
+- [x] Validar a nova estrutura de navegação em telas desktop e mobile
+- [x] Testar a indisponibilidade segura dos módulos futuros na barra lateral
+- [x] Testar o clique em Estoque, Produção e Diesel sem navegação para rotas indisponíveis

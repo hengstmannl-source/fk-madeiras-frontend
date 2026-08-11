@@ -15,6 +15,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarTrigger,
   useSidebar,
@@ -23,21 +26,67 @@ import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, Users,
-  FileText, Building2, BadgeCheck, WalletCards,
+  FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
+  ArrowUpFromLine, Warehouse, Factory, Fuel,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
+import { toast } from "sonner";
 
-export const dashboardMenuItems = [
+type NavigationItem = {
+  icon: typeof LayoutDashboard;
+  label: string;
+  path: string;
+  disabled?: boolean;
+};
+
+export const dashboardNavigation = {
+  principal: [
   { icon: LayoutDashboard, label: "Dashboard", path: "/" },
-  { icon: Users, label: "Clientes", path: "/clientes" },
-  { icon: FileText, label: "Orçamentos", path: "/orcamentos" },
-  { icon: BadgeCheck, label: "Aprovados", path: "/orcamentos/aprovados" },
-  { icon: WalletCards, label: "Financeiro", path: "/financeiro" },
-  { icon: Building2, label: "Empresa", path: "/empresa" },
-];
+  ],
+  financeiro: [
+    { icon: WalletCards, label: "Financeiro", path: "/financeiro" },
+    { icon: ArrowUpFromLine, label: "Contas a pagar", path: "/financeiro?tipo=pagar" },
+    { icon: ArrowDownToLine, label: "Contas a receber", path: "/financeiro?tipo=receber" },
+  ],
+  vendas: [
+    { icon: FileText, label: "Orçamentos", path: "/orcamentos" },
+    { icon: BadgeCheck, label: "Aprovados", path: "/orcamentos/aprovados" },
+  ],
+  gestao: [
+    { icon: Users, label: "Clientes", path: "/clientes" },
+    { icon: Building2, label: "Empresa", path: "/empresa" },
+  ],
+  futuros: [
+    { icon: Warehouse, label: "Estoque", path: "/futuro/estoque", disabled: true },
+    { icon: Factory, label: "Produção", path: "/futuro/producao", disabled: true },
+    { icon: Fuel, label: "Diesel", path: "/futuro/diesel", disabled: true },
+  ],
+} satisfies Record<string, NavigationItem[]>;
+
+export const dashboardMenuItems = Object.values(dashboardNavigation).flat();
+
+export function getNavigationPresentation(isMobile: boolean) {
+  return {
+    collapsible: "icon" as const,
+    showMobileHeader: isMobile,
+    groups: ["Financeiro", "Vendas", "Gestão", "Em breve"],
+  };
+}
+
+export function handleNavigationItemClick(
+  item: NavigationItem,
+  navigate: (path: string) => void,
+  notify: (message: string) => void,
+) {
+  if (item.disabled) {
+    notify(getFutureModuleMessage(item.label));
+    return;
+  }
+  navigate(item.path);
+}
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
 const DEFAULT_WIDTH = 280;
@@ -105,9 +154,9 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = dashboardMenuItems.find(item => location.startsWith("/orcamentos/aprovados"))
-    ?? dashboardMenuItems.find(item => location.startsWith(item.path));
+  const activeMenuItem = dashboardMenuItems.find((item) => isItemActive(item, location));
   const isMobile = useIsMobile();
+  const navigationPresentation = getNavigationPresentation(isMobile);
 
   useEffect(() => { if (isCollapsed) setIsResizing(false); }, [isCollapsed]);
 
@@ -136,7 +185,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   return (
     <>
       <div className="relative" ref={sidebarRef}>
-        <Sidebar collapsible="icon" className="border-r-0" disableTransition={isResizing}>
+        <Sidebar collapsible={navigationPresentation.collapsible} className="border-r-0" disableTransition={isResizing}>
           <SidebarHeader className="h-16 justify-center">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
@@ -164,27 +213,14 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0">
-            <SidebarMenu className="px-2 py-1">
-              {dashboardMenuItems.map(item => {
-                const isActive = item.path === "/orcamentos"
-                  ? location === "/orcamentos" || (location.startsWith("/orcamentos/") && !location.startsWith("/orcamentos/aprovados"))
-                  : location === item.path || (item.path !== "/" && location.startsWith(item.path));
-                return (
-                  <SidebarMenuItem key={item.path}>
-                    <SidebarMenuButton
-                      isActive={isActive}
-                      onClick={() => setLocation(item.path)}
-                      tooltip={item.label}
-                      className="h-10 transition-all font-medium text-sm"
-                    >
-                      <item.icon className={`h-4 w-4 ${isActive ? "text-primary" : ""}`} />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                );
-              })}
+          <SidebarContent className="gap-0 px-2 py-1">
+            <SidebarMenu>
+              {dashboardNavigation.principal.map((item) => <NavigationButton key={item.path} item={item} location={location} navigate={setLocation} />)}
             </SidebarMenu>
+            <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} navigate={setLocation} renderPrincipal />
+            <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} navigate={setLocation} />
+            <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} navigate={setLocation} />
+            <NavigationGroup label="Em breve" items={dashboardNavigation.futuros} location={location} navigate={setLocation} />
           </SidebarContent>
 
           <SidebarFooter className="p-3">
@@ -223,7 +259,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
       </div>
 
       <SidebarInset>
-        {isMobile && (
+        {navigationPresentation.showMobileHeader && (
           <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
             <div className="flex items-center gap-2">
               <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
@@ -237,4 +273,25 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
       </SidebarInset>
     </>
   );
+}
+
+function isItemActive(item: NavigationItem, location: string) {
+  if (item.path === "/") return location === "/";
+  if (item.path === "/orcamentos") return location === "/orcamentos" || (location.startsWith("/orcamentos/") && !location.startsWith("/orcamentos/aprovados"));
+  return location === item.path || (item.path !== "/financeiro" && location.startsWith(item.path));
+}
+
+function NavigationButton({ item, location, navigate }: { item: NavigationItem; location: string; navigate: (path: string) => void }) {
+  const active = isItemActive(item, location);
+  return <SidebarMenuItem><SidebarMenuButton isActive={active} onClick={() => navigate(item.path)} tooltip={item.label} className="h-10 transition-all font-medium text-sm"><item.icon className={`h-4 w-4 ${active ? "text-primary" : ""}`} /><span>{item.label}</span></SidebarMenuButton></SidebarMenuItem>;
+}
+
+export function getFutureModuleMessage(label: string) {
+  return `${label} será disponibilizado em uma próxima etapa.`;
+}
+
+function NavigationGroup({ label, items, location, navigate, renderPrincipal = false }: { label: string; items: NavigationItem[]; location: string; navigate: (path: string) => void; renderPrincipal?: boolean }) {
+  const principal = renderPrincipal ? items[0] : undefined;
+  const subitems = renderPrincipal ? items.slice(1) : items;
+  return <div className="mt-2"><p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground group-data-[collapsible=icon]:hidden">{label}</p><SidebarMenu>{principal ? <NavigationButton item={principal} location={location} navigate={navigate} /> : null}<SidebarMenuSub>{subitems.map((item) => { const active = isItemActive(item, location); return <SidebarMenuSubItem key={item.path}><SidebarMenuSubButton isActive={active} onClick={() => handleNavigationItemClick(item, navigate, toast.info)} className={item.disabled ? "text-muted-foreground/70" : ""}><item.icon className={`h-3.5 w-3.5 ${active ? "text-primary" : ""}`} /><span>{item.label}</span>{item.disabled ? <span className="ml-auto text-[10px] text-muted-foreground">Em breve</span> : null}</SidebarMenuSubButton></SidebarMenuSubItem>; })}</SidebarMenuSub></SidebarMenu></div>;
 }

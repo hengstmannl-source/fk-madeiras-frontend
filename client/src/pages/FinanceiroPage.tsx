@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -74,6 +75,7 @@ function StatusBadge({ estado }: { estado: string }) {
 
 export default function FinanceiroPage() {
   const utils = trpc.useUtils();
+  const search = useSearch();
   const [aba, setAba] = useState<"lancamentos" | "recorrencias" | "fornecedores" | "categorias" | "contas">("lancamentos");
   const [lancamentoAberto, setLancamentoAberto] = useState(false);
   const [baixaAberta, setBaixaAberta] = useState(false);
@@ -135,6 +137,10 @@ export default function FinanceiroPage() {
       }).sort((a: any, b: any) => new Date(a.dataVencimento).getTime() - new Date(b.dataVencimento).getTime()),
     };
   }, [titulos.data]);
+
+  const tipoAtalho = new URLSearchParams(search).get("tipo") === "pagar" ? "pagar" : new URLSearchParams(search).get("tipo") === "receber" ? "receber" : null;
+  const titulosExibidos = useMemo(() => (titulos.data ?? []).filter((titulo: any) => !tipoAtalho || titulo.tipo === tipoAtalho), [titulos.data, tipoAtalho]);
+  const tituloLancamentos = tipoAtalho === "pagar" ? "Contas a pagar" : tipoAtalho === "receber" ? "Contas a receber" : "Contas a pagar e receber";
 
   const invalidarFinanceiro = () => {
     utils.financeiro.titulos.list.invalidate();
@@ -264,11 +270,11 @@ export default function FinanceiroPage() {
 
       {aba === "lancamentos" && (
         <section className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/20"><div><h2 className="font-semibold">Contas a pagar e receber</h2><p className="text-xs text-muted-foreground mt-0.5">Inclui lançamentos originados em orçamentos e lançamentos avulsos.</p></div><Badge variant="outline">{titulos.data?.length ?? 0} títulos</Badge></div>
-          {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : titulos.data?.length ? (
+          <div className="flex items-center justify-between px-5 py-4 border-b bg-muted/20"><div><h2 className="font-semibold">{tituloLancamentos}</h2><p className="text-xs text-muted-foreground mt-0.5">Inclui lançamentos originados em orçamentos e lançamentos avulsos.</p></div><Badge variant="outline">{titulosExibidos.length} títulos</Badge></div>
+          {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : titulosExibidos.length ? (
             <Table>
               <TableHeader><TableRow className="bg-muted/40"><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Vencimento</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader>
-              <TableBody>{titulos.data.map((titulo: any) => <TableRow key={titulo.id} className="hover:bg-muted/20"><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{titulo.origem === "orcamento" ? "Originado em orçamento" : "Lançamento não programado"}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell><span className={`inline-flex items-center gap-1 text-sm ${titulo.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{titulo.tipo === "receber" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{titulo.tipo === "receber" ? "Receber" : "Pagar"}</span></TableCell><TableCell className="text-sm">{formatarDataFinanceira(titulo.dataVencimento)}</TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{Number(titulo.valorBaixado || 0) > 0 && <Button size="sm" variant="ghost" onClick={() => setTituloBaixas(titulo)}>Baixas</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirBaixa(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Baixar</Button>}</div></TableCell></TableRow>)}</TableBody>
+              <TableBody>{titulosExibidos.map((titulo: any) => <TableRow key={titulo.id} className="hover:bg-muted/20"><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{titulo.origem === "orcamento" ? "Originado em orçamento" : "Lançamento não programado"}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell><span className={`inline-flex items-center gap-1 text-sm ${titulo.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{titulo.tipo === "receber" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{titulo.tipo === "receber" ? "Receber" : "Pagar"}</span></TableCell><TableCell className="text-sm">{formatarDataFinanceira(titulo.dataVencimento)}</TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{Number(titulo.valorBaixado || 0) > 0 && <Button size="sm" variant="ghost" onClick={() => setTituloBaixas(titulo)}>Baixas</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirBaixa(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Baixar</Button>}</div></TableCell></TableRow>)}</TableBody>
             </Table>
           ) : <EstadoVazio icon={<CalendarClock className="h-9 w-9" />} texto="Nenhum lançamento financeiro encontrado" acao={() => setLancamentoAberto(true)} labelAcao="Criar lançamento avulso" />}
         </section>
