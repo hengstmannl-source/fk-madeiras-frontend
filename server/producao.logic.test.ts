@@ -11,21 +11,33 @@ describe("regras de produção", () => {
   it("aceita uma única plaqueta disponível e bloqueia produção acima do seu volume", () => {
     const confirmado = validarConfirmacaoRomaneio({
       plaqueta: { codigo: "PLQ-001", estado: "disponivel", volumeDisponivel: "1.000000" },
+      tora: { madeiraNome: "Cedrinho", volume: "1.000000" },
       itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 10 }],
     });
     expect(confirmado).toMatchObject({ totalPecas: 10, volumeProduzido: 0.1125, volumeRemanescente: 0.8875 });
     expect(() => validarConfirmacaoRomaneio({
       plaqueta: { codigo: "PLQ-001", estado: "disponivel", volumeDisponivel: "0.1" },
+      tora: { madeiraNome: "Cedrinho", volume: "0.1" },
       itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 10 }],
-    })).toThrow(/excede o saldo/i);
+    })).toThrow(/excede o volume/i);
   });
 
   it("recusa plaquetas já consumidas e normaliza seu identificador", () => {
     expect(normalizarCodigoPlaqueta(" plq  001 ")).toBe("PLQ-001");
     expect(() => validarConfirmacaoRomaneio({
       plaqueta: { codigo: "PLQ-001", estado: "consumida", volumeDisponivel: "1" },
+      tora: { madeiraNome: "Piqui", volume: "1" },
       itens: [{ madeiraNome: "Piqui", espessura: 3, largura: 20, comprimento: 2, quantidade: 1 }],
     })).toThrow(/não está disponível/i);
+  });
+
+  it("calcula o aproveitamento usando o volume corrigido da tora no romaneio", () => {
+    const resultado = validarConfirmacaoRomaneio({
+      plaqueta: { codigo: "PLQ-001", estado: "disponivel", volumeDisponivel: "3.000000" },
+      tora: { madeiraNome: "Cedrinho", espessura: "10", largura: "50", comprimento: "4", volume: "2.000000" },
+      itens: [{ madeiraNome: "Cedrinho", espessura: "5", largura: "20", comprimento: "4", quantidade: 10 }],
+    });
+    expect(resultado).toMatchObject({ volumeTora: 2, volumeProduzido: 0.4, aproveitamento: 20 });
   });
 
   it("agrupa o saldo disponível por madeira e dimensões de venda", () => {

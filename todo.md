@@ -119,3 +119,10 @@
 - [x] Criar entidades e fluxo de romaneio vinculando exatamente uma plaqueta por produção, com validações e testes
 - [x] Implementar estoque de peças serradas e etapa de entrega física para baixar peças apenas após o recebimento confirmado
 - [x] Criar entradas manuais iniciais de plaquetas, sem importar automaticamente dados históricos da planilha
+- [x] Renomear a entrada de plaquetas como Estoque de Toras, com essência e medidas de origem
+- [x] Preencher o romaneio automaticamente a partir da plaqueta selecionada no estoque de toras
+- [x] Permitir corrigir as informações pré-preenchidas da plaqueta somente no contexto do romaneio
+- [x] Organizar o lançamento diário em subabas de Tora/Plaqueta e Peças Produzidas
+- [x] Calcular e exibir o aproveitamento entre o volume da tora selecionada e a madeira serrada produzida
+- [x] Gerar e baixar PDF profissional dos romaneios de produção confirmados
+- [x] Cobrir a seleção editável da plaqueta e o PDF de romaneio com testes e validação visual

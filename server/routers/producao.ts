@@ -13,6 +13,9 @@ function dataLocal(data: string): Date {
 const PlaquetaSchema = z.object({
   codigo: z.string().trim().min(2).max(80),
   madeiraNome: z.string().trim().min(2).max(200),
+  espessura: DecimalPositivo.optional().nullable(),
+  largura: DecimalPositivo.optional().nullable(),
+  comprimento: DecimalPositivo.optional().nullable(),
   volumeInicial: DecimalPositivo,
   dataEntrada: DataSchema,
   origem: z.string().trim().max(200).nullable().optional(),
@@ -30,6 +33,13 @@ const ItemRomaneioSchema = z.object({
 
 const RomaneioSchema = z.object({
   plaquetaId: z.number().int().positive(),
+  tora: z.object({
+    madeiraNome: z.string().trim().min(2).max(200),
+    espessura: DecimalPositivo.optional().nullable(),
+    largura: DecimalPositivo.optional().nullable(),
+    comprimento: DecimalPositivo.optional().nullable(),
+    volume: DecimalPositivo,
+  }),
   dataProducao: DataSchema,
   fita: z.string().trim().max(100).nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),

@@ -33,6 +33,16 @@ describe("rotas de PDF protegidas", () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining("Autenticação") }));
   });
 
+  it("rejeita PDF de romaneio quando não há utilizador autenticado", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue(null);
+    const res = createResponse();
+
+    await routes["/api/pdf/romaneio/:id"]!({ params: { id: "1" } }, res);
+
+    expect(res.status).toHaveBeenCalledWith(401);
+    expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining("Autenticação") }));
+  });
+
   it("rejeita recibo de venda ainda não quitada", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({

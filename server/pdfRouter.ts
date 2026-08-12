@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { getEmpresaConfiguracao, getOrcamentoWithItems, listClientes } from "./db";
+import { getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioProducaoComItens, listClientes } from "./db";
 import { storageGetSignedUrl } from "./storage";
 import { sdk } from "./_core/sdk";
 
@@ -282,6 +282,86 @@ export async function registerPdfRoutes(app: any) {
     } catch (err: any) {
       console.error("Receipt PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar recibo de pagamento" });
+    }
+  });
+
+  app.get("/api/pdf/romaneio/:id", async (req: any, res: any) => {
+    try {
+      if (!(await requirePdfAuthentication(req, res))) return;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+      const data = await getRomaneioProducaoComItens(id);
+      if (!data) return res.status(404).json({ error: "Romaneio não encontrado" });
+
+      const pdfDoc = await PDFDocument.create();
+      const page = pdfDoc.addPage([595, 842]);
+      const { width, height } = page.getSize();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const logo = await loadCompanyLogo(pdfDoc);
+      const logoDimensoes = logo?.scaleToFit(108, 50);
+      if (logoDimensoes) page.drawImage(logo!, { x: 48, y: height - 50 - logoDimensoes.height, width: logoDimensoes.width, height: logoDimensoes.height });
+      const cabecalhoX = logoDimensoes ? 48 + logoDimensoes.width + 14 : 48;
+      let y = height - 55;
+      page.drawText("FK MADEIRAS", { x: cabecalhoX, y, size: 22, font: bold, color: rgb(0.22, 0.16, 0.08) });
+      y -= 17;
+      page.drawText("Romaneio de produção", { x: cabecalhoX, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      y -= 50;
+      page.drawRectangle({ x: 48, y: y - 48, width: width - 96, height: 60, color: rgb(0.95, 0.93, 0.89) });
+      page.drawText(data.romaneio.numero, { x: 62, y: y - 6, size: 17, font: bold, color: rgb(0.22, 0.16, 0.08) });
+      page.drawText(`Produção em ${new Date(data.romaneio.dataProducao).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Aproveitamento: ${formatMeasurement(data.romaneio.aproveitamento ?? "0")}%`, { x: width - 212, y: y - 17, size: 11, font: bold, color: rgb(0.12, 0.42, 0.25) });
+      y -= 78;
+      page.drawText("TORA / PLAQUETA DE ORIGEM", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
+      y -= 18;
+      page.drawText(`Código: ${data.romaneio.plaquetaCodigo}   •   Essência: ${data.romaneio.madeiraTora}`, { x: 48, y, size: 9, font });
+      y -= 14;
+      const dimensoesTora = [data.romaneio.espessuraTora, data.romaneio.larguraTora, data.romaneio.comprimentoTora].every(Boolean)
+        ? `${formatMeasurement(data.romaneio.espessuraTora ?? "0")} cm × ${formatMeasurement(data.romaneio.larguraTora ?? "0")} cm × ${formatMeasurement(data.romaneio.comprimentoTora ?? "0")} m`
+        : "Medidas não informadas";
+      page.drawText(`Medidas: ${dimensoesTora}   •   Volume: ${formatMeasurement(data.romaneio.volumeTora ?? "0")} m³`, { x: 48, y, size: 9, font });
+      y -= 14;
+      page.drawText(`Fita/Linha: ${data.romaneio.fita ?? "Não informada"}   •   Responsável: ${data.romaneio.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
+      y -= 32;
+      page.drawText("PEÇAS PRODUZIDAS", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
+      y -= 18;
+      const colunas = [145, 92, 54, 66, 66, 62];
+      const titulos = ["Essência", "Dimensões", "Comp.", "Peças", "M. linear", "Volume"];
+      let x = 48;
+      titulos.forEach((titulo, indice) => { page.drawText(titulo, { x, y, size: 8, font: bold, color: rgb(0.42, 0.42, 0.42) }); x += colunas[indice]; });
+      y -= 14;
+      let totalPecas = 0;
+      let totalMetros = 0;
+      let totalVolume = 0;
+      for (const item of data.itens) {
+        x = 48;
+        page.drawText(item.madeiraNome, { x, y, size: 8, font }); x += colunas[0];
+        page.drawText(`${formatMeasurement(item.espessura)} × ${formatMeasurement(item.largura)} cm`, { x, y, size: 8, font }); x += colunas[1];
+        page.drawText(`${formatMeasurement(item.comprimento)} m`, { x, y, size: 8, font }); x += colunas[2];
+        page.drawText(String(item.quantidade), { x, y, size: 8, font }); x += colunas[3];
+        page.drawText(`${formatMeasurement(item.metrosLineares)} m`, { x, y, size: 8, font }); x += colunas[4];
+        page.drawText(`${formatMeasurement(item.volume)} m³`, { x, y, size: 8, font: bold });
+        totalPecas += item.quantidade;
+        totalMetros += Number(item.metrosLineares);
+        totalVolume += Number(item.volume);
+        y -= 16;
+      }
+      y -= 12;
+      page.drawLine({ start: { x: 48, y }, end: { x: width - 48, y }, thickness: 0.8, color: rgb(0.72, 0.67, 0.58) });
+      y -= 18;
+      page.drawText(`Total de peças: ${totalPecas}`, { x: 48, y, size: 10, font: bold });
+      page.drawText(`Metros lineares: ${formatMeasurement(String(totalMetros))} m`, { x: 210, y, size: 10, font: bold });
+      page.drawText(`Madeira serrada: ${formatMeasurement(String(totalVolume))} m³`, { x: 385, y, size: 10, font: bold });
+      if (data.romaneio.observacoes) { y -= 30; page.drawText("Observações", { x: 48, y, size: 9, font: bold }); y -= 14; page.drawText(data.romaneio.observacoes, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 }); }
+      page.drawText("FK Madeiras — Romaneio gerado eletronicamente", { x: 48, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 155, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+      const bytes = await pdfDoc.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="romaneio-${data.romaneio.numero}.pdf"`);
+      res.send(Buffer.from(bytes));
+    } catch (err) {
+      console.error("Romaneio PDF generation error:", err);
+      res.status(500).json({ error: "Erro ao gerar PDF do romaneio" });
     }
   });
 }

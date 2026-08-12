@@ -12,6 +12,14 @@ export type PlaquetaParaConfirmacao = {
   volumeDisponivel: string | number;
 };
 
+export type ToraParaRomaneio = {
+  madeiraNome: string;
+  espessura?: string | number | null;
+  largura?: string | number | null;
+  comprimento?: string | number | null;
+  volume: string | number;
+};
+
 function numero(valor: string | number): number {
   const convertido = typeof valor === "string" ? Number(valor.replace(",", ".")) : valor;
   return Number.isFinite(convertido) ? convertido : 0;
@@ -45,6 +53,7 @@ export function calcularItemRomaneio(item: ItemProducaoEntrada) {
 
 export function validarConfirmacaoRomaneio(input: {
   plaqueta: PlaquetaParaConfirmacao | null | undefined;
+  tora?: ToraParaRomaneio;
   itens: ItemProducaoEntrada[];
 }) {
   if (!input.plaqueta) throw new Error("Selecione uma plaqueta para o romaneio");
@@ -54,16 +63,21 @@ export function validarConfirmacaoRomaneio(input: {
   if (!input.itens.length) throw new Error("Adicione ao menos uma peça produzida ao romaneio");
   const itens = input.itens.map(calcularItemRomaneio);
   const volumeProduzido = itens.reduce((total, item) => total + item.volume, 0);
-  const volumeDisponivel = numero(input.plaqueta.volumeDisponivel);
-  if (volumeProduzido > volumeDisponivel + 0.000001) {
-    throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o saldo da plaqueta (${volumeDisponivel.toFixed(6)} m³)`);
+  const volumeTora = numero(input.tora?.volume ?? input.plaqueta.volumeDisponivel);
+  if (!input.tora?.madeiraNome?.trim() || volumeTora <= 0) {
+    throw new Error("Informe a essência e o volume válido da tora para o romaneio");
+  }
+  if (volumeProduzido > volumeTora + 0.000001) {
+    throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o volume informado da tora (${volumeTora.toFixed(6)} m³)`);
   }
   return {
     itens,
     totalPecas: itens.reduce((total, item) => total + item.quantidade, 0),
     metrosLineares: Number(itens.reduce((total, item) => total + item.metrosLineares, 0).toFixed(4)),
     volumeProduzido: Number(volumeProduzido.toFixed(6)),
-    volumeRemanescente: Number((volumeDisponivel - volumeProduzido).toFixed(6)),
+    volumeTora: Number(volumeTora.toFixed(6)),
+    volumeRemanescente: Number((volumeTora - volumeProduzido).toFixed(6)),
+    aproveitamento: Number(((volumeProduzido / volumeTora) * 100).toFixed(2)),
   };
 }
 
