@@ -372,6 +372,9 @@ export async function registerPdfRoutes(app: any) {
       if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
       const data = await getRomaneioCargaComPlaquetas(id);
       if (!data) return res.status(404).json({ error: "Romaneio de carga não encontrado" });
+      const volumeCarga = Number(data.carga.volumeTotal ?? 0);
+      const freteTotal = Number(data.carga.frete ?? 0);
+      const fretePorMetroCubico = Number(data.carga.fretePorMetroCubico ?? 0) || (volumeCarga ? freteTotal / volumeCarga : 0);
 
       const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -393,6 +396,7 @@ export async function registerPdfRoutes(app: any) {
       page.drawText(data.carga.numero, { x: 62, y: y - 6, size: 17, font: bold, color: rgb(0.22, 0.16, 0.08) });
       page.drawText(`Recebimento em ${new Date(data.carga.dataCarga).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
       page.drawText(`Volume: ${formatMeasurement(data.carga.volumeTotal)} m³`, { x: width - 190, y: y - 15, size: 10, font: bold, color: rgb(0.12, 0.42, 0.25) });
+      page.drawText(`Frete: R$ ${formatBRL(String(fretePorMetroCubico))}/m³`, { x: width - 190, y: y - 30, size: 8, font, color: rgb(0.35, 0.35, 0.35) });
       y -= 78;
       page.drawText(`Origem: ${data.carga.origem ?? "Não informada"}   •   Responsável: ${data.carga.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
       y -= 30;
@@ -427,7 +431,9 @@ export async function registerPdfRoutes(app: any) {
       y -= 22;
       page.drawText(`Plaquetas: ${data.carga.totalPlaquetas}`, { x: 48, y, size: 10, font: bold });
       page.drawText(`Toras: R$ ${formatBRL(data.carga.valorProdutos ?? "0")}`, { x: 190, y, size: 10, font: bold });
-      page.drawText(`Frete: R$ ${formatBRL(data.carga.frete ?? "0")}`, { x: 350, y, size: 10, font: bold });
+      page.drawText(`Frete/m³: R$ ${formatBRL(String(fretePorMetroCubico))}`, { x: 350, y, size: 10, font: bold });
+      y -= 18;
+      page.drawText(`Frete total: R$ ${formatBRL(String(freteTotal))}`, { x: 350, y, size: 9, font });
       y -= 23;
       page.drawText(`VALOR TOTAL DA CARGA: R$ ${formatBRL(data.carga.valorTotal)}`, { x: 48, y, size: 14, font: bold, color: rgb(0.12, 0.42, 0.25) });
       if (data.carga.observacoes) { y -= 30; page.drawText("Observações", { x: 48, y, size: 9, font: bold }); y -= 14; page.drawText(data.carga.observacoes, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 }); }

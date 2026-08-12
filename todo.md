@@ -147,3 +147,7 @@
 - [x] Cobrir frete, edição e PDF de romaneio de carga com testes e validação visual
 - [x] Testar a geração autenticada do PDF de romaneio de carga, incluindo totais de toras, frete e valor total
 - [x] Validar visualmente o PDF do romaneio de carga gerado com layout e informações financeiras completas
+- [x] Corrigir a sobreposição de textos e valores nos cartões do romaneio de carga em telas estreitas
+- [x] Substituir o frete total pelo valor de frete por m³ calculado automaticamente pelo volume da carga
+- [x] Atualizar o PDF e a edição do romaneio para apresentar o frete por m³ e o frete total calculado
+- [x] Cobrir os novos cálculos e validar visualmente o formulário de carga em tela móvel

@@ -141,6 +141,13 @@
       "when": 1786537709863,
       "tag": "0019_wet_red_wolf",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "5",
+      "when": 1786539003224,
+      "tag": "0020_icy_radioactive_man",
+      "breakpoints": true
     }
   ]
 }

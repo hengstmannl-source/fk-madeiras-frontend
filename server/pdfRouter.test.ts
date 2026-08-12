@@ -77,11 +77,11 @@ describe("rotas de PDF protegidas", () => {
     expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: expect.stringContaining("Autenticação") }));
   });
 
-  it("gera PDF autenticado de carga com toras, frete e total", async () => {
+  it("gera PDF autenticado de carga com toras, frete por metro cúbico e total", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
     vi.spyOn(db, "getRomaneioCargaComPlaquetas").mockResolvedValue({
-      carga: { numero: "CARGA-000007", dataCarga: new Date("2026-08-12T12:00:00.000Z"), origem: "Fazenda Norte", responsavel: "João", volumeTotal: "1.500000", totalPlaquetas: 2, valorProdutos: "1350.00", frete: "150.00", valorTotal: "1500.00", observacoes: "Carga conferida" },
+      carga: { numero: "CARGA-000007", dataCarga: new Date("2026-08-12T12:00:00.000Z"), origem: "Fazenda Norte", responsavel: "João", volumeTotal: "1.500000", totalPlaquetas: 2, valorProdutos: "1350.00", fretePorMetroCubico: "100.00", frete: "150.00", valorTotal: "1500.00", observacoes: "Carga conferida" },
       plaquetas: [{ codigo: "TOR-0100", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeInicial: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70" }],
     } as any);
     const res = createResponse();
@@ -94,7 +94,8 @@ describe("rotas de PDF protegidas", () => {
     const textos = pdfCanvas.drawText.mock.calls.map(([texto]) => texto).join(" ");
     expect(textos).toContain("CARGA-000007");
     expect(textos).toContain("Toras: R$ 1.350,00");
-    expect(textos).toContain("Frete: R$ 150,00");
+    expect(textos).toContain("Frete/m³: R$ 100,00");
+    expect(textos).toContain("Frete total: R$ 150,00");
     expect(textos).toContain("VALOR TOTAL DA CARGA: R$ 1.500,00");
   });
 

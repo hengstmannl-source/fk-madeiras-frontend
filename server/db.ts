@@ -1132,9 +1132,9 @@ function prepararPlaquetasCarga(entrada: PlaquetaCargaEntrada[]) {
 }
 
 function normalizarFreteCarga(valor: string) {
-  const frete = Number(String(valor ?? "0").replace(",", "."));
-  if (!Number.isFinite(frete) || frete < 0) throw new Error("Informe um frete válido");
-  return frete;
+  const fretePorMetroCubico = Number(String(valor ?? "0").replace(",", "."));
+  if (!Number.isFinite(fretePorMetroCubico) || fretePorMetroCubico < 0) throw new Error("Informe um frete por m³ válido");
+  return fretePorMetroCubico;
 }
 
 export async function criarRomaneioCargaToras(data: {
@@ -1142,7 +1142,7 @@ export async function criarRomaneioCargaToras(data: {
   origem?: string | null;
   responsavel?: string | null;
   observacoes?: string | null;
-  frete: string;
+  fretePorMetroCubico: string;
   plaquetas: PlaquetaCargaEntrada[];
   criadoPor: number;
 }) {
@@ -1151,7 +1151,8 @@ export async function criarRomaneioCargaToras(data: {
   const plaquetasPreparadas = prepararPlaquetasCarga(data.plaquetas);
   const volumeTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.volume, 0);
   const valorProdutos = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.valorTotal, 0);
-  const frete = normalizarFreteCarga(data.frete);
+  const fretePorMetroCubico = normalizarFreteCarga(data.fretePorMetroCubico);
+  const frete = Number((volumeTotal * fretePorMetroCubico).toFixed(2));
   const valorTotal = valorProdutos + frete;
   return db.transaction(async (tx: any) => {
     for (const plaqueta of plaquetasPreparadas) {
@@ -1168,6 +1169,7 @@ export async function criarRomaneioCargaToras(data: {
       totalPlaquetas: plaquetasPreparadas.length,
       volumeTotal: volumeTotal.toFixed(6),
       valorProdutos: valorProdutos.toFixed(2),
+      fretePorMetroCubico: fretePorMetroCubico.toFixed(2),
       frete: frete.toFixed(2),
       valorTotal: valorTotal.toFixed(2),
       criadoPor: data.criadoPor,
@@ -1195,7 +1197,7 @@ export async function criarRomaneioCargaToras(data: {
       const plaquetaId = getInsertedId(insercaoPlaqueta as MysqlInsertResult);
       await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${numero}`, criadoPor: data.criadoPor });
     }
-    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, frete, valorTotal };
+    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, fretePorMetroCubico, frete, valorTotal };
   });
 }
 
@@ -1204,7 +1206,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
   origem?: string | null;
   responsavel?: string | null;
   observacoes?: string | null;
-  frete: string;
+  fretePorMetroCubico: string;
   plaquetas: PlaquetaCargaEntrada[];
 }) {
   const db = await getDb();
@@ -1212,7 +1214,8 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
   const plaquetasPreparadas = prepararPlaquetasCarga(data.plaquetas);
   const volumeTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.volume, 0);
   const valorProdutos = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.valorTotal, 0);
-  const frete = normalizarFreteCarga(data.frete);
+  const fretePorMetroCubico = normalizarFreteCarga(data.fretePorMetroCubico);
+  const frete = Number((volumeTotal * fretePorMetroCubico).toFixed(2));
   const valorTotal = valorProdutos + frete;
 
   return db.transaction(async (tx: any) => {
@@ -1251,8 +1254,8 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
       if (existente) await tx.update(plaquetas).set(valores).where(eq(plaquetas.id, plaquetaId));
       await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${carga.numero}`, criadoPor: carga.criadoPor });
     }
-    await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, origem: data.origem?.trim() || null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
-    return { id, numero: carga.numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, frete, valorTotal };
+    await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, origem: data.origem?.trim() || null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), fretePorMetroCubico: fretePorMetroCubico.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
+    return { id, numero: carga.numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, fretePorMetroCubico, frete, valorTotal };
   });
 }
 

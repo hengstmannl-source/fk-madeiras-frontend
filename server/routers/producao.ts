@@ -38,7 +38,7 @@ const RomaneioCargaSchema = z.object({
   origem: z.string().trim().max(200).nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),
   observacoes: z.string().max(4000).nullable().optional(),
-  frete: DecimalNaoNegativo.default("0"),
+  fretePorMetroCubico: DecimalNaoNegativo.default("0"),
   plaquetas: z.array(PlaquetaCargaSchema).min(1, "Adicione ao menos uma plaqueta").max(200),
 });
 

@@ -11,7 +11,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar } } }),
       producao: {
-        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false }) }, get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) }, create: mutation, update: mutation },
+        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false }) }, get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) }, create: mutation, update: mutation },
         plaquetas: { list: { useQuery: () => ({ data: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], isLoading: false }) }, create: mutation },
         estoque: { resumo: { useQuery: () => ({ data: [{ madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" }], isLoading: false }) } },
       },
@@ -40,7 +40,7 @@ describe("EstoquePage", () => {
     expect(screen.getByRole("cell", { name: "20" })).toBeInTheDocument();
   });
 
-  it("monta uma lista responsiva de plaquetas e soma frete e valor automaticamente", async () => {
+  it("calcula frete por metro cúbico, totaliza a carga e mantém valores contidos nos cartões", async () => {
     const user = userEvent.setup();
     render(<EstoquePage />);
 
@@ -48,18 +48,19 @@ describe("EstoquePage", () => {
     await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
     await user.type(screen.getByPlaceholderText("PLQ-001"), "TOR-0100");
     await user.type(screen.getByPlaceholderText("Ex.: Cedrinho"), "Piqui");
-    const camposDecimais = screen.getAllByPlaceholderText("0,00");
-    await user.type(camposDecimais[1], "20");
-    await user.type(camposDecimais[2], "10");
+    await user.type(screen.getByRole("textbox", { name: "Diâmetro (cm)" }), "20");
+    await user.type(screen.getByRole("textbox", { name: "Comprimento (m)" }), "10");
     await user.type(screen.getByPlaceholderText("900,00"), "900");
-    const frete = camposDecimais[0];
+    const frete = screen.getByRole("textbox", { name: "Frete por m³ (R$)" });
     await user.clear(frete);
     await user.type(frete, "100");
 
     expect(screen.getAllByText(/0,314/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/282,74/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/382,74/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/31,42/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/314,16/).length).toBeGreaterThan(0);
     expect(screen.getByText("Valor das toras")).toBeInTheDocument();
+    expect(screen.getByText(/Frete \(R\$\s?100,00\/m³\)/)).toBeInTheDocument();
     expect(screen.getByText("Valor total da carga")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Adicionar plaqueta" }));
     expect(screen.getAllByPlaceholderText("PLQ-001")).toHaveLength(2);

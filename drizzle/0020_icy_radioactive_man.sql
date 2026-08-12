@@ -1,0 +1,1 @@
+ALTER TABLE `romaneiosCargaToras` ADD `fretePorMetroCubico` decimal(14,2) DEFAULT '0' NOT NULL;
