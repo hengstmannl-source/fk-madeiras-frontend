@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gte, lte, ne } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -1404,28 +1404,53 @@ export async function createPlaqueta(data: {
 export async function listRomaneiosProducao() {
   const db = await getDb();
   if (!db) return [];
-  return db.select({
-    id: romaneiosProducao.id,
-    numero: romaneiosProducao.numero,
-    dataProducao: romaneiosProducao.dataProducao,
-    fita: romaneiosProducao.fita,
-    responsavel: romaneiosProducao.responsavel,
-    estado: romaneiosProducao.estado,
-    observacoes: romaneiosProducao.observacoes,
-    plaquetaId: romaneiosProducao.plaquetaId,
-    plaquetaCodigo: plaquetas.codigo,
-    madeiraNome: plaquetas.madeiraNome,
-    volumePlaqueta: plaquetas.volumeInicial,
-    madeiraTora: romaneiosProducao.madeiraTora,
-    espessuraTora: romaneiosProducao.espessuraTora,
-    larguraTora: romaneiosProducao.larguraTora,
-    comprimentoTora: romaneiosProducao.comprimentoTora,
-    volumeTora: romaneiosProducao.volumeTora,
-    aproveitamento: romaneiosProducao.aproveitamento,
-    confirmadoEm: romaneiosProducao.confirmadoEm,
-  }).from(romaneiosProducao)
-    .innerJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id))
-    .orderBy(desc(romaneiosProducao.dataProducao), desc(romaneiosProducao.id));
+  const [romaneios, totaisToras, totaisPecas] = await Promise.all([
+    db.select({
+      id: romaneiosProducao.id,
+      numero: romaneiosProducao.numero,
+      dataProducao: romaneiosProducao.dataProducao,
+      fita: romaneiosProducao.fita,
+      responsavel: romaneiosProducao.responsavel,
+      estado: romaneiosProducao.estado,
+      observacoes: romaneiosProducao.observacoes,
+      plaquetaId: romaneiosProducao.plaquetaId,
+      plaquetaCodigo: plaquetas.codigo,
+      madeiraNome: plaquetas.madeiraNome,
+      volumePlaqueta: plaquetas.volumeInicial,
+      madeiraTora: romaneiosProducao.madeiraTora,
+      espessuraTora: romaneiosProducao.espessuraTora,
+      larguraTora: romaneiosProducao.larguraTora,
+      comprimentoTora: romaneiosProducao.comprimentoTora,
+      volumeTora: romaneiosProducao.volumeTora,
+      aproveitamento: romaneiosProducao.aproveitamento,
+      confirmadoEm: romaneiosProducao.confirmadoEm,
+    }).from(romaneiosProducao)
+      .leftJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id))
+      .orderBy(desc(romaneiosProducao.dataProducao), desc(romaneiosProducao.id)),
+    db.select({
+      romaneioId: itensRomaneioToras.romaneioId,
+      totalToras: sql<number>`count(*)`,
+      volumeToras: sql<string>`coalesce(sum(${itensRomaneioToras.volume}), 0)`,
+    }).from(itensRomaneioToras).groupBy(itensRomaneioToras.romaneioId),
+    db.select({
+      romaneioId: itensRomaneioProducao.romaneioId,
+      totalPecas: sql<number>`coalesce(sum(${itensRomaneioProducao.quantidade}), 0)`,
+      volumeProduzido: sql<string>`coalesce(sum(${itensRomaneioProducao.volume}), 0)`,
+    }).from(itensRomaneioProducao).groupBy(itensRomaneioProducao.romaneioId),
+  ]);
+  const porRomaneioToras = new Map(totaisToras.map((total) => [total.romaneioId, total]));
+  const porRomaneioPecas = new Map(totaisPecas.map((total) => [total.romaneioId, total]));
+  return romaneios.map((romaneio) => {
+    const toras = porRomaneioToras.get(romaneio.id);
+    const pecas = porRomaneioPecas.get(romaneio.id);
+    return {
+      ...romaneio,
+      totalToras: Number(toras?.totalToras ?? (romaneio.plaquetaId ? 1 : 0)),
+      volumeTora: toras?.volumeToras ?? romaneio.volumeTora ?? romaneio.volumePlaqueta ?? "0",
+      totalPecas: Number(pecas?.totalPecas ?? 0),
+      volumeProduzido: pecas?.volumeProduzido ?? "0",
+    };
+  });
 }
 
 export async function listItensRomaneioProducao(romaneioId: number) {

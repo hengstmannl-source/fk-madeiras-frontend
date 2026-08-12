@@ -206,3 +206,6 @@
 - [x] Cobrir a edição e o lançamento matricial de peças com testes e validação visual
 - [x] Corrigir o salvamento da edição para aceitar as plaquetas já vinculadas e consumidas pelo próprio romaneio
 - [x] Cobrir a edição de um romaneio confirmado sem revalidar indevidamente a disponibilidade das suas plaquetas
+- [x] Corrigir os totais e rótulos iniciais exibidos na listagem de romaneios diários de Produção
+- [x] Adicionar filtros de estoque serrado por essência, espessura, largura e comprimento/bitola
+- [x] Cobrir e validar visualmente a listagem de Produção e os filtros de estoque serrado

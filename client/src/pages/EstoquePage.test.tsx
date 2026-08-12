@@ -66,6 +66,22 @@ describe("EstoquePage", () => {
     expect(screen.getByRole("cell", { name: "20" })).toBeInTheDocument();
   });
 
+  it("filtra o estoque serrado por essência, espessura, largura e comprimento", async () => {
+    const user = userEvent.setup();
+    render(<EstoquePage />);
+    await user.click(screen.getByRole("tab", { name: "Serrado" }));
+
+    await user.type(screen.getByLabelText("Filtrar essência serrada"), "Itaúba");
+    expect(screen.getByText("Nenhuma peça encontrada para os filtros informados.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Limpar filtros" }));
+    await user.type(screen.getByLabelText("Filtrar espessura serrada"), "2,5");
+    await user.type(screen.getByLabelText("Filtrar largura serrada"), "15");
+    await user.type(screen.getByLabelText("Filtrar comprimento serrado"), "3");
+    expect(screen.getByRole("cell", { name: "Cedrinho" })).toBeInTheDocument();
+  });
+
   it("calcula frete por metro cúbico, totaliza a carga e mantém valores contidos nos cartões", async () => {
     const user = userEvent.setup();
     render(<EstoquePage />);
