@@ -138,3 +138,6 @@
 - [x] Calcular e exibir automaticamente o valor individual da tora a partir de volume e preço por m³
 - [x] Calcular e exibir o valor total do romaneio de carga
 - [x] Cobrir os cálculos financeiros e validar visualmente o novo layout do romaneio
+- [x] Remover o botão duplicado de novo romaneio de carga da área de cabeçalho do Estoque
+- [x] Reaproveitar essência e preço por m³ ao adicionar uma nova plaqueta no mesmo romaneio
+- [x] Cobrir o preenchimento automático da próxima plaqueta e validar a interface atualizada

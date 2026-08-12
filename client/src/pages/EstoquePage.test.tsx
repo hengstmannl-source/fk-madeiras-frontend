@@ -42,7 +42,8 @@ describe("EstoquePage", () => {
     const user = userEvent.setup();
     render(<EstoquePage />);
 
-    await user.click(screen.getAllByRole("button", { name: "Novo romaneio de carga" })[0]);
+    expect(screen.getAllByRole("button", { name: "Novo romaneio de carga" })).toHaveLength(1);
+    await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
     await user.type(screen.getByPlaceholderText("PLQ-001"), "TOR-0100");
     await user.type(screen.getByPlaceholderText("Ex.: Cedrinho"), "Piqui");
     const medidas = screen.getAllByPlaceholderText("0,00");
@@ -55,5 +56,7 @@ describe("EstoquePage", () => {
     expect(screen.getByText("Valor total da carga")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Adicionar plaqueta" }));
     expect(screen.getAllByPlaceholderText("PLQ-001")).toHaveLength(2);
+    expect(screen.getAllByPlaceholderText("Ex.: Cedrinho")[1]).toHaveValue("Piqui");
+    expect(screen.getAllByPlaceholderText("900,00")[1]).toHaveValue("900");
   });
 });
