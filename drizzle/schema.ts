@@ -149,6 +149,22 @@ export type EmpresaConfiguracao = typeof empresaConfiguracoes.$inferSelect;
 export type InsertEmpresaConfiguracao = typeof empresaConfiguracoes.$inferInsert;
 
 // ─── Produção e estoque de madeira serrada ───
+export const romaneiosCargaToras = mysqlTable("romaneiosCargaToras", {
+  id: int("id").autoincrement().primaryKey(),
+  numero: varchar("numero", { length: 30 }).notNull().unique(),
+  dataCarga: timestamp("dataCarga").notNull(),
+  origem: varchar("origem", { length: 200 }),
+  responsavel: varchar("responsavel", { length: 200 }),
+  observacoes: text("observacoes"),
+  totalPlaquetas: int("totalPlaquetas").notNull().default(0),
+  volumeTotal: decimal("volumeTotal", { precision: 14, scale: 6 }).notNull().default("0"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type RomaneioCargaToras = typeof romaneiosCargaToras.$inferSelect;
+
 export const plaquetas = mysqlTable("plaquetas", {
   id: int("id").autoincrement().primaryKey(),
   codigo: varchar("codigo", { length: 80 }).notNull().unique(),
@@ -156,9 +172,11 @@ export const plaquetas = mysqlTable("plaquetas", {
   espessura: decimal("espessura", { precision: 8, scale: 2 }),
   largura: decimal("largura", { precision: 8, scale: 2 }),
   comprimento: decimal("comprimento", { precision: 8, scale: 2 }),
+  diametro: decimal("diametro", { precision: 8, scale: 2 }),
   volumeInicial: decimal("volumeInicial", { precision: 14, scale: 6 }).notNull(),
   volumeDisponivel: decimal("volumeDisponivel", { precision: 14, scale: 6 }).notNull(),
   dataEntrada: timestamp("dataEntrada").notNull(),
+  romaneioCargaId: int("romaneioCargaId"),
   origem: varchar("origem", { length: 200 }),
   localizacao: varchar("localizacao", { length: 200 }),
   observacoes: text("observacoes"),

@@ -5,7 +5,7 @@ import {
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
-  plaquetas, romaneiosProducao, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado,
+  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -14,7 +14,7 @@ import {
 import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
-import { alocarPecasParaEntrega, agruparEstoquePecas, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
+import { alocarPecasParaEntrega, agruparEstoquePecas, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1093,6 +1093,78 @@ export async function listPlaquetas() {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt));
+}
+
+export async function listRomaneiosCargaToras() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(romaneiosCargaToras).orderBy(desc(romaneiosCargaToras.dataCarga), desc(romaneiosCargaToras.id));
+}
+
+export async function criarRomaneioCargaToras(data: {
+  dataCarga: Date;
+  origem?: string | null;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  plaquetas: Array<{ codigo: string; madeiraNome: string; diametro: string; comprimento: string; observacoes?: string | null }>;
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!data.plaquetas.length) throw new Error("Adicione ao menos uma plaqueta ao romaneio de carga");
+  if (data.plaquetas.length > 200) throw new Error("O romaneio de carga suporta no máximo 200 plaquetas");
+  const codigos = data.plaquetas.map((plaqueta) => normalizarCodigoPlaqueta(plaqueta.codigo));
+  if (codigos.some((codigo) => !codigo)) throw new Error("Informe o código de todas as plaquetas");
+  if (new Set(codigos).size !== codigos.length) throw new Error("Há códigos de plaqueta repetidos no mesmo romaneio de carga");
+  const plaquetasPreparadas = data.plaquetas.map((plaqueta, indice) => {
+    const codigo = codigos[indice];
+    const madeiraNome = plaqueta.madeiraNome.trim();
+    if (!madeiraNome) throw new Error(`Informe a essência da plaqueta ${codigo}`);
+    const diametro = Number(String(plaqueta.diametro).replace(",", "."));
+    const comprimento = Number(String(plaqueta.comprimento).replace(",", "."));
+    const volume = calcularVolumeToraCilindrica(diametro, comprimento);
+    return { codigo, madeiraNome, diametro, comprimento, volume, observacoes: plaqueta.observacoes?.trim() || null };
+  });
+  const volumeTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.volume, 0);
+  return db.transaction(async (tx: any) => {
+    for (const plaqueta of plaquetasPreparadas) {
+      const existente = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, plaqueta.codigo)).limit(1))[0];
+      if (existente) throw new Error(`A plaqueta ${plaqueta.codigo} já está cadastrada`);
+    }
+    const temporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
+    const insercao = await tx.insert(romaneiosCargaToras).values({
+      numero: temporario,
+      dataCarga: data.dataCarga,
+      origem: data.origem?.trim() || null,
+      responsavel: data.responsavel?.trim() || null,
+      observacoes: data.observacoes?.trim() || null,
+      totalPlaquetas: plaquetasPreparadas.length,
+      volumeTotal: volumeTotal.toFixed(6),
+      criadoPor: data.criadoPor,
+    });
+    const id = getInsertedId(insercao as MysqlInsertResult);
+    const numero = `CARGA-${String(id).padStart(6, "0")}`;
+    await tx.update(romaneiosCargaToras).set({ numero }).where(eq(romaneiosCargaToras.id, id));
+    for (const plaqueta of plaquetasPreparadas) {
+      const insercaoPlaqueta = await tx.insert(plaquetas).values({
+        codigo: plaqueta.codigo,
+        madeiraNome: plaqueta.madeiraNome,
+        comprimento: plaqueta.comprimento.toFixed(2),
+        diametro: plaqueta.diametro.toFixed(2),
+        volumeInicial: plaqueta.volume.toFixed(6),
+        volumeDisponivel: plaqueta.volume.toFixed(6),
+        dataEntrada: data.dataCarga,
+        romaneioCargaId: id,
+        origem: data.origem?.trim() || null,
+        observacoes: plaqueta.observacoes,
+        estado: "disponivel",
+        criadoPor: data.criadoPor,
+      });
+      const plaquetaId = getInsertedId(insercaoPlaqueta as MysqlInsertResult);
+      await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${numero}`, criadoPor: data.criadoPor });
+    }
+    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal };
+  });
 }
 
 export async function createPlaqueta(data: {

@@ -126,3 +126,10 @@
 - [x] Calcular e exibir o aproveitamento entre o volume da tora selecionada e a madeira serrada produzida
 - [x] Gerar e baixar PDF profissional dos romaneios de produção confirmados
 - [x] Cobrir a seleção editável da plaqueta e o PDF de romaneio com testes e validação visual
+- [x] Separar as rotas e abas de Produção e Estoque para que cada módulo abra de forma independente
+- [x] Criar romaneio de carga como cabeçalho de entrada de toras no estoque
+- [x] Permitir adicionar várias plaquetas a um romaneio de carga em formato de lista
+- [x] Registrar essência, diâmetro e comprimento de cada plaqueta recebida
+- [x] Calcular automaticamente o volume individual e o volume total do romaneio de carga
+- [x] Criar a aba Estoque com categorias independentes Toras e Serrado
+- [x] Testar a navegação, o romaneio de carga e os cálculos de volume do estoque

@@ -61,7 +61,7 @@ export const dashboardNavigation = {
   ],
   producao: [
     { icon: Factory, label: "Produção", path: "/producao" },
-    { icon: Warehouse, label: "Estoque", path: "/producao?aba=estoque" },
+    { icon: Warehouse, label: "Estoque", path: "/estoque" },
   ],
   futuros: [
     { icon: Fuel, label: "Diesel", path: "/futuro/diesel", disabled: true },

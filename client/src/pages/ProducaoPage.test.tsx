@@ -34,19 +34,13 @@ Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: t
 afterEach(() => cleanup());
 
 describe("ProducaoPage", () => {
-  it("apresenta produção diária, estoque de toras e abre o cadastro de matéria-prima", async () => {
-    const user = userEvent.setup();
+  it("apresenta somente a produção diária e orienta o uso prévio do Estoque", () => {
     render(<ProducaoPage />);
 
     expect(screen.getByRole("heading", { name: "Produção diária" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Produção diária" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Estoque de toras" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Peças serradas" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Entrada de tora" }));
-    expect(screen.getByRole("heading", { name: "Entrada no estoque de toras" })).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Ex.: PLQ-0001")).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("Ex.: Cedrinho")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Nova produção diária" })).toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "Estoque de toras" })).not.toBeInTheDocument();
+    expect(screen.getByText(/Selecione uma tora já recebida no Estoque/i)).toBeInTheDocument();
   });
 
   it("preenche a tora selecionada no romaneio e disponibiliza o PDF do documento confirmado", async () => {

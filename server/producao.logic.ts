@@ -25,6 +25,16 @@ function numero(valor: string | number): number {
   return Number.isFinite(convertido) ? convertido : 0;
 }
 
+export function calcularVolumeToraCilindrica(diametroCm: string | number, comprimentoM: string | number): number {
+  const diametro = numero(diametroCm);
+  const comprimento = numero(comprimentoM);
+  if (diametro <= 0 || comprimento <= 0) {
+    throw new Error("Informe diâmetro e comprimento positivos para a tora");
+  }
+  const raioEmMetros = (diametro / 100) / 2;
+  return Math.PI * raioEmMetros ** 2 * comprimento;
+}
+
 export function normalizarCodigoPlaqueta(codigo: string): string {
   return codigo.trim().toLocaleUpperCase("pt-BR").replace(/\s+/g, "-");
 }

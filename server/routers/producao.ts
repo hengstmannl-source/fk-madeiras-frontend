@@ -23,6 +23,22 @@ const PlaquetaSchema = z.object({
   observacoes: z.string().max(4000).nullable().optional(),
 });
 
+const PlaquetaCargaSchema = z.object({
+  codigo: z.string().trim().min(2).max(80),
+  madeiraNome: z.string().trim().min(2).max(200),
+  diametro: DecimalPositivo,
+  comprimento: DecimalPositivo,
+  observacoes: z.string().max(1000).nullable().optional(),
+});
+
+const RomaneioCargaSchema = z.object({
+  dataCarga: DataSchema,
+  origem: z.string().trim().max(200).nullable().optional(),
+  responsavel: z.string().trim().max(200).nullable().optional(),
+  observacoes: z.string().max(4000).nullable().optional(),
+  plaquetas: z.array(PlaquetaCargaSchema).min(1, "Adicione ao menos uma plaqueta").max(200),
+});
+
 const ItemRomaneioSchema = z.object({
   madeiraNome: z.string().trim().min(2).max(200),
   espessura: DecimalPositivo,
@@ -48,6 +64,14 @@ const RomaneioSchema = z.object({
 });
 
 export const producaoRouter = router({
+  cargas: router({
+    list: protectedProcedure.query(() => db.listRomaneiosCargaToras()),
+    create: protectedProcedure.input(RomaneioCargaSchema).mutation(({ ctx, input }) => db.criarRomaneioCargaToras({
+      ...input,
+      dataCarga: dataLocal(input.dataCarga),
+      criadoPor: ctx.user.id,
+    })),
+  }),
   plaquetas: router({
     list: protectedProcedure.query(() => db.listPlaquetas()),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({

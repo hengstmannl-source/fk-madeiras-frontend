@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alocarPecasParaEntrega, agruparEstoquePecas, calcularItemRomaneio, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
+import { alocarPecasParaEntrega, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
 
 describe("regras de produção", () => {
   it("calcula metros lineares e volume a partir de centímetros, metros e peças", () => {
@@ -29,6 +29,11 @@ describe("regras de produção", () => {
       tora: { madeiraNome: "Piqui", volume: "1" },
       itens: [{ madeiraNome: "Piqui", espessura: 3, largura: 20, comprimento: 2, quantidade: 1 }],
     })).toThrow(/não está disponível/i);
+  });
+
+  it("calcula o volume cilíndrico da tora pelo diâmetro em centímetros e comprimento em metros", () => {
+    expect(calcularVolumeToraCilindrica("50", "4")).toBeCloseTo(Math.PI * 0.25 ** 2 * 4, 8);
+    expect(() => calcularVolumeToraCilindrica("0", "4")).toThrow(/diâmetro/i);
   });
 
   it("calcula o aproveitamento usando o volume corrigido da tora no romaneio", () => {
