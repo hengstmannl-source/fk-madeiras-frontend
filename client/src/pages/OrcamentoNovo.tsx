@@ -115,7 +115,7 @@ export default function OrcamentoNovo() {
       return;
     }
 
-    // O utilizador trabalha em centímetros; os cálculos e a base de dados mantêm milímetros.
+    // A venda conserva milímetros; a integração de entrega converte para centímetros ao consultar o estoque.
     const esp = centimetersToMillimeters(espCm);
     const larg = centimetersToMillimeters(largCm);
     const precoLinear = calculatePrecoLinear(esp, larg, precoM3);

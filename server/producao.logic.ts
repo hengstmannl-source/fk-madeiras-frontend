@@ -152,6 +152,19 @@ export type ItemVendaParaEntrega = {
   quantidade: number;
 };
 
+/**
+ * Vendas históricas guardam espessura e largura em milímetros, enquanto a
+ * produção e o estoque serrado trabalham em centímetros. Esta adaptação só
+ * é aplicada ao entregar a venda, antes da comparação com os lotes.
+ */
+export function converterDimensoesVendaParaEstoque(item: ItemVendaParaEntrega): ItemVendaParaEntrega {
+  return {
+    ...item,
+    espessura: numero(item.espessura) / 10,
+    largura: numero(item.largura) / 10,
+  };
+}
+
 export type LoteParaEntrega = {
   id: number;
   madeiraNome: string;

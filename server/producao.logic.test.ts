@@ -1,7 +1,19 @@
 import { describe, expect, it } from "vitest";
-import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
+import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
 
 describe("regras de produção", () => {
+  it("converte bitolas legadas de venda de milímetros para centímetros antes da baixa", () => {
+    const itemConvertido = converterDimensoesVendaParaEstoque({ id: 1, madeiraNome: "Cedrinho", espessura: "23", largura: "50", comprimento: "3", quantidade: 32 });
+    expect(itemConvertido).toMatchObject({
+      espessura: 2.3,
+      largura: 5,
+      comprimento: "3",
+    });
+    expect(alocarPecasPermitindoNegativo([itemConvertido], [
+      { id: 1, madeiraNome: "Cedrinho", espessura: "2.3", largura: "5", comprimento: "3", quantidadeDisponivel: 32 },
+    ])).toMatchObject({ alocacoes: [{ itemVendaId: 1, loteId: 1, quantidade: 32 }], deficits: [] });
+  });
+
   it("calcula metros lineares e volume a partir de centímetros, metros e peças", () => {
     expect(calcularItemRomaneio({ madeiraNome: "Cedrinho", espessura: "2,5", largura: "15", comprimento: "3", quantidade: 10 })).toEqual({
       madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 10, metrosLineares: 30, volume: 0.1125,

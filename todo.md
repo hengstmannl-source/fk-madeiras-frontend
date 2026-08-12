@@ -218,3 +218,6 @@
 - [x] Criar relatório de rutura do estoque serrado por essência e medida
 - [x] Criar página de ajuste e inventário com regularização rastreável de saldos negativos
 - [x] Cobrir relatórios, ajustes e permissões com testes e validação visual
+- [x] Corrigir a normalização de bitolas decimais na criação de déficits de estoque por entrega
+- [x] Reparar os lotes de déficit existentes com dimensões e volumes ampliados indevidamente
+- [x] Cobrir a conversão decimal e a reparação de déficits com testes e validação visual

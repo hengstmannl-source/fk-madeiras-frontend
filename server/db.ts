@@ -15,7 +15,7 @@ import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
-import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
+import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 
@@ -1862,7 +1862,8 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       tx.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId)),
       tx.select().from(lotesPecasSerradas),
     ]);
-    const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itens, lotes);
+    const itensParaEstoque = itens.map(converterDimensoesVendaParaEstoque);
+    const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itensParaEstoque, lotes);
     const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
     const movimentacoes: Array<{ itemVendaId: number; loteId: number; quantidade: number }> = [];
     for (const alocacao of alocacoes) {

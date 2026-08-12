@@ -67,6 +67,11 @@ export function calculatePrecoLinear(espessura: number, largura: number, precoM3
   return (espessura / 1000) * (largura / 1000) * precoM3;
 }
 
+/** Calcula o preço linear quando as dimensões já estão informadas em centímetros. */
+export function calculatePrecoLinearCm(espessuraCm: number, larguraCm: number, precoM3: number): number {
+  return (espessuraCm / 100) * (larguraCm / 100) * precoM3;
+}
+
 export function calculateValorPeca(precoLinear: number, comprimento: number): number {
   return precoLinear * comprimento;
 }
@@ -77,6 +82,11 @@ export function calculateValorTotal(valorPeca: number, quantidade: number): numb
 
 export function calculateVolume(espessura: number, largura: number, comprimento: number, quantidade: number): number {
   return (espessura / 1000) * (largura / 1000) * comprimento * quantidade;
+}
+
+/** Calcula o volume quando espessura e largura já estão em centímetros. */
+export function calculateVolumeCm(espessuraCm: number, larguraCm: number, comprimento: number, quantidade: number): number {
+  return (espessuraCm / 100) * (larguraCm / 100) * comprimento * quantidade;
 }
 
 export function calculateMetroLinear(comprimento: number, quantidade: number): number {
