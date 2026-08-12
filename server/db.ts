@@ -14,6 +14,7 @@ import {
 import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
+import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasParaEntrega, agruparEstoquePecas, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -1108,6 +1109,31 @@ export async function getRomaneioCargaComPlaquetas(id: number) {
   if (!carga[0]) return undefined;
   const itens = await db.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id)).orderBy(asc(plaquetas.id));
   return { carga: carga[0], plaquetas: itens };
+}
+
+export function getModeloImportacaoPlaquetasCargaCsv() {
+  return criarModeloCsvPlaquetasCarga();
+}
+
+export async function importarPlaquetasCargaCsv(
+  input: { conteudo: string; dataCarga: Date; origem?: string | null; responsavel?: string | null; observacoes?: string | null; fretePorMetroCubico: string },
+  criadoPor: number,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const codigosExistentes = await db.select({ codigo: plaquetas.codigo }).from(plaquetas);
+  const preparo = prepararImportacaoPlaquetasCarga({ conteudo: input.conteudo, codigosExistentes });
+  if (preparo.erros.length) return { importados: 0, erros: preparo.erros, numero: null as string | null };
+  const carga = await criarRomaneioCargaToras({
+    dataCarga: input.dataCarga,
+    origem: input.origem ?? null,
+    responsavel: input.responsavel ?? null,
+    observacoes: input.observacoes ?? null,
+    fretePorMetroCubico: input.fretePorMetroCubico,
+    plaquetas: preparo.linhas.map(({ codigo, madeiraNome, diametro, comprimento, valorMetroCubico, observacoes }) => ({ codigo, madeiraNome, diametro, comprimento, valorMetroCubico, observacoes })),
+    criadoPor,
+  });
+  return { importados: preparo.linhas.length, erros: [] as string[], numero: carga.numero };
 }
 
 type PlaquetaCargaEntrada = { codigo: string; madeiraNome: string; diametro: string; comprimento: string; valorMetroCubico: string; observacoes?: string | null };

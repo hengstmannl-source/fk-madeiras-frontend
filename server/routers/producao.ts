@@ -70,6 +70,13 @@ export const producaoRouter = router({
   cargas: router({
     list: protectedProcedure.query(() => db.listRomaneiosCargaToras()),
     get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioCargaComPlaquetas(input.id)),
+    modeloPlaquetasCsv: protectedProcedure.query(() => db.getModeloImportacaoPlaquetasCargaCsv()),
+    importarPlaquetasCsv: protectedProcedure.input(RomaneioCargaSchema.omit({ plaquetas: true }).extend({
+      conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
+    })).mutation(({ ctx, input }) => db.importarPlaquetasCargaCsv({
+      ...input,
+      dataCarga: dataLocal(input.dataCarga),
+    }, ctx.user.id)),
     create: protectedProcedure.input(RomaneioCargaSchema).mutation(({ ctx, input }) => db.criarRomaneioCargaToras({
       ...input,
       dataCarga: dataLocal(input.dataCarga),

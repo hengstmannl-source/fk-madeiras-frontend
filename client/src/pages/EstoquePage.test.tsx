@@ -2,6 +2,9 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
+
+const { importarMutate } = vi.hoisted(() => ({ importarMutate: vi.fn() }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
@@ -11,7 +14,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar } } }),
       producao: {
-        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false }) }, get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) }, create: mutation, update: mutation },
+        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false }) }, get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) }, modeloPlaquetasCsv: { useQuery: () => ({ refetch: vi.fn() }) }, create: mutation, update: mutation, importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) } },
         plaquetas: { list: { useQuery: () => ({ data: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], isLoading: false }) }, create: mutation },
         estoque: { resumo: { useQuery: () => ({ data: [{ madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" }], isLoading: false }) } },
       },
@@ -21,7 +24,10 @@ vi.mock("@/lib/trpc", () => {
 
 import EstoquePage from "./EstoquePage";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  importarMutate.mockReset();
+});
 
 describe("EstoquePage", () => {
   it("mantém Toras e Serrado em categorias próprias", async () => {
@@ -66,6 +72,37 @@ describe("EstoquePage", () => {
     expect(screen.getAllByPlaceholderText("PLQ-001")).toHaveLength(2);
     expect(screen.getAllByPlaceholderText("Ex.: Cedrinho")[1]).toHaveValue("Piqui");
     expect(screen.getAllByPlaceholderText("900,00")[1]).toHaveValue("900");
+  });
+
+  it("oferece importação por planilha CSV com modelo e dados do romaneio", async () => {
+    const user = userEvent.setup();
+    render(<EstoquePage />);
+
+    await user.click(screen.getByRole("button", { name: "Importar planilha" }));
+
+    expect(screen.getByRole("heading", { name: "Importar toras por planilha" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Baixar modelo CSV" })).toBeInTheDocument();
+    expect(screen.getByText(/todos os dados são validados/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Planilha CSV")).toHaveAttribute("accept", ".csv,text/csv");
+    expect(screen.getByRole("button", { name: "Importar toras" })).toBeInTheDocument();
+  });
+
+  it("apresenta o fluxo de sucesso quando a importação validada é concluída", async () => {
+    const user = userEvent.setup();
+    importarMutate.mockImplementationOnce((_entrada, opcoes) => {
+      opcoes.onSuccess({ numero: "CARGA-IMPORT-0001", importados: 1, erros: [] });
+    });
+    render(<EstoquePage />);
+
+    await user.click(screen.getByRole("button", { name: "Importar planilha" }));
+    await user.upload(
+      screen.getByLabelText("Planilha CSV"),
+      new File(["codigo;essencia;diametro_cm;comprimento_m;preco_m3\nTOR-TESTE;Cumaru;40;7,5;900"], "toras.csv", { type: "text/csv" })
+    );
+    await user.click(screen.getByRole("button", { name: "Importar toras" }));
+
+    expect(importarMutate).toHaveBeenCalledTimes(1);
+    expect(toast.success).toHaveBeenCalled();
   });
 
   it("carrega os dados do romaneio no formulário de edição", async () => {

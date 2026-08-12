@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, ClipboardList, FileText, Loader2, Pencil, Plus, TreePine, Warehouse } from "lucide-react";
+import { Box, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, TreePine, Upload, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +29,8 @@ type CargaFormulario = {
   plaquetas: PlaquetaCarga[];
 };
 
+type CabecalhoCarga = Omit<CargaFormulario, "plaquetas">;
+
 const hoje = () => new Date().toISOString().slice(0, 10);
 const num = (valor: string | number | null | undefined) => Number(String(valor ?? "").replace(",", ".")) || 0;
 const volumeTora = (diametro: string | number, comprimento: string | number) => Math.PI * ((num(diametro) / 100) / 2) ** 2 * num(comprimento);
@@ -37,7 +39,19 @@ const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFor
 const formatarMoeda = (valor: number | string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor ?? 0));
 const formatarData = (valor: string | Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(valor));
 const novaPlaqueta = (): PlaquetaCarga => ({ codigo: "", madeiraNome: "", diametro: "", comprimento: "", valorMetroCubico: "", observacoes: "" });
-const novaCarga = (): CargaFormulario => ({ dataCarga: hoje(), origem: "", responsavel: "", observacoes: "", fretePorMetroCubico: "0", plaquetas: [novaPlaqueta()] });
+const novoCabecalhoCarga = (): CabecalhoCarga => ({ dataCarga: hoje(), origem: "", responsavel: "", observacoes: "", fretePorMetroCubico: "0" });
+const novaCarga = (): CargaFormulario => ({ ...novoCabecalhoCarga(), plaquetas: [novaPlaqueta()] });
+
+function baixarCsv(conteudo: string, nomeArquivo: string) {
+  const url = URL.createObjectURL(new Blob([conteudo], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
 
 function Campo({ label, children, ajuda }: { label: string; children: React.ReactNode; ajuda?: string }) {
   return <div className="min-w-0 space-y-1.5"><Label className="text-xs font-medium leading-4">{label}</Label>{children}{ajuda && <p className="text-[11px] leading-4 text-muted-foreground">{ajuda}</p>}</div>;
@@ -58,16 +72,22 @@ function taxaFrete(item: any) {
 export default function EstoquePage() {
   const [categoria, setCategoria] = useState<"toras" | "serrado">("toras");
   const [dialogCarga, setDialogCarga] = useState(false);
+  const [dialogImportacao, setDialogImportacao] = useState(false);
   const [cargaEmEdicao, setCargaEmEdicao] = useState<number | null>(null);
   const [carga, setCarga] = useState<CargaFormulario>(novaCarga);
+  const [cabecalhoImportacao, setCabecalhoImportacao] = useState<CabecalhoCarga>(novoCabecalhoCarga);
+  const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
+  const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
   const carregouEdicao = useRef<number | null>(null);
   const utils = trpc.useUtils();
   const cargas = trpc.producao.cargas.list.useQuery();
   const detalheCarga = trpc.producao.cargas.get.useQuery({ id: cargaEmEdicao ?? 1 }, { enabled: cargaEmEdicao !== null });
+  const modeloPlaquetasCsv = trpc.producao.cargas.modeloPlaquetasCsv.useQuery(undefined, { enabled: false });
   const plaquetas = trpc.producao.plaquetas.list.useQuery();
   const serrado = trpc.producao.estoque.resumo.useQuery();
   const criarCarga = trpc.producao.cargas.create.useMutation();
   const atualizarCarga = trpc.producao.cargas.update.useMutation();
+  const importarPlaquetasCsv = trpc.producao.cargas.importarPlaquetasCsv.useMutation();
 
   useEffect(() => {
     const detalhe = detalheCarga.data;
@@ -103,6 +123,7 @@ export default function EstoquePage() {
   const redefinirCarga = () => { carregouEdicao.current = null; setCarga(novaCarga()); setCargaEmEdicao(null); };
   const fecharDialogo = () => { setDialogCarga(false); redefinirCarga(); };
   const abrirNovoRomaneio = () => { redefinirCarga(); setDialogCarga(true); };
+  const abrirImportacao = () => { setCabecalhoImportacao(novoCabecalhoCarga()); setArquivoImportacao(null); setErrosImportacao([]); setDialogImportacao(true); };
   const abrirEdicao = (id: number) => { carregouEdicao.current = null; setCarga(novaCarga()); setCargaEmEdicao(id); setDialogCarga(true); };
   const atualizarPlaqueta = (indice: number, campo: keyof PlaquetaCarga, valor: string) => setCarga((anterior) => ({ ...anterior, plaquetas: anterior.plaquetas.map((item, posicao) => posicao === indice ? { ...item, [campo]: valor } : item) }));
   const adicionarPlaqueta = () => setCarga((anterior) => {
@@ -112,6 +133,40 @@ export default function EstoquePage() {
   });
   const removerPlaqueta = (indice: number) => setCarga((anterior) => ({ ...anterior, plaquetas: anterior.plaquetas.filter((_, posicao) => posicao !== indice) }));
   const carregarPdf = (id: number) => window.open(`/api/pdf/romaneio-carga/${id}`, "_blank", "noopener,noreferrer");
+
+  const baixarModeloImportacao = async () => {
+    const resposta = await modeloPlaquetasCsv.refetch();
+    if (!resposta.data) { toast.error("Não foi possível gerar o modelo de planilha"); return; }
+    baixarCsv(resposta.data, "modelo-importacao-toras-fk-madeiras.csv");
+    toast.success("Modelo de planilha baixado");
+  };
+
+  const importarArquivo = async () => {
+    if (!arquivoImportacao) { toast.error("Selecione uma planilha CSV para importar"); return; }
+    try {
+      const conteudo = await arquivoImportacao.text();
+      importarPlaquetasCsv.mutate({
+        ...cabecalhoImportacao,
+        origem: cabecalhoImportacao.origem || null,
+        responsavel: cabecalhoImportacao.responsavel || null,
+        observacoes: cabecalhoImportacao.observacoes || null,
+        conteudo,
+      }, {
+        onSuccess: (resultado) => {
+          if (resultado.erros.length) { setErrosImportacao(resultado.erros); toast.error("A importação foi recusada. Revise as linhas indicadas."); return; }
+          toast.success(`${resultado.numero} criado com ${resultado.importados} tora(s)`);
+          setDialogImportacao(false);
+          setArquivoImportacao(null);
+          setErrosImportacao([]);
+          utils.producao.cargas.list.invalidate();
+          utils.producao.plaquetas.list.invalidate();
+        },
+        onError: (erro) => toast.error(erro.message),
+      });
+    } catch {
+      toast.error("Não foi possível ler o arquivo selecionado");
+    }
+  };
 
   const salvarCarga = () => {
     const entrada = {
@@ -139,7 +194,7 @@ export default function EstoquePage() {
     <Tabs value={categoria} onValueChange={(valor) => setCategoria(valor as typeof categoria)}><TabsList><TabsTrigger value="toras">Toras</TabsTrigger><TabsTrigger value="serrado">Serrado</TabsTrigger></TabsList></Tabs>
     {categoria === "toras" && <div className="space-y-5">
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-        <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Romaneios de carga</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada carga agrupa as plaquetas, o frete e os valores calculados automaticamente.</p></div><Button size="sm" onClick={abrirNovoRomaneio}><Plus className="mr-1.5 h-3.5 w-3.5" />Novo romaneio de carga</Button></div>
+        <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Romaneios de carga</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada carga agrupa as plaquetas, o frete e os valores calculados automaticamente.</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={abrirImportacao}><Upload className="mr-1.5 h-3.5 w-3.5" />Importar planilha</Button><Button size="sm" onClick={abrirNovoRomaneio}><Plus className="mr-1.5 h-3.5 w-3.5" />Novo romaneio de carga</Button></div></div>
         {cargas.isLoading ? <Carregando /> : cargas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Romaneio</TableHead><TableHead>Data</TableHead><TableHead>Origem</TableHead><TableHead>Responsável</TableHead><TableHead className="text-right">Plaquetas</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">Frete/m³</TableHead><TableHead className="text-right">Frete total</TableHead><TableHead className="text-right">Valor total</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cargas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.numero}</TableCell><TableCell>{formatarData(item.dataCarga)}</TableCell><TableCell>{item.origem || "—"}</TableCell><TableCell>{item.responsavel || "—"}</TableCell><TableCell className="text-right">{item.totalPlaquetas}</TableCell><TableCell className="text-right font-medium">{formatarNumero(item.volumeTotal)} m³</TableCell><TableCell className="text-right">{formatarMoeda(taxaFrete(item))}</TableCell><TableCell className="text-right">{formatarMoeda(item.frete)}</TableCell><TableCell className="text-right font-semibold">{formatarMoeda(item.valorTotal)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" title="Editar romaneio" aria-label={`Editar ${item.numero}`} onClick={() => abrirEdicao(item.id)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" title="Gerar PDF" aria-label={`Gerar PDF de ${item.numero}`} onClick={() => carregarPdf(item.id)}><FileText className="h-4 w-4" /></Button></div></TableCell></TableRow>)}</TableBody></Table></div> : <Vazio icone={<ClipboardList />} texto="Registre o primeiro romaneio de carga para dar entrada nas toras." />}
       </section>
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="border-b bg-muted/20 px-5 py-4"><h2 className="font-semibold">Plaquetas no estoque</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada plaqueta entra por uma carga e pode ser utilizada uma única vez na produção.</p></div>{plaquetas.isLoading ? <Carregando /> : plaquetas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Essência</TableHead><TableHead className="text-right">Diâmetro</TableHead><TableHead className="text-right">Comprimento</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">R$/m³</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader><TableBody>{plaquetas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.codigo}</TableCell><TableCell>{item.madeiraNome}</TableCell><TableCell className="text-right">{item.diametro ? `${formatarNumero(item.diametro, 2)} cm` : "—"}</TableCell><TableCell className="text-right">{item.comprimento ? `${formatarNumero(item.comprimento, 2)} m` : "—"}</TableCell><TableCell className="text-right">{formatarNumero(item.volumeDisponivel)} m³</TableCell><TableCell className="text-right">{formatarMoeda(item.valorMetroCubico)}</TableCell><TableCell className="text-right font-medium">{formatarMoeda(item.valorTotal)}</TableCell><TableCell><EstadoTora estado={item.estado} /></TableCell></TableRow>)}</TableBody></Table></div> : <Vazio icone={<TreePine />} texto="Nenhuma plaqueta recebida no estoque." />}</section>
@@ -183,6 +238,26 @@ export default function EstoquePage() {
             <Campo label="Observações da carga"><Textarea value={carga.observacoes} onChange={(evento) => setCarga((anterior) => ({ ...anterior, observacoes: evento.target.value }))} placeholder="Informações gerais da carga" /></Campo>
             <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button variant="outline" onClick={fecharDialogo} disabled={salvando}>Cancelar</Button><Button onClick={salvarCarga} disabled={salvando}>{salvando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{cargaEmEdicao ? "Salvar alterações" : "Confirmar entrada"}</Button></div>
           </>}
+        </div>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={dialogImportacao} onOpenChange={(aberto) => { setDialogImportacao(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); } }}>
+      <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] overflow-y-auto p-4 sm:max-w-2xl sm:p-6">
+        <DialogHeader><DialogTitle>Importar toras por planilha</DialogTitle><DialogDescription>Crie um romaneio de carga usando uma planilha CSV compatível com Excel. Todos os dados são validados antes de qualquer entrada no estoque.</DialogDescription></DialogHeader>
+        <div className="space-y-5">
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm leading-5 text-sky-950"><p className="font-medium">Formato esperado da planilha</p><p className="mt-1 text-xs">Código, essência, diâmetro em cm, comprimento em m, preço por m³ e observações opcionais. Baixe o modelo para manter os cabeçalhos corretos.</p></div>
+          <Button variant="outline" size="sm" onClick={baixarModeloImportacao}><Download className="mr-2 h-4 w-4" />Baixar modelo CSV</Button>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Campo label="Data da carga *"><Input type="date" value={cabecalhoImportacao.dataCarga} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, dataCarga: evento.target.value }))} /></Campo>
+            <Campo label="Frete por m³ (R$)" ajuda="Ex.: R$ 30,00 × volume total"><Input inputMode="decimal" value={cabecalhoImportacao.fretePorMetroCubico} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, fretePorMetroCubico: evento.target.value }))} placeholder="0,00" /></Campo>
+            <Campo label="Origem"><Input value={cabecalhoImportacao.origem} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, origem: evento.target.value }))} placeholder="Fornecedor ou fazenda" /></Campo>
+            <Campo label="Responsável"><Input value={cabecalhoImportacao.responsavel} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, responsavel: evento.target.value }))} placeholder="Quem recebeu" /></Campo>
+          </div>
+          <Campo label="Planilha CSV *" ajuda="Máximo de 200 toras e 1 MB por importação."><Input aria-label="Planilha CSV" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); }} /></Campo>
+          {arquivoImportacao && <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="min-w-0 truncate">{arquivoImportacao.name}</span></div>}
+          {errosImportacao.length > 0 && <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"><p className="text-sm font-medium text-destructive">Corrija a planilha antes de importar</p><ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-destructive">{errosImportacao.map((erro, indice) => <li key={`${erro}-${indice}`}>{erro}</li>)}</ul></div>}
+          <Campo label="Observações da carga"><Textarea value={cabecalhoImportacao.observacoes} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, observacoes: evento.target.value }))} placeholder="Informações gerais da carga importada" /></Campo>
+          <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button variant="outline" onClick={() => setDialogImportacao(false)} disabled={importarPlaquetasCsv.isPending}>Cancelar</Button><Button onClick={importarArquivo} disabled={importarPlaquetasCsv.isPending}>{importarPlaquetasCsv.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Importar toras</Button></div>
         </div>
       </DialogContent>
     </Dialog>

@@ -151,3 +151,10 @@
 - [x] Substituir o frete total pelo valor de frete por m³ calculado automaticamente pelo volume da carga
 - [x] Atualizar o PDF e a edição do romaneio para apresentar o frete por m³ e o frete total calculado
 - [x] Cobrir os novos cálculos e validar visualmente o formulário de carga em tela móvel
+- [x] Definir o modelo de planilha para importação de toras em romaneio de carga
+- [x] Validar integralmente os dados da planilha antes de criar um romaneio e suas plaquetas
+- [x] Importar toras válidas sem duplicar plaquetas e informar linhas recusadas
+- [x] Adicionar botão de importação, modelo baixável e feedback detalhado no Estoque
+- [x] Cobrir a importação de toras com testes automatizados e validação visual
+- [x] Validar visualmente o diálogo de importação de toras, incluindo campos, modelo baixável e layout responsivo
+- [x] Validar visualmente o feedback de erro da importação CSV com linhas recusadas e o feedback de sucesso da importação válida
