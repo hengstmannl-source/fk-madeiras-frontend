@@ -27,7 +27,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   LayoutDashboard, LogOut, PanelLeft, Users,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
-  ArrowUpFromLine, Warehouse, Factory, Fuel,
+  ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
@@ -62,6 +62,7 @@ export const dashboardNavigation = {
   producao: [
     { icon: Factory, label: "Produção", path: "/producao" },
     { icon: Warehouse, label: "Estoque", path: "/estoque" },
+    { icon: ClipboardCheck, label: "Inventário", path: "/inventario" },
   ],
   futuros: [
     { icon: Fuel, label: "Diesel", path: "/futuro/diesel", disabled: true },

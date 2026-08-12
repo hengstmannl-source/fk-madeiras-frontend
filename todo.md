@@ -214,3 +214,7 @@
 - [x] Integrar a confirmação de venda à baixa do estoque serrado por peça e comprimento
 - [x] Exibir saldos negativos controlados para itens vendidos sem disponibilidade em estoque
 - [x] Cobrir a agrupação, a baixa por venda e os saldos negativos com testes e validação visual
+- [x] Criar relatório de rotação do estoque serrado por essência e medida
+- [x] Criar relatório de rutura do estoque serrado por essência e medida
+- [x] Criar página de ajuste e inventário com regularização rastreável de saldos negativos
+- [x] Cobrir relatórios, ajustes e permissões com testes e validação visual

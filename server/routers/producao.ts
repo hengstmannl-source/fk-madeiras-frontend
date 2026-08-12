@@ -54,6 +54,20 @@ const ListaPlaquetasSchema = z.object({
   deslocamento: z.number().int().min(0).default(0),
 });
 
+const RelatorioInventarioSchema = z.object({
+  dataInicial: DataSchema.optional(),
+  dataFinal: DataSchema.optional(),
+}).refine((valor) => !valor.dataInicial || !valor.dataFinal || valor.dataInicial <= valor.dataFinal, "A data inicial deve ser anterior à data final");
+
+const AjusteEstoqueSerradoSchema = z.object({
+  madeiraNome: z.string().trim().min(2).max(200),
+  espessura: DecimalPositivo,
+  largura: DecimalPositivo,
+  comprimento: DecimalPositivo,
+  quantidadeContada: z.number().int().min(0).max(1_000_000),
+  motivo: z.string().trim().min(3).max(1000),
+});
+
 const ItemRomaneioSchema = z.object({
   madeiraNome: z.string().trim().min(2).max(200),
   espessura: DecimalPositivo,
@@ -141,5 +155,11 @@ export const producaoRouter = router({
   }),
   estoque: router({
     resumo: protectedProcedure.query(() => db.getResumoEstoqueSerrado()),
+    relatorio: protectedProcedure.input(RelatorioInventarioSchema.optional()).query(({ input }) => db.getRelatorioInventarioSerrado(
+      input?.dataInicial ? dataLocal(input.dataInicial) : undefined,
+      input?.dataFinal ? dataLocal(input.dataFinal) : undefined,
+    )),
+    ajustes: protectedProcedure.query(() => db.listAjustesEstoqueSerrado()),
+    ajustar: adminProcedure.input(AjusteEstoqueSerradoSchema).mutation(({ ctx, input }) => db.ajustarEstoqueSerrado({ ...input, criadoPor: ctx.user.id })),
   }),
 });

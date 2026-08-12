@@ -16,6 +16,7 @@ import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVen
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
+import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -1734,6 +1735,117 @@ export async function getResumoEstoqueSerrado() {
   if (!db) return [];
   const lotes = await db.select().from(lotesPecasSerradas);
   return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado" && lote.quantidadeDisponivel !== 0));
+}
+
+export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFinal?: Date) {
+  const db = await getDb();
+  if (!db) return { linhas: [], resumo: { itensAnalisados: 0, itensEmRutura: 0, itensCriticos: 0, pecasEmDeficit: 0, saidasNoPeriodo: 0 }, periodo: { dataInicial: new Date(), dataFinal: new Date(), dias: 1 } };
+  const fim = dataFinal ? new Date(dataFinal) : new Date();
+  fim.setHours(23, 59, 59, 999);
+  const inicio = dataInicial ? new Date(dataInicial) : new Date(fim);
+  if (!dataInicial) inicio.setDate(inicio.getDate() - 89);
+  inicio.setHours(0, 0, 0, 0);
+  const [lotes, movimentos] = await Promise.all([
+    db.select().from(lotesPecasSerradas),
+    db.select().from(movimentacoesEstoqueSerrado),
+  ]);
+  const movimentosNoPeriodo = movimentos.filter((movimento) => {
+    const dataMovimento = new Date(movimento.createdAt).getTime();
+    return dataMovimento >= inicio.getTime() && dataMovimento <= fim.getTime();
+  });
+  const dias = Math.max(1, Math.floor((fim.getTime() - inicio.getTime()) / 86_400_000) + 1);
+  return {
+    ...calcularRelatorioInventarioSerrado(lotes.filter((lote) => lote.estado !== "cancelado"), movimentosNoPeriodo, dias),
+    periodo: { dataInicial: inicio, dataFinal: fim, dias },
+  };
+}
+
+export async function listAjustesEstoqueSerrado() {
+  const db = await getDb();
+  if (!db) return [];
+  const [movimentos, lotes, utilizadores] = await Promise.all([
+    db.select().from(movimentacoesEstoqueSerrado),
+    db.select().from(lotesPecasSerradas),
+    db.select({ id: users.id, name: users.name }).from(users),
+  ]);
+  const lotesPorId = new Map(lotes.map((lote) => [lote.id, lote]));
+  const utilizadoresPorId = new Map(utilizadores.map((utilizador) => [utilizador.id, utilizador]));
+  return movimentos
+    .filter((movimento) => movimento.tipo === "ajuste")
+    .sort((primeiro, segundo) => new Date(segundo.createdAt).getTime() - new Date(primeiro.createdAt).getTime())
+    .slice(0, 30)
+    .flatMap((movimento) => {
+      const lote = lotesPorId.get(movimento.loteId);
+      if (!lote) return [];
+      return [{
+        id: movimento.id,
+        quantidade: movimento.quantidade,
+        motivo: movimento.motivo,
+        createdAt: movimento.createdAt,
+        madeiraNome: lote.madeiraNome,
+        espessura: lote.espessura,
+        largura: lote.largura,
+        comprimento: lote.comprimento,
+        utilizador: utilizadoresPorId.get(movimento.criadoPor)?.name ?? `Utilizador #${movimento.criadoPor}`,
+      }];
+    });
+}
+
+export async function ajustarEstoqueSerrado(data: {
+  madeiraNome: string;
+  espessura: string | number;
+  largura: string | number;
+  comprimento: string | number;
+  quantidadeContada: number;
+  motivo: string;
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const quantidadeContada = Number(data.quantidadeContada);
+  if (!Number.isInteger(quantidadeContada) || quantidadeContada < 0) throw new Error("Informe uma contagem inteira igual ou superior a zero");
+  if (data.motivo.trim().length < 3) throw new Error("Informe o motivo do ajuste de inventário");
+  const dimensoes = calcularItemRomaneio({
+    madeiraNome: data.madeiraNome,
+    espessura: data.espessura,
+    largura: data.largura,
+    comprimento: data.comprimento,
+    quantidade: 1,
+  });
+  return db.transaction(async (tx: any) => {
+    const lotes = await tx.select().from(lotesPecasSerradas);
+    const mesmaMedida = (lote: any) => lote.estado !== "cancelado"
+      && lote.madeiraNome.trim().toLocaleUpperCase("pt-BR") === dimensoes.madeiraNome.trim().toLocaleUpperCase("pt-BR")
+      && Math.abs(Number(lote.espessura) - dimensoes.espessura) < 0.0001
+      && Math.abs(Number(lote.largura) - dimensoes.largura) < 0.0001
+      && Math.abs(Number(lote.comprimento) - dimensoes.comprimento) < 0.0001;
+    const saldoAnterior = lotes.filter(mesmaMedida).reduce((total: number, lote: any) => total + Number(lote.quantidadeDisponivel), 0);
+    const variacao = quantidadeContada - saldoAnterior;
+    if (!variacao) throw new Error("A contagem informada já corresponde ao saldo atual desta medida");
+    const calculoVariacao = calcularItemRomaneio({ ...dimensoes, quantidade: Math.abs(variacao) });
+    const insercao = await tx.insert(lotesPecasSerradas).values({
+      romaneioId: null,
+      itemRomaneioId: null,
+      madeiraNome: calculoVariacao.madeiraNome,
+      espessura: calculoVariacao.espessura.toFixed(2),
+      largura: calculoVariacao.largura.toFixed(2),
+      comprimento: calculoVariacao.comprimento.toFixed(2),
+      quantidadeProduzida: Math.max(variacao, 0),
+      quantidadeDisponivel: variacao,
+      metrosLineares: calculoVariacao.metrosLineares.toFixed(4),
+      volume: calculoVariacao.volume.toFixed(6),
+      estado: variacao < 0 ? "negativo" : "disponivel",
+    });
+    const loteId = getInsertedId(insercao as MysqlInsertResult);
+    await tx.insert(movimentacoesEstoqueSerrado).values({
+      loteId,
+      tipo: "ajuste",
+      quantidade: variacao,
+      motivo: `Inventário: ${data.motivo.trim()} | saldo anterior: ${saldoAnterior}; contagem: ${quantidadeContada}`,
+      criadoPor: data.criadoPor,
+    });
+    return { success: true, saldoAnterior, quantidadeContada, variacao, loteId };
+  });
 }
 
 export async function entregarVendaFisicamente(vendaId: number, userId: number, dependencias?: { database?: any }) {
