@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, lte, ne } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -1090,16 +1090,41 @@ export async function getDashboardStats() {
 }
 
 // ─── Produção e estoque de madeira serrada ───
-export async function listPlaquetas() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt));
+export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Date | string | null; id: number }>(itens: T[]) {
+  return [...itens].sort((primeira, segunda) => {
+    const primeiraData = primeira.createdAt ? new Date(primeira.createdAt).getTime() : 0;
+    const segundaData = segunda.createdAt ? new Date(segunda.createdAt).getTime() : 0;
+    return segundaData - primeiraData || segunda.id - primeira.id;
+  });
 }
 
-export async function listRomaneiosCargaToras() {
+export async function listPlaquetas(parametros: { busca?: string; limite?: number; deslocamento?: number } = {}) {
+  const db = await getDb();
+  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, proximoDeslocamento: null };
+  const todas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
+  const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  const filtradas = termo ? todas.filter((item) => {
+    const codigo = item.codigo.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    const essencia = item.madeiraNome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    return codigo.includes(termo) || essencia.includes(termo);
+  }) : todas;
+  const limite = Math.min(Math.max(parametros.limite ?? 10, 1), 500);
+  const deslocamento = Math.max(parametros.deslocamento ?? 0, 0);
+  const itens = filtradas.slice(deslocamento, deslocamento + limite);
+  const proximoDeslocamento = deslocamento + itens.length < filtradas.length ? deslocamento + itens.length : null;
+  return { itens, total: filtradas.length, totalDisponiveis: todas.filter((item) => item.estado === "disponivel").length, proximoDeslocamento };
+}
+
+export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(romaneiosCargaToras).orderBy(desc(romaneiosCargaToras.dataCarga), desc(romaneiosCargaToras.id));
+  const origem = filtros.origem?.trim().toLocaleLowerCase("pt-BR");
+  const condicoes = [
+    filtros.dataInicial ? gte(romaneiosCargaToras.dataCarga, filtros.dataInicial) : undefined,
+    filtros.dataFinal ? lte(romaneiosCargaToras.dataCarga, filtros.dataFinal) : undefined,
+  ];
+  const resultado = await db.select().from(romaneiosCargaToras).where(and(...condicoes)).orderBy(desc(romaneiosCargaToras.dataCarga), desc(romaneiosCargaToras.id));
+  return origem ? resultado.filter((item) => (item.origem ?? "").toLocaleLowerCase("pt-BR").includes(origem)) : resultado;
 }
 
 export async function getRomaneioCargaComPlaquetas(id: number) {

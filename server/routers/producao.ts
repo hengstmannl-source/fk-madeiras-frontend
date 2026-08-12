@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { protectedProcedure, router } from "../_core/trpc";
+import { adminProcedure, protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 
 const DataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
@@ -42,6 +42,18 @@ const RomaneioCargaSchema = z.object({
   plaquetas: z.array(PlaquetaCargaSchema).min(1, "Adicione ao menos uma plaqueta").max(200),
 });
 
+const FiltrosCargasSchema = z.object({
+  dataInicial: DataSchema.optional(),
+  dataFinal: DataSchema.optional(),
+  origem: z.string().trim().max(200).optional(),
+}).refine((valor) => !valor.dataInicial || !valor.dataFinal || valor.dataInicial <= valor.dataFinal, "A data inicial deve ser anterior à data final");
+
+const ListaPlaquetasSchema = z.object({
+  busca: z.string().trim().max(200).optional(),
+  limite: z.number().int().min(1).max(500).default(10),
+  deslocamento: z.number().int().min(0).default(0),
+});
+
 const ItemRomaneioSchema = z.object({
   madeiraNome: z.string().trim().min(2).max(200),
   espessura: DecimalPositivo,
@@ -68,7 +80,11 @@ const RomaneioSchema = z.object({
 
 export const producaoRouter = router({
   cargas: router({
-    list: protectedProcedure.query(() => db.listRomaneiosCargaToras()),
+    list: protectedProcedure.input(FiltrosCargasSchema.optional()).query(({ input }) => db.listRomaneiosCargaToras({
+      dataInicial: input?.dataInicial ? dataLocal(input.dataInicial) : undefined,
+      dataFinal: input?.dataFinal ? dataLocal(input.dataFinal) : undefined,
+      origem: input?.origem,
+    })),
     get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioCargaComPlaquetas(input.id)),
     modeloPlaquetasCsv: protectedProcedure.query(() => db.getModeloImportacaoPlaquetasCargaCsv()),
     importarPlaquetasCsv: protectedProcedure.input(RomaneioCargaSchema.omit({ plaquetas: true }).extend({
@@ -86,10 +102,10 @@ export const producaoRouter = router({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
     })),
-    excluir: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => db.excluirRomaneioCargaToras(input.id)),
+    excluir: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => db.excluirRomaneioCargaToras(input.id)),
   }),
   plaquetas: router({
-    list: protectedProcedure.query(() => db.listPlaquetas()),
+    list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ input }) => db.listPlaquetas(input)),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({
       ...input,
       dataEntrada: dataLocal(input.dataEntrada),

@@ -29,12 +29,12 @@ export default function ProducaoPage() {
   const [toraForm, setToraForm] = useState({ codigo: "", madeiraNome: "", espessura: "", largura: "", comprimento: "", volumeInicial: "", dataEntrada: hoje(), origem: "", localizacao: "", observacoes: "" });
   const [romaneio, setRomaneio] = useState({ plaquetaId: "", tora: { madeiraNome: "", espessura: "", largura: "", comprimento: "", volume: "" } as ToraForm, dataProducao: hoje(), fita: "", responsavel: "", observacoes: "", itens: [novoItem()] as ItemForm[] });
   const utils = trpc.useUtils();
-  const plaquetas = trpc.producao.plaquetas.list.useQuery();
+  const plaquetas = trpc.producao.plaquetas.list.useQuery({ limite: 500 });
   const romaneios = trpc.producao.romaneios.list.useQuery();
   const estoque = trpc.producao.estoque.resumo.useQuery();
   const criarTora = trpc.producao.plaquetas.create.useMutation();
   const confirmarRomaneio = trpc.producao.romaneios.confirmar.useMutation();
-  const torasDisponiveis = useMemo(() => (plaquetas.data ?? []).filter((item: any) => item.estado === "disponivel"), [plaquetas.data]);
+  const torasDisponiveis = useMemo(() => (plaquetas.data?.itens ?? []).filter((item: any) => item.estado === "disponivel"), [plaquetas.data]);
   const totais = useMemo(() => romaneio.itens.reduce((total, item) => { const calculo = calcularItem(item); return { pecas: total.pecas + calculo.quantidade, metrosLineares: total.metrosLineares + calculo.metrosLineares, volume: total.volume + calculo.volume }; }, { pecas: 0, metrosLineares: 0, volume: 0 }), [romaneio.itens]);
   const volumeCalculadoTora = useMemo(() => calcularVolume(romaneio.tora.espessura, romaneio.tora.largura, romaneio.tora.comprimento), [romaneio.tora]);
   const aproveitamento = num(romaneio.tora.volume) > 0 ? (totais.volume / num(romaneio.tora.volume)) * 100 : 0;

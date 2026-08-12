@@ -165,3 +165,11 @@
 - [x] Cobrir e validar visualmente a exclusão de romaneios
 - [x] Validar no navegador o fluxo completo de exclusão de romaneio: abrir confirmação, excluir uma carga disponível e verificar atualização da listagem sem recarregamento manual
 - [x] Registrar evidência da validação visual da exclusão real pela interface, distinta da remoção administrativa via banco de dados
+- [x] Adicionar filtros por período e origem na listagem de romaneios de carga
+- [x] Limitar a listagem inicial de plaquetas às 10 entradas mais recentes
+- [x] Permitir pesquisar plaquetas de estoque por código de plaqueta ou essência
+- [x] Permitir carregar mais plaquetas conforme a necessidade, sem lista infinita inicial
+- [x] Restringir a exclusão de romaneios ao perfil administrativo no servidor e na interface
+- [x] Cobrir filtros, paginação, pesquisa e autorização administrativa com testes e validação visual
+- [x] Garantir a ordenação decrescente por entrada na consulta paginada de plaquetas e testar que a listagem inicial exibe as 10 mais recentes
+- [x] Executar e confirmar a cobertura automatizada da ordenação das 10 plaquetas mais recentes antes da paginação
