@@ -184,3 +184,6 @@
 - [x] Definir e disponibilizar planilha de importação de plaquetas para a produção diária
 - [x] Importar plaquetas do estoque por planilha, com validação integral e correção das medidas antes da confirmação
 - [x] Cobrir a digitação e a importação de plaquetas de produção com testes e validação visual
+- [x] Corrigir transbordamentos e informações cortadas no formulário de Produção Diária em telas estreitas
+- [x] Remover o botão duplicado de criação de Produção Diária, mantendo uma única ação clara
+- [x] Cobrir e validar visualmente o layout responsivo corrigido da Produção

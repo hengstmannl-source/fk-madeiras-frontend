@@ -39,6 +39,7 @@ describe("ProducaoPage", () => {
 
     expect(screen.getByRole("heading", { name: "Produção diária" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Nova produção diária" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Nova produção/i })).toHaveLength(1);
     expect(screen.queryByRole("tab", { name: "Estoque de toras" })).not.toBeInTheDocument();
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
   });
@@ -48,7 +49,7 @@ describe("ProducaoPage", () => {
     const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<ProducaoPage />);
 
-    await user.click(screen.getByRole("button", { name: "Nova produção" }));
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
     await user.type(screen.getByLabelText("Código da plaqueta"), "TOR-0008");
     await user.keyboard("{Enter}");
 
@@ -68,7 +69,7 @@ describe("ProducaoPage", () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 
-    await user.click(screen.getByRole("button", { name: "Nova produção" }));
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
     await user.click(screen.getByRole("button", { name: "Importar planilha" }));
 
     expect(screen.getByRole("heading", { name: "Importar plaquetas para produção" })).toBeInTheDocument();
