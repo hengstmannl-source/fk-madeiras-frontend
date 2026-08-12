@@ -133,3 +133,8 @@
 - [x] Calcular automaticamente o volume individual e o volume total do romaneio de carga
 - [x] Criar a aba Estoque com categorias independentes Toras e Serrado
 - [x] Testar a navegação, o romaneio de carga e os cálculos de volume do estoque
+- [x] Remover a rolagem horizontal desnecessária e redimensionar a lista do romaneio de carga
+- [x] Registrar o valor por m³ de cada tora no romaneio de carga
+- [x] Calcular e exibir automaticamente o valor individual da tora a partir de volume e preço por m³
+- [x] Calcular e exibir o valor total do romaneio de carga
+- [x] Cobrir os cálculos financeiros e validar visualmente o novo layout do romaneio

@@ -35,6 +35,13 @@ export function calcularVolumeToraCilindrica(diametroCm: string | number, compri
   return Math.PI * raioEmMetros ** 2 * comprimento;
 }
 
+export function calcularValorTora(volume: string | number, valorMetroCubico: string | number): number {
+  const volumeNumerico = numero(volume);
+  const preco = numero(valorMetroCubico);
+  if (volumeNumerico < 0 || preco < 0) throw new Error("Volume e valor por m³ não podem ser negativos");
+  return Number((volumeNumerico * preco).toFixed(2));
+}
+
 export function normalizarCodigoPlaqueta(codigo: string): string {
   return codigo.trim().toLocaleUpperCase("pt-BR").replace(/\s+/g, "-");
 }

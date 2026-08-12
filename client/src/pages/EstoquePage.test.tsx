@@ -11,8 +11,8 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { cargas: { list: invalidar }, plaquetas: { list: invalidar } } }),
       producao: {
-        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000" }], isLoading: false }) }, create: mutation },
-        plaquetas: { list: { useQuery: () => ({ data: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", estado: "disponivel" }], isLoading: false }) }, create: mutation },
+        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorTotal: "1080.00" }], isLoading: false }) }, create: mutation },
+        plaquetas: { list: { useQuery: () => ({ data: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], isLoading: false }) }, create: mutation },
         estoque: { resumo: { useQuery: () => ({ data: [{ madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" }], isLoading: false }) } },
       },
     },
@@ -38,7 +38,7 @@ describe("EstoquePage", () => {
     expect(screen.getByRole("cell", { name: "20" })).toBeInTheDocument();
   });
 
-  it("monta uma lista de plaquetas e calcula o volume da carga automaticamente", async () => {
+  it("monta uma lista responsiva de plaquetas e calcula volume e valor automaticamente", async () => {
     const user = userEvent.setup();
     render(<EstoquePage />);
 
@@ -48,8 +48,11 @@ describe("EstoquePage", () => {
     const medidas = screen.getAllByPlaceholderText("0,00");
     await user.type(medidas[0], "20");
     await user.type(medidas[1], "10");
+    await user.type(screen.getByPlaceholderText("900,00"), "900");
 
     expect(screen.getAllByText(/0,314/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/282,74/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Valor total da carga")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Adicionar plaqueta" }));
     expect(screen.getAllByPlaceholderText("PLQ-001")).toHaveLength(2);
   });

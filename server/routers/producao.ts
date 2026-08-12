@@ -28,6 +28,7 @@ const PlaquetaCargaSchema = z.object({
   madeiraNome: z.string().trim().min(2).max(200),
   diametro: DecimalPositivo,
   comprimento: DecimalPositivo,
+  valorMetroCubico: DecimalPositivo,
   observacoes: z.string().max(1000).nullable().optional(),
 });
 

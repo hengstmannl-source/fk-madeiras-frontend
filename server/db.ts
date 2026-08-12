@@ -1106,7 +1106,7 @@ export async function criarRomaneioCargaToras(data: {
   origem?: string | null;
   responsavel?: string | null;
   observacoes?: string | null;
-  plaquetas: Array<{ codigo: string; madeiraNome: string; diametro: string; comprimento: string; observacoes?: string | null }>;
+  plaquetas: Array<{ codigo: string; madeiraNome: string; diametro: string; comprimento: string; valorMetroCubico: string; observacoes?: string | null }>;
   criadoPor: number;
 }) {
   const db = await getDb();
@@ -1122,10 +1122,14 @@ export async function criarRomaneioCargaToras(data: {
     if (!madeiraNome) throw new Error(`Informe a essência da plaqueta ${codigo}`);
     const diametro = Number(String(plaqueta.diametro).replace(",", "."));
     const comprimento = Number(String(plaqueta.comprimento).replace(",", "."));
+    const valorMetroCubico = Number(String(plaqueta.valorMetroCubico).replace(",", "."));
     const volume = calcularVolumeToraCilindrica(diametro, comprimento);
-    return { codigo, madeiraNome, diametro, comprimento, volume, observacoes: plaqueta.observacoes?.trim() || null };
+    if (!Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) throw new Error(`Informe o valor por m³ da plaqueta ${codigo}`);
+    const valorTotal = Number((volume * valorMetroCubico).toFixed(2));
+    return { codigo, madeiraNome, diametro, comprimento, volume, valorMetroCubico, valorTotal, observacoes: plaqueta.observacoes?.trim() || null };
   });
   const volumeTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.volume, 0);
+  const valorTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.valorTotal, 0);
   return db.transaction(async (tx: any) => {
     for (const plaqueta of plaquetasPreparadas) {
       const existente = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, plaqueta.codigo)).limit(1))[0];
@@ -1140,6 +1144,7 @@ export async function criarRomaneioCargaToras(data: {
       observacoes: data.observacoes?.trim() || null,
       totalPlaquetas: plaquetasPreparadas.length,
       volumeTotal: volumeTotal.toFixed(6),
+      valorTotal: valorTotal.toFixed(2),
       criadoPor: data.criadoPor,
     });
     const id = getInsertedId(insercao as MysqlInsertResult);
@@ -1153,6 +1158,8 @@ export async function criarRomaneioCargaToras(data: {
         diametro: plaqueta.diametro.toFixed(2),
         volumeInicial: plaqueta.volume.toFixed(6),
         volumeDisponivel: plaqueta.volume.toFixed(6),
+        valorMetroCubico: plaqueta.valorMetroCubico.toFixed(2),
+        valorTotal: plaqueta.valorTotal.toFixed(2),
         dataEntrada: data.dataCarga,
         romaneioCargaId: id,
         origem: data.origem?.trim() || null,
@@ -1163,7 +1170,7 @@ export async function criarRomaneioCargaToras(data: {
       const plaquetaId = getInsertedId(insercaoPlaqueta as MysqlInsertResult);
       await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${numero}`, criadoPor: data.criadoPor });
     }
-    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal };
+    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorTotal };
   });
 }
 
