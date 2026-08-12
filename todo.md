@@ -158,3 +158,10 @@
 - [x] Cobrir a importação de toras com testes automatizados e validação visual
 - [x] Validar visualmente o diálogo de importação de toras, incluindo campos, modelo baixável e layout responsivo
 - [x] Validar visualmente o feedback de erro da importação CSV com linhas recusadas e o feedback de sucesso da importação válida
+- [x] Permitir excluir romaneios de carga quando nenhuma plaqueta tiver sido utilizada na produção
+- [x] Exigir confirmação explícita antes de excluir um romaneio e suas plaquetas disponíveis
+- [x] Impedir a exclusão de romaneios que tenham plaquetas já consumidas, preservando a rastreabilidade
+- [x] Remover a carga de validação CARGA-120001 e a plaqueta VALID-IMPORT-0001 criadas no teste autorizado
+- [x] Cobrir e validar visualmente a exclusão de romaneios
+- [x] Validar no navegador o fluxo completo de exclusão de romaneio: abrir confirmação, excluir uma carga disponível e verificar atualização da listagem sem recarregamento manual
+- [x] Registrar evidência da validação visual da exclusão real pela interface, distinta da remoção administrativa via banco de dados

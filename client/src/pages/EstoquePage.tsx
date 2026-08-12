@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, TreePine, Upload, Warehouse } from "lucide-react";
+import { Box, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Trash2, TreePine, Upload, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -74,6 +75,7 @@ export default function EstoquePage() {
   const [dialogCarga, setDialogCarga] = useState(false);
   const [dialogImportacao, setDialogImportacao] = useState(false);
   const [cargaEmEdicao, setCargaEmEdicao] = useState<number | null>(null);
+  const [cargaParaExcluir, setCargaParaExcluir] = useState<{ id: number; numero: string } | null>(null);
   const [carga, setCarga] = useState<CargaFormulario>(novaCarga);
   const [cabecalhoImportacao, setCabecalhoImportacao] = useState<CabecalhoCarga>(novoCabecalhoCarga);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
@@ -87,6 +89,7 @@ export default function EstoquePage() {
   const serrado = trpc.producao.estoque.resumo.useQuery();
   const criarCarga = trpc.producao.cargas.create.useMutation();
   const atualizarCarga = trpc.producao.cargas.update.useMutation();
+  const excluirCarga = trpc.producao.cargas.excluir.useMutation();
   const importarPlaquetasCsv = trpc.producao.cargas.importarPlaquetasCsv.useMutation();
 
   useEffect(() => {
@@ -120,6 +123,7 @@ export default function EstoquePage() {
 
   const torasDisponiveis = useMemo(() => (plaquetas.data ?? []).filter((item: any) => item.estado === "disponivel"), [plaquetas.data]);
   const salvando = criarCarga.isPending || atualizarCarga.isPending;
+  const excluindo = excluirCarga.isPending;
   const redefinirCarga = () => { carregouEdicao.current = null; setCarga(novaCarga()); setCargaEmEdicao(null); };
   const fecharDialogo = () => { setDialogCarga(false); redefinirCarga(); };
   const abrirNovoRomaneio = () => { redefinirCarga(); setDialogCarga(true); };
@@ -133,6 +137,20 @@ export default function EstoquePage() {
   });
   const removerPlaqueta = (indice: number) => setCarga((anterior) => ({ ...anterior, plaquetas: anterior.plaquetas.filter((_, posicao) => posicao !== indice) }));
   const carregarPdf = (id: number) => window.open(`/api/pdf/romaneio-carga/${id}`, "_blank", "noopener,noreferrer");
+  const confirmarExclusao = () => {
+    if (!cargaParaExcluir) return;
+    const cargaExcluida = cargaParaExcluir;
+    excluirCarga.mutate({ id: cargaExcluida.id }, {
+      onSuccess: (resultado) => {
+        toast.success(`${resultado.numero} excluído com ${resultado.totalPlaquetas} plaqueta(s) removida(s)`);
+        if (cargaEmEdicao === cargaExcluida.id) fecharDialogo();
+        setCargaParaExcluir(null);
+        utils.producao.cargas.list.invalidate();
+        utils.producao.plaquetas.list.invalidate();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
 
   const baixarModeloImportacao = async () => {
     const resposta = await modeloPlaquetasCsv.refetch();
@@ -195,7 +213,7 @@ export default function EstoquePage() {
     {categoria === "toras" && <div className="space-y-5">
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
         <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Romaneios de carga</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada carga agrupa as plaquetas, o frete e os valores calculados automaticamente.</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={abrirImportacao}><Upload className="mr-1.5 h-3.5 w-3.5" />Importar planilha</Button><Button size="sm" onClick={abrirNovoRomaneio}><Plus className="mr-1.5 h-3.5 w-3.5" />Novo romaneio de carga</Button></div></div>
-        {cargas.isLoading ? <Carregando /> : cargas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Romaneio</TableHead><TableHead>Data</TableHead><TableHead>Origem</TableHead><TableHead>Responsável</TableHead><TableHead className="text-right">Plaquetas</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">Frete/m³</TableHead><TableHead className="text-right">Frete total</TableHead><TableHead className="text-right">Valor total</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cargas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.numero}</TableCell><TableCell>{formatarData(item.dataCarga)}</TableCell><TableCell>{item.origem || "—"}</TableCell><TableCell>{item.responsavel || "—"}</TableCell><TableCell className="text-right">{item.totalPlaquetas}</TableCell><TableCell className="text-right font-medium">{formatarNumero(item.volumeTotal)} m³</TableCell><TableCell className="text-right">{formatarMoeda(taxaFrete(item))}</TableCell><TableCell className="text-right">{formatarMoeda(item.frete)}</TableCell><TableCell className="text-right font-semibold">{formatarMoeda(item.valorTotal)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" title="Editar romaneio" aria-label={`Editar ${item.numero}`} onClick={() => abrirEdicao(item.id)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" title="Gerar PDF" aria-label={`Gerar PDF de ${item.numero}`} onClick={() => carregarPdf(item.id)}><FileText className="h-4 w-4" /></Button></div></TableCell></TableRow>)}</TableBody></Table></div> : <Vazio icone={<ClipboardList />} texto="Registre o primeiro romaneio de carga para dar entrada nas toras." />}
+        {cargas.isLoading ? <Carregando /> : cargas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Romaneio</TableHead><TableHead>Data</TableHead><TableHead>Origem</TableHead><TableHead>Responsável</TableHead><TableHead className="text-right">Plaquetas</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">Frete/m³</TableHead><TableHead className="text-right">Frete total</TableHead><TableHead className="text-right">Valor total</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cargas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.numero}</TableCell><TableCell>{formatarData(item.dataCarga)}</TableCell><TableCell>{item.origem || "—"}</TableCell><TableCell>{item.responsavel || "—"}</TableCell><TableCell className="text-right">{item.totalPlaquetas}</TableCell><TableCell className="text-right font-medium">{formatarNumero(item.volumeTotal)} m³</TableCell><TableCell className="text-right">{formatarMoeda(taxaFrete(item))}</TableCell><TableCell className="text-right">{formatarMoeda(item.frete)}</TableCell><TableCell className="text-right font-semibold">{formatarMoeda(item.valorTotal)}</TableCell><TableCell><div className="flex justify-end gap-1"><Button variant="ghost" size="icon" title="Editar romaneio" aria-label={`Editar ${item.numero}`} onClick={() => abrirEdicao(item.id)}><Pencil className="h-4 w-4" /></Button><Button variant="ghost" size="icon" title="Gerar PDF" aria-label={`Gerar PDF de ${item.numero}`} onClick={() => carregarPdf(item.id)}><FileText className="h-4 w-4" /></Button><Button variant="ghost" size="icon" title="Excluir romaneio" aria-label={`Excluir ${item.numero}`} onClick={() => setCargaParaExcluir({ id: item.id, numero: item.numero })}><Trash2 className="h-4 w-4 text-destructive" /></Button></div></TableCell></TableRow>)}</TableBody></Table></div> : <Vazio icone={<ClipboardList />} texto="Registre o primeiro romaneio de carga para dar entrada nas toras." />}
       </section>
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="border-b bg-muted/20 px-5 py-4"><h2 className="font-semibold">Plaquetas no estoque</h2><p className="mt-0.5 text-xs text-muted-foreground">Cada plaqueta entra por uma carga e pode ser utilizada uma única vez na produção.</p></div>{plaquetas.isLoading ? <Carregando /> : plaquetas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Essência</TableHead><TableHead className="text-right">Diâmetro</TableHead><TableHead className="text-right">Comprimento</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">R$/m³</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader><TableBody>{plaquetas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.codigo}</TableCell><TableCell>{item.madeiraNome}</TableCell><TableCell className="text-right">{item.diametro ? `${formatarNumero(item.diametro, 2)} cm` : "—"}</TableCell><TableCell className="text-right">{item.comprimento ? `${formatarNumero(item.comprimento, 2)} m` : "—"}</TableCell><TableCell className="text-right">{formatarNumero(item.volumeDisponivel)} m³</TableCell><TableCell className="text-right">{formatarMoeda(item.valorMetroCubico)}</TableCell><TableCell className="text-right font-medium">{formatarMoeda(item.valorTotal)}</TableCell><TableCell><EstadoTora estado={item.estado} /></TableCell></TableRow>)}</TableBody></Table></div> : <Vazio icone={<TreePine />} texto="Nenhuma plaqueta recebida no estoque." />}</section>
     </div>}
@@ -261,6 +279,12 @@ export default function EstoquePage() {
         </div>
       </DialogContent>
     </Dialog>
+    <AlertDialog open={Boolean(cargaParaExcluir)} onOpenChange={(aberto) => { if (!aberto && !excluindo) setCargaParaExcluir(null); }}>
+      <AlertDialogContent>
+        <AlertDialogHeader><AlertDialogTitle>Excluir romaneio de carga?</AlertDialogTitle><AlertDialogDescription>Esta ação remove o romaneio <strong>{cargaParaExcluir?.numero}</strong> e todas as suas plaquetas disponíveis do estoque. Romaneios com toras já usadas na produção são protegidos e não podem ser excluídos.</AlertDialogDescription></AlertDialogHeader>
+        <AlertDialogFooter><AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={excluindo} onClick={confirmarExclusao}>{excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Excluir romaneio</AlertDialogAction></AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>;
 }
 

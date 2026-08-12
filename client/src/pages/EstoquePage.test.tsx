@@ -4,7 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
-const { importarMutate } = vi.hoisted(() => ({ importarMutate: vi.fn() }));
+const { importarMutate, excluirMutate } = vi.hoisted(() => ({ importarMutate: vi.fn(), excluirMutate: vi.fn() }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
@@ -14,7 +14,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar } } }),
       producao: {
-        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false }) }, get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) }, modeloPlaquetasCsv: { useQuery: () => ({ refetch: vi.fn() }) }, create: mutation, update: mutation, importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) } },
+        cargas: { list: { useQuery: () => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false }) }, get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) }, modeloPlaquetasCsv: { useQuery: () => ({ refetch: vi.fn() }) }, create: mutation, update: mutation, excluir: { useMutation: () => ({ mutate: excluirMutate, isPending: false }) }, importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) } },
         plaquetas: { list: { useQuery: () => ({ data: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], isLoading: false }) }, create: mutation },
         estoque: { resumo: { useQuery: () => ({ data: [{ madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" }], isLoading: false }) } },
       },
@@ -27,6 +27,7 @@ import EstoquePage from "./EstoquePage";
 afterEach(() => {
   cleanup();
   importarMutate.mockReset();
+  excluirMutate.mockReset();
 });
 
 describe("EstoquePage", () => {
@@ -40,6 +41,7 @@ describe("EstoquePage", () => {
     expect(screen.getByText("TOR-0005")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Editar CAR-000001" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Gerar PDF de CAR-000001" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Excluir CAR-000001" })).toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Serrado" }));
     expect(screen.getByRole("heading", { name: "Estoque serrado" })).toBeInTheDocument();
@@ -115,5 +117,21 @@ describe("EstoquePage", () => {
     expect(screen.getByDisplayValue("Fazenda Norte")).toBeInTheDocument();
     expect(screen.getByDisplayValue("TOR-0005")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Salvar alterações" })).toBeInTheDocument();
+  });
+
+  it("solicita confirmação e exclui o romaneio quando as toras estão disponíveis", async () => {
+    const user = userEvent.setup();
+    excluirMutate.mockImplementationOnce((_entrada, opcoes) => {
+      opcoes.onSuccess({ id: 1, numero: "CAR-000001", totalPlaquetas: 2 });
+    });
+    render(<EstoquePage />);
+
+    await user.click(screen.getByRole("button", { name: "Excluir CAR-000001" }));
+    expect(screen.getByRole("heading", { name: "Excluir romaneio de carga?" })).toBeInTheDocument();
+    expect(screen.getByText(/toras já usadas na produção/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Excluir romaneio" }));
+
+    expect(excluirMutate).toHaveBeenCalledWith({ id: 1 }, expect.any(Object));
+    expect(toast.success).toHaveBeenCalled();
   });
 });

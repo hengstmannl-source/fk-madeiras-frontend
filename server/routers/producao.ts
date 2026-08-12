@@ -86,6 +86,7 @@ export const producaoRouter = router({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
     })),
+    excluir: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => db.excluirRomaneioCargaToras(input.id)),
   }),
   plaquetas: router({
     list: protectedProcedure.query(() => db.listPlaquetas()),

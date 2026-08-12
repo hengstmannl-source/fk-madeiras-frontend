@@ -1285,6 +1285,27 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
   });
 }
 
+export async function excluirRomaneioCargaToras(id: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async (tx: any) => {
+    const carga = (await tx.select().from(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id)).limit(1))[0];
+    if (!carga) throw new Error("Romaneio de carga não encontrado");
+    const itens = await tx.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id));
+    if (itens.some((plaqueta: any) => plaqueta.estado !== "disponivel")) {
+      throw new Error("Este romaneio possui toras utilizadas na produção e não pode ser excluído");
+    }
+
+    for (const plaqueta of itens) {
+      await tx.delete(movimentacoesPlaquetas).where(eq(movimentacoesPlaquetas.plaquetaId, plaqueta.id));
+      await tx.delete(plaquetas).where(eq(plaquetas.id, plaqueta.id));
+    }
+    await tx.delete(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id));
+    return { id, numero: carga.numero, totalPlaquetas: itens.length };
+  });
+}
+
 export async function createPlaqueta(data: {
   codigo: string;
   madeiraNome: string;
