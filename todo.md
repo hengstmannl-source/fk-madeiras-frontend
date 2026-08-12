@@ -141,3 +141,9 @@
 - [x] Remover o botão duplicado de novo romaneio de carga da área de cabeçalho do Estoque
 - [x] Reaproveitar essência e preço por m³ ao adicionar uma nova plaqueta no mesmo romaneio
 - [x] Cobrir o preenchimento automático da próxima plaqueta e validar a interface atualizada
+- [x] Adicionar frete ao romaneio de carga e calcular o valor total com as toras e o frete
+- [x] Permitir editar romaneios de carga já registrados com recálculo consistente dos totais
+- [x] Gerar PDF profissional de romaneio de carga para impressão e compartilhamento
+- [x] Cobrir frete, edição e PDF de romaneio de carga com testes e validação visual
+- [x] Testar a geração autenticada do PDF de romaneio de carga, incluindo totais de toras, frete e valor total
+- [x] Validar visualmente o PDF do romaneio de carga gerado com layout e informações financeiras completas

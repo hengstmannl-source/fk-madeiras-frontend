@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioProducaoComItens, listClientes } from "./db";
+import { getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioCargaComPlaquetas, getRomaneioProducaoComItens, listClientes } from "./db";
 import { storageGetSignedUrl } from "./storage";
 import { sdk } from "./_core/sdk";
 
@@ -362,6 +362,84 @@ export async function registerPdfRoutes(app: any) {
     } catch (err) {
       console.error("Romaneio PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar PDF do romaneio" });
+    }
+  });
+
+  app.get("/api/pdf/romaneio-carga/:id", async (req: any, res: any) => {
+    try {
+      if (!(await requirePdfAuthentication(req, res))) return;
+      const id = parseInt(req.params.id);
+      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+      const data = await getRomaneioCargaComPlaquetas(id);
+      if (!data) return res.status(404).json({ error: "Romaneio de carga não encontrado" });
+
+      const pdfDoc = await PDFDocument.create();
+      const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+      const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const logo = await loadCompanyLogo(pdfDoc);
+      const adicionarPagina = () => pdfDoc.addPage([595, 842]);
+      let page = adicionarPagina();
+      const { width, height } = page.getSize();
+      const logoDimensoes = logo?.scaleToFit(108, 50);
+      const desenharCabecalho = (continuacao = false) => {
+        if (logoDimensoes) page.drawImage(logo!, { x: 48, y: height - 50 - logoDimensoes.height, width: logoDimensoes.width, height: logoDimensoes.height });
+        const cabecalhoX = logoDimensoes ? 48 + logoDimensoes.width + 14 : 48;
+        page.drawText("FK MADEIRAS", { x: cabecalhoX, y: height - 55, size: 22, font: bold, color: rgb(0.22, 0.16, 0.08) });
+        page.drawText(continuacao ? `Romaneio de carga ${data.carga.numero} — continuação` : "Romaneio de carga", { x: cabecalhoX, y: height - 72, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
+      };
+      desenharCabecalho();
+      let y = height - 125;
+      page.drawRectangle({ x: 48, y: y - 48, width: width - 96, height: 60, color: rgb(0.95, 0.93, 0.89) });
+      page.drawText(data.carga.numero, { x: 62, y: y - 6, size: 17, font: bold, color: rgb(0.22, 0.16, 0.08) });
+      page.drawText(`Recebimento em ${new Date(data.carga.dataCarga).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
+      page.drawText(`Volume: ${formatMeasurement(data.carga.volumeTotal)} m³`, { x: width - 190, y: y - 15, size: 10, font: bold, color: rgb(0.12, 0.42, 0.25) });
+      y -= 78;
+      page.drawText(`Origem: ${data.carga.origem ?? "Não informada"}   •   Responsável: ${data.carga.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
+      y -= 30;
+
+      const colunas = [76, 92, 56, 61, 65, 73, 74];
+      const titulos = ["Código", "Essência", "Diâm.", "Comp.", "Volume", "R$/m³", "Valor"];
+      const desenharCabecalhoTabela = () => {
+        let x = 48;
+        titulos.forEach((titulo, indice) => { page.drawText(titulo, { x, y, size: 8, font: bold, color: rgb(0.42, 0.42, 0.42) }); x += colunas[indice]; });
+        y -= 15;
+      };
+      desenharCabecalhoTabela();
+      for (const plaqueta of data.plaquetas) {
+        if (y < 80) {
+          page = adicionarPagina();
+          desenharCabecalho(true);
+          y = height - 108;
+          desenharCabecalhoTabela();
+        }
+        let x = 48;
+        page.drawText(plaqueta.codigo, { x, y, size: 8, font }); x += colunas[0];
+        page.drawText(plaqueta.madeiraNome, { x, y, size: 8, font, maxWidth: colunas[1] - 5 }); x += colunas[1];
+        page.drawText(`${formatMeasurement(plaqueta.diametro ?? "0")} cm`, { x, y, size: 8, font }); x += colunas[2];
+        page.drawText(`${formatMeasurement(plaqueta.comprimento ?? "0")} m`, { x, y, size: 8, font }); x += colunas[3];
+        page.drawText(`${formatMeasurement(plaqueta.volumeInicial)} m³`, { x, y, size: 8, font }); x += colunas[4];
+        page.drawText(`R$ ${formatBRL(plaqueta.valorMetroCubico)}`, { x, y, size: 8, font }); x += colunas[5];
+        page.drawText(`R$ ${formatBRL(plaqueta.valorTotal)}`, { x, y, size: 8, font: bold });
+        y -= 16;
+      }
+      if (y < 135) { page = adicionarPagina(); desenharCabecalho(true); y = height - 110; }
+      page.drawLine({ start: { x: 48, y }, end: { x: width - 48, y }, thickness: 0.8, color: rgb(0.72, 0.67, 0.58) });
+      y -= 22;
+      page.drawText(`Plaquetas: ${data.carga.totalPlaquetas}`, { x: 48, y, size: 10, font: bold });
+      page.drawText(`Toras: R$ ${formatBRL(data.carga.valorProdutos ?? "0")}`, { x: 190, y, size: 10, font: bold });
+      page.drawText(`Frete: R$ ${formatBRL(data.carga.frete ?? "0")}`, { x: 350, y, size: 10, font: bold });
+      y -= 23;
+      page.drawText(`VALOR TOTAL DA CARGA: R$ ${formatBRL(data.carga.valorTotal)}`, { x: 48, y, size: 14, font: bold, color: rgb(0.12, 0.42, 0.25) });
+      if (data.carga.observacoes) { y -= 30; page.drawText("Observações", { x: 48, y, size: 9, font: bold }); y -= 14; page.drawText(data.carga.observacoes, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 }); }
+      page.drawText("FK Madeiras — Romaneio de carga gerado eletronicamente", { x: 48, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 155, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+      const bytes = await pdfDoc.save();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="romaneio-carga-${data.carga.numero}.pdf"`);
+      res.send(Buffer.from(bytes));
+    } catch (err) {
+      console.error("Carga PDF generation error:", err);
+      res.status(500).json({ error: "Erro ao gerar PDF do romaneio de carga" });
     }
   });
 }

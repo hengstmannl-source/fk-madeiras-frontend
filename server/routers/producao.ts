@@ -4,6 +4,7 @@ import * as db from "../db";
 
 const DataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
 const DecimalPositivo = z.union([z.string(), z.number()]).transform((valor) => String(valor).replace(",", ".")).refine((valor) => Number(valor) > 0, "Informe um valor positivo");
+const DecimalNaoNegativo = z.union([z.string(), z.number()]).transform((valor) => String(valor).replace(",", ".")).refine((valor) => Number(valor) >= 0, "Informe um valor válido");
 
 function dataLocal(data: string): Date {
   const [ano, mes, dia] = data.split("-").map(Number);
@@ -37,6 +38,7 @@ const RomaneioCargaSchema = z.object({
   origem: z.string().trim().max(200).nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),
   observacoes: z.string().max(4000).nullable().optional(),
+  frete: DecimalNaoNegativo.default("0"),
   plaquetas: z.array(PlaquetaCargaSchema).min(1, "Adicione ao menos uma plaqueta").max(200),
 });
 
@@ -67,10 +69,15 @@ const RomaneioSchema = z.object({
 export const producaoRouter = router({
   cargas: router({
     list: protectedProcedure.query(() => db.listRomaneiosCargaToras()),
+    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioCargaComPlaquetas(input.id)),
     create: protectedProcedure.input(RomaneioCargaSchema).mutation(({ ctx, input }) => db.criarRomaneioCargaToras({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
       criadoPor: ctx.user.id,
+    })),
+    update: protectedProcedure.input(RomaneioCargaSchema.extend({ id: z.number().int().positive() })).mutation(({ input }) => db.atualizarRomaneioCargaToras(input.id, {
+      ...input,
+      dataCarga: dataLocal(input.dataCarga),
     })),
   }),
   plaquetas: router({

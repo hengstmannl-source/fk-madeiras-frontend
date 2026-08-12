@@ -1101,22 +1101,24 @@ export async function listRomaneiosCargaToras() {
   return db.select().from(romaneiosCargaToras).orderBy(desc(romaneiosCargaToras.dataCarga), desc(romaneiosCargaToras.id));
 }
 
-export async function criarRomaneioCargaToras(data: {
-  dataCarga: Date;
-  origem?: string | null;
-  responsavel?: string | null;
-  observacoes?: string | null;
-  plaquetas: Array<{ codigo: string; madeiraNome: string; diametro: string; comprimento: string; valorMetroCubico: string; observacoes?: string | null }>;
-  criadoPor: number;
-}) {
+export async function getRomaneioCargaComPlaquetas(id: number) {
   const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  if (!data.plaquetas.length) throw new Error("Adicione ao menos uma plaqueta ao romaneio de carga");
-  if (data.plaquetas.length > 200) throw new Error("O romaneio de carga suporta no máximo 200 plaquetas");
-  const codigos = data.plaquetas.map((plaqueta) => normalizarCodigoPlaqueta(plaqueta.codigo));
+  if (!db) return undefined;
+  const carga = await db.select().from(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id)).limit(1);
+  if (!carga[0]) return undefined;
+  const itens = await db.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id)).orderBy(asc(plaquetas.id));
+  return { carga: carga[0], plaquetas: itens };
+}
+
+type PlaquetaCargaEntrada = { codigo: string; madeiraNome: string; diametro: string; comprimento: string; valorMetroCubico: string; observacoes?: string | null };
+
+function prepararPlaquetasCarga(entrada: PlaquetaCargaEntrada[]) {
+  if (!entrada.length) throw new Error("Adicione ao menos uma plaqueta ao romaneio de carga");
+  if (entrada.length > 200) throw new Error("O romaneio de carga suporta no máximo 200 plaquetas");
+  const codigos = entrada.map((plaqueta) => normalizarCodigoPlaqueta(plaqueta.codigo));
   if (codigos.some((codigo) => !codigo)) throw new Error("Informe o código de todas as plaquetas");
   if (new Set(codigos).size !== codigos.length) throw new Error("Há códigos de plaqueta repetidos no mesmo romaneio de carga");
-  const plaquetasPreparadas = data.plaquetas.map((plaqueta, indice) => {
+  return entrada.map((plaqueta, indice) => {
     const codigo = codigos[indice];
     const madeiraNome = plaqueta.madeiraNome.trim();
     if (!madeiraNome) throw new Error(`Informe a essência da plaqueta ${codigo}`);
@@ -1125,11 +1127,32 @@ export async function criarRomaneioCargaToras(data: {
     const valorMetroCubico = Number(String(plaqueta.valorMetroCubico).replace(",", "."));
     const volume = calcularVolumeToraCilindrica(diametro, comprimento);
     if (!Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) throw new Error(`Informe o valor por m³ da plaqueta ${codigo}`);
-    const valorTotal = Number((volume * valorMetroCubico).toFixed(2));
-    return { codigo, madeiraNome, diametro, comprimento, volume, valorMetroCubico, valorTotal, observacoes: plaqueta.observacoes?.trim() || null };
+    return { codigo, madeiraNome, diametro, comprimento, volume, valorMetroCubico, valorTotal: Number((volume * valorMetroCubico).toFixed(2)), observacoes: plaqueta.observacoes?.trim() || null };
   });
+}
+
+function normalizarFreteCarga(valor: string) {
+  const frete = Number(String(valor ?? "0").replace(",", "."));
+  if (!Number.isFinite(frete) || frete < 0) throw new Error("Informe um frete válido");
+  return frete;
+}
+
+export async function criarRomaneioCargaToras(data: {
+  dataCarga: Date;
+  origem?: string | null;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  frete: string;
+  plaquetas: PlaquetaCargaEntrada[];
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const plaquetasPreparadas = prepararPlaquetasCarga(data.plaquetas);
   const volumeTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.volume, 0);
-  const valorTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.valorTotal, 0);
+  const valorProdutos = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.valorTotal, 0);
+  const frete = normalizarFreteCarga(data.frete);
+  const valorTotal = valorProdutos + frete;
   return db.transaction(async (tx: any) => {
     for (const plaqueta of plaquetasPreparadas) {
       const existente = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, plaqueta.codigo)).limit(1))[0];
@@ -1144,6 +1167,8 @@ export async function criarRomaneioCargaToras(data: {
       observacoes: data.observacoes?.trim() || null,
       totalPlaquetas: plaquetasPreparadas.length,
       volumeTotal: volumeTotal.toFixed(6),
+      valorProdutos: valorProdutos.toFixed(2),
+      frete: frete.toFixed(2),
       valorTotal: valorTotal.toFixed(2),
       criadoPor: data.criadoPor,
     });
@@ -1170,7 +1195,64 @@ export async function criarRomaneioCargaToras(data: {
       const plaquetaId = getInsertedId(insercaoPlaqueta as MysqlInsertResult);
       await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${numero}`, criadoPor: data.criadoPor });
     }
-    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorTotal };
+    return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, frete, valorTotal };
+  });
+}
+
+export async function atualizarRomaneioCargaToras(id: number, data: {
+  dataCarga: Date;
+  origem?: string | null;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  frete: string;
+  plaquetas: PlaquetaCargaEntrada[];
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const plaquetasPreparadas = prepararPlaquetasCarga(data.plaquetas);
+  const volumeTotal = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.volume, 0);
+  const valorProdutos = plaquetasPreparadas.reduce((total, plaqueta) => total + plaqueta.valorTotal, 0);
+  const frete = normalizarFreteCarga(data.frete);
+  const valorTotal = valorProdutos + frete;
+
+  return db.transaction(async (tx: any) => {
+    const carga = (await tx.select().from(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id)).limit(1))[0];
+    if (!carga) throw new Error("Romaneio de carga não encontrado");
+    const existentes = await tx.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id));
+    if (existentes.some((plaqueta: any) => plaqueta.estado !== "disponivel")) throw new Error("Este romaneio possui toras utilizadas na produção e não pode ser alterado");
+    const existentesPorCodigo = new Map<string, any>(existentes.map((plaqueta: any) => [plaqueta.codigo, plaqueta]));
+
+    for (const plaqueta of plaquetasPreparadas) {
+      if (existentesPorCodigo.has(plaqueta.codigo)) continue;
+      const duplicada = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, plaqueta.codigo)).limit(1))[0];
+      if (duplicada) throw new Error(`A plaqueta ${plaqueta.codigo} já está cadastrada`);
+    }
+    for (const plaqueta of existentes) await tx.delete(movimentacoesPlaquetas).where(eq(movimentacoesPlaquetas.plaquetaId, plaqueta.id));
+    const codigosAtualizados = new Set(plaquetasPreparadas.map((plaqueta) => plaqueta.codigo));
+    for (const plaqueta of existentes) {
+      if (!codigosAtualizados.has(plaqueta.codigo)) await tx.delete(plaquetas).where(eq(plaquetas.id, plaqueta.id));
+    }
+
+    for (const plaqueta of plaquetasPreparadas) {
+      const valores = {
+        madeiraNome: plaqueta.madeiraNome,
+        comprimento: plaqueta.comprimento.toFixed(2),
+        diametro: plaqueta.diametro.toFixed(2),
+        volumeInicial: plaqueta.volume.toFixed(6),
+        volumeDisponivel: plaqueta.volume.toFixed(6),
+        valorMetroCubico: plaqueta.valorMetroCubico.toFixed(2),
+        valorTotal: plaqueta.valorTotal.toFixed(2),
+        dataEntrada: data.dataCarga,
+        origem: data.origem?.trim() || null,
+        observacoes: plaqueta.observacoes,
+      };
+      const existente = existentesPorCodigo.get(plaqueta.codigo);
+      const plaquetaId = existente ? existente.id : getInsertedId(await tx.insert(plaquetas).values({ ...valores, codigo: plaqueta.codigo, romaneioCargaId: id, estado: "disponivel", criadoPor: carga.criadoPor }) as MysqlInsertResult);
+      if (existente) await tx.update(plaquetas).set(valores).where(eq(plaquetas.id, plaquetaId));
+      await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${carga.numero}`, criadoPor: carga.criadoPor });
+    }
+    await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, origem: data.origem?.trim() || null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
+    return { id, numero: carga.numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, frete, valorTotal };
   });
 }
 

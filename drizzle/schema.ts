@@ -158,6 +158,8 @@ export const romaneiosCargaToras = mysqlTable("romaneiosCargaToras", {
   observacoes: text("observacoes"),
   totalPlaquetas: int("totalPlaquetas").notNull().default(0),
   volumeTotal: decimal("volumeTotal", { precision: 14, scale: 6 }).notNull().default("0"),
+  valorProdutos: decimal("valorProdutos", { precision: 14, scale: 2 }).notNull().default("0"),
+  frete: decimal("frete", { precision: 14, scale: 2 }).notNull().default("0"),
   valorTotal: decimal("valorTotal", { precision: 14, scale: 2 }).notNull().default("0"),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
