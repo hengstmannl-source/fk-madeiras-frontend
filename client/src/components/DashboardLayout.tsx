@@ -64,8 +64,8 @@ export const dashboardNavigation = {
     { icon: Warehouse, label: "Estoque", path: "/estoque" },
     { icon: ClipboardCheck, label: "Inventário", path: "/inventario" },
   ],
-  futuros: [
-    { icon: Fuel, label: "Diesel", path: "/futuro/diesel", disabled: true },
+  combustivel: [
+    { icon: Fuel, label: "Diesel", path: "/diesel" },
   ],
 } satisfies Record<string, NavigationItem[]>;
 
@@ -75,7 +75,7 @@ export function getNavigationPresentation(isMobile: boolean) {
   return {
     collapsible: "icon" as const,
     showMobileHeader: isMobile,
-    groups: ["Financeiro", "Vendas", "Gestão", "Produção", "Em breve"],
+    groups: ["Financeiro", "Vendas", "Gestão", "Produção", "Combustível"],
   };
 }
 
@@ -224,7 +224,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
             <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} navigate={setLocation} />
             <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} navigate={setLocation} />
             <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} navigate={setLocation} />
-            <NavigationGroup label="Em breve" items={dashboardNavigation.futuros} location={location} navigate={setLocation} />
+            <NavigationGroup label="Combustível" items={dashboardNavigation.combustivel} location={location} navigate={setLocation} />
           </SidebarContent>
 
           <SidebarFooter className="p-3">

@@ -5,7 +5,7 @@ import {
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
-  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado,
+  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -18,6 +18,7 @@ import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
+import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel } from "./diesel.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -2060,5 +2061,135 @@ export async function estornarEntregaVenda(vendaId: number, userId: number, moti
     await tx.update(orcamentos).set({ entregue: false, entregueEm: null, entreguePor: null }).where(eq(orcamentos.id, vendaId));
     await tx.insert(historicoAlteracoes).values({ orcamentoId: vendaId, usuarioId: userId, tipo: "alteracao" as any, detalhes: JSON.stringify({ acao: "entrega_fisica_estornada", motivo: motivo.trim() }) });
     return { success: true, pecasDevolvidas: saidas.reduce((total: number, saida: any) => total + saida.quantidade, 0) };
+  });
+}
+
+// ─── Tanque de diesel ───
+async function getOrCreateCategoriaPagamentoDiesel(tx: any, userId: number): Promise<number> {
+  const existente = await tx.select().from(categoriasFinanceiras)
+    .where(and(eq(categoriasFinanceiras.nome, "Pagamento de nota de diesel"), eq(categoriasFinanceiras.ativo, true))).limit(1);
+  if (existente[0]) return existente[0].id;
+  const resultado = await tx.insert(categoriasFinanceiras).values({
+    nome: "Pagamento de nota de diesel",
+    tipo: "despesa",
+    ativo: true,
+    criadoPor: userId,
+  });
+  return getInsertedId(resultado as MysqlInsertResult);
+}
+
+export async function getResumoTanqueDiesel() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const [notasComFornecedor, abastecimentos, titulos] = await Promise.all([
+    db.select({ nota: notasDiesel, fornecedorNome: fornecedores.nome }).from(notasDiesel)
+      .leftJoin(fornecedores, eq(notasDiesel.fornecedorId, fornecedores.id)).orderBy(desc(notasDiesel.dataNota)),
+    db.select().from(abastecimentosDiesel).orderBy(desc(abastecimentosDiesel.dataAbastecimento)),
+    db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.origem, "nota_diesel")),
+  ]);
+  const tituloPorNota = new Map<number, any>(titulos.filter((titulo: any) => titulo.notaDieselId).map((titulo: any) => [titulo.notaDieselId, titulo]));
+  const resumo = calcularResumoTanqueDiesel(notasComFornecedor.map(({ nota }: any) => nota), abastecimentos);
+  return {
+    ...resumo,
+    notas: notasComFornecedor.map(({ nota, fornecedorNome }: any) => ({
+      ...nota,
+      fornecedorNome: fornecedorNome ?? "Fornecedor não informado",
+      titulo: tituloPorNota.get(nota.id) ?? null,
+    })),
+    abastecimentos,
+  };
+}
+
+export async function criarNotaDiesel(data: {
+  numeroNota?: string | null;
+  fornecedorId: number;
+  litros: string;
+  valorTotal: string;
+  dataNota: Date;
+  dataVencimento: Date;
+  observacoes?: string | null;
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const fornecedor = (await tx.select().from(fornecedores).where(eq(fornecedores.id, data.fornecedorId)).limit(1))[0];
+    if (!fornecedor) throw new Error("Fornecedor não encontrado para a nota de diesel");
+    const litros = Number(data.litros.replace(",", "."));
+    const valorTotal = Number(data.valorTotal.replace(",", "."));
+    if (!(litros > 0) || !(valorTotal > 0)) throw new Error("Informe litros e valor total válidos para a nota de diesel");
+    const notaResultado = await tx.insert(notasDiesel).values({
+      numeroNota: data.numeroNota?.trim() || null,
+      fornecedorId: data.fornecedorId,
+      litros: litros.toFixed(3),
+      valorTotal: valorTotal.toFixed(2),
+      dataNota: data.dataNota,
+      dataVencimento: data.dataVencimento,
+      observacoes: data.observacoes?.trim() || null,
+      criadoPor: data.criadoPor,
+    });
+    const notaDieselId = getInsertedId(notaResultado as MysqlInsertResult);
+    const categoriaId = await getOrCreateCategoriaPagamentoDiesel(tx, data.criadoPor);
+    const tituloResultado = await tx.insert(titulosFinanceiros).values({
+      tipo: "pagar",
+      origem: "nota_diesel",
+      chaveImportacao: null,
+      descricao: `Pagamento de diesel${data.numeroNota?.trim() ? ` — Nota ${data.numeroNota.trim()}` : ""}`,
+      clienteId: null,
+      fornecedorId: data.fornecedorId,
+      contraparteNome: fornecedor.nome,
+      orcamentoId: null,
+      romaneioCargaId: null,
+      notaDieselId,
+      categoriaId,
+      recorrenciaId: null,
+      grupoParcelamento: null,
+      numeroParcela: null,
+      totalParcelas: null,
+      valorOriginal: valorTotal.toFixed(2),
+      desconto: "0",
+      juros: "0",
+      valorBaixado: "0",
+      dataEmissao: data.dataNota,
+      dataVencimento: data.dataVencimento,
+      competencia: data.dataNota,
+      estado: calcularEstadoTitulo({ valorOriginal: valorTotal.toFixed(2), dataVencimento: data.dataVencimento }),
+      observacoes: ["Lembrete financeiro vinculado à nota de diesel.", data.observacoes?.trim()].filter(Boolean).join("\n") || null,
+      canceladoEm: null,
+      canceladoPor: null,
+      criadoPor: data.criadoPor,
+    });
+    return { id: notaDieselId, tituloFinanceiroId: getInsertedId(tituloResultado as MysqlInsertResult) };
+  });
+}
+
+export async function registrarAbastecimentoDiesel(data: {
+  destino: string;
+  responsavel?: string | null;
+  litros: string;
+  dataAbastecimento: Date;
+  observacoes?: string | null;
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!data.destino.trim()) throw new Error("Informe o destino do abastecimento");
+  return db.transaction(async (tx: any) => {
+    const [notas, abastecimentos] = await Promise.all([
+      tx.select().from(notasDiesel),
+      tx.select().from(abastecimentosDiesel),
+    ]);
+    const custo = calcularCustoAbastecimentoDiesel(calcularResumoTanqueDiesel(notas, abastecimentos), data.litros);
+    const resultado = await tx.insert(abastecimentosDiesel).values({
+      destino: data.destino.trim(),
+      responsavel: data.responsavel?.trim() || null,
+      litros: custo.litros.toFixed(3),
+      custoUnitario: custo.custoUnitario.toFixed(4),
+      custoTotal: custo.custoTotal.toFixed(2),
+      dataAbastecimento: data.dataAbastecimento,
+      observacoes: data.observacoes?.trim() || null,
+      criadoPor: data.criadoPor,
+    });
+    return { id: getInsertedId(resultado as MysqlInsertResult), ...custo };
   });
 }

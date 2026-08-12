@@ -17,6 +17,7 @@ import FinanceiroPage from "./pages/FinanceiroPage";
 import ProducaoPage from "./pages/ProducaoPage";
 import EstoquePage from "./pages/EstoquePage";
 import InventarioPage from "./pages/InventarioPage";
+import DieselPage from "./pages/DieselPage";
 
 function Router() {
   return (
@@ -34,6 +35,7 @@ function Router() {
         <Route path="/producao" component={ProducaoPage} />
         <Route path="/estoque" component={EstoquePage} />
         <Route path="/inventario" component={InventarioPage} />
+        <Route path="/diesel" component={DieselPage} />
         <Route path="/empresa" component={EmpresaPage} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

@@ -169,6 +169,13 @@
       "when": 1786565520610,
       "tag": "0023_bent_black_bird",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "5",
+      "when": 1786566913555,
+      "tag": "0024_overrated_the_leader",
+      "breakpoints": true
     }
   ]
 }

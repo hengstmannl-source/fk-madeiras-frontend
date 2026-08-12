@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { dashboardMenuItems, dashboardNavigation, getFutureModuleMessage, getNavigationPresentation, handleNavigationItemClick } from "../client/src/components/DashboardLayout";
+import { dashboardMenuItems, dashboardNavigation, getNavigationPresentation, handleNavigationItemClick } from "../client/src/components/DashboardLayout";
 
 describe("navegação principal", () => {
   it("não apresenta o cadastro de madeiras como aba lateral", () => {
@@ -12,23 +12,16 @@ describe("navegação principal", () => {
     expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados"]);
     expect(dashboardNavigation.producao.map((item) => item.label)).toEqual(["Produção", "Estoque", "Inventário"]);
     expect(dashboardNavigation.producao.every((item) => !item.disabled)).toBe(true);
-    expect(dashboardNavigation.futuros.map((item) => item.label)).toEqual(["Diesel"]);
+    expect(dashboardNavigation.combustivel.map((item) => item.label)).toEqual(["Diesel"]);
+    expect(dashboardNavigation.combustivel.every((item) => !item.disabled)).toBe(true);
   });
 
-  it("informa que os módulos futuros ainda não estão disponíveis", () => {
-    for (const item of dashboardNavigation.futuros) {
-      expect(item.disabled).toBe(true);
-      expect(getFutureModuleMessage(item.label)).toBe(`${item.label} será disponibilizado em uma próxima etapa.`);
-    }
-  });
-
-  it("bloqueia a navegação e mostra feedback ao clicar em um módulo futuro", () => {
+  it("navega diretamente para o módulo Diesel disponível", () => {
     const navigate = vi.fn();
     const notify = vi.fn();
-    for (const item of dashboardNavigation.futuros) handleNavigationItemClick(item, navigate, notify);
-    expect(navigate).not.toHaveBeenCalled();
-    expect(notify).toHaveBeenCalledTimes(dashboardNavigation.futuros.length);
-    expect(notify).toHaveBeenNthCalledWith(1, getFutureModuleMessage("Diesel"));
+    for (const item of dashboardNavigation.combustivel) handleNavigationItemClick(item, navigate, notify);
+    expect(navigate).toHaveBeenCalledWith("/diesel");
+    expect(notify).not.toHaveBeenCalled();
   });
 
   it("mantém a barra lateral recolhível no desktop e ativa o cabeçalho de navegação no mobile", () => {

@@ -224,3 +224,8 @@
 - [x] Gerar uma conta a pagar de custo de matéria-prima ao confirmar cada romaneio de carga de toras
 - [x] Vincular romaneio de carga, fornecedor, vencimento e título financeiro sem permitir duplicidade
 - [x] Cobrir a integração de entrada de toras e contas a pagar com testes e validação visual
+- [x] Modelar o tanque de combustível, notas de diesel e abastecimentos com rastreabilidade
+- [x] Criar lembrete financeiro de pagamento para nota de diesel sem contabilizá-la como custo operacional
+- [x] Lançar o custo real de diesel somente por abastecimento, usando o custo médio do tanque
+- [x] Implementar a tela de Diesel com saldo, notas agendadas e histórico de abastecimentos
+- [x] Cobrir o módulo de combustível com testes e validação visual

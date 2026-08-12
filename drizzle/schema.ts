@@ -351,10 +351,43 @@ export const contasFinanceiras = mysqlTable("contasFinanceiras", {
 export type ContaFinanceira = typeof contasFinanceiras.$inferSelect;
 export type InsertContaFinanceira = typeof contasFinanceiras.$inferInsert;
 
+export const notasDiesel = mysqlTable("notasDiesel", {
+  id: int("id").autoincrement().primaryKey(),
+  numeroNota: varchar("numeroNota", { length: 100 }),
+  fornecedorId: int("fornecedorId").notNull(),
+  litros: decimal("litros", { precision: 14, scale: 3 }).notNull(),
+  valorTotal: decimal("valorTotal", { precision: 14, scale: 2 }).notNull(),
+  dataNota: timestamp("dataNota").notNull(),
+  dataVencimento: timestamp("dataVencimento").notNull(),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type NotaDiesel = typeof notasDiesel.$inferSelect;
+export type InsertNotaDiesel = typeof notasDiesel.$inferInsert;
+
+export const abastecimentosDiesel = mysqlTable("abastecimentosDiesel", {
+  id: int("id").autoincrement().primaryKey(),
+  destino: varchar("destino", { length: 200 }).notNull(),
+  responsavel: varchar("responsavel", { length: 200 }),
+  litros: decimal("litros", { precision: 14, scale: 3 }).notNull(),
+  custoUnitario: decimal("custoUnitario", { precision: 14, scale: 4 }).notNull(),
+  custoTotal: decimal("custoTotal", { precision: 14, scale: 2 }).notNull(),
+  dataAbastecimento: timestamp("dataAbastecimento").notNull(),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AbastecimentoDiesel = typeof abastecimentosDiesel.$inferSelect;
+export type InsertAbastecimentoDiesel = typeof abastecimentosDiesel.$inferInsert;
+
 export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
-  origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "manual", "recorrencia"]).notNull().default("manual"),
+  origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "nota_diesel", "manual", "recorrencia"]).notNull().default("manual"),
   chaveImportacao: varchar("chaveImportacao", { length: 120 }).unique(),
   descricao: varchar("descricao", { length: 300 }).notNull(),
   clienteId: int("clienteId"),
@@ -362,6 +395,7 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   contraparteNome: varchar("contraparteNome", { length: 300 }),
   orcamentoId: int("orcamentoId"),
   romaneioCargaId: int("romaneioCargaId").unique(),
+  notaDieselId: int("notaDieselId").unique(),
   categoriaId: int("categoriaId").notNull(),
   recorrenciaId: int("recorrenciaId"),
   grupoParcelamento: varchar("grupoParcelamento", { length: 64 }),
