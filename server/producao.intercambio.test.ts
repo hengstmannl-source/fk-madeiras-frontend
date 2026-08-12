@@ -17,4 +17,16 @@ describe("intercâmbio de plaquetas para produção", () => {
     const repetido = prepararImportacaoTorasProducao({ conteudo: "plaqueta;essencia;diametro_cm;comprimento_m;volume_m3\nTOR-0008;;;;\nTOR-0008;;;;", plaquetas: estoque });
     expect(repetido.erros.join(" ")).toMatch(/repetida/i);
   });
+
+  it("prepara uma plaqueta nova com entrada imediata quando a planilha traz essência e volume", () => {
+    const resultado = prepararImportacaoTorasProducao({
+      conteudo: "plaqueta;essencia;diametro_cm;comprimento_m;volume_m3\nAVU-001;Cedrinho;32;4,5;0,362",
+      plaquetas: [],
+    });
+
+    expect(resultado).toEqual({
+      erros: [],
+      toras: [expect.objectContaining({ novaPlaqueta: { codigo: "AVU-001" }, origem: "entrada_imediata", madeiraNome: "Cedrinho", volume: "0.362" })],
+    });
+  });
 });

@@ -69,11 +69,16 @@ const ToraRomaneioSchema = z.object({
     volume: DecimalPositivo,
   });
 
+const ToraEntradaRomaneioSchema = z.object({
+  plaquetaId: z.number().int().positive().optional(),
+  novaPlaqueta: z.object({
+    codigo: z.string().trim().min(2).max(80),
+  }).optional(),
+  tora: ToraRomaneioSchema,
+}).refine((entrada) => Boolean(entrada.plaquetaId) !== Boolean(entrada.novaPlaqueta), "Informe uma plaqueta disponível ou um novo código para entrada imediata");
+
 const RomaneioSchema = z.object({
-  toras: z.array(z.object({
-    plaquetaId: z.number().int().positive(),
-    tora: ToraRomaneioSchema,
-  })).min(1, "Selecione ao menos uma plaqueta serrada"),
+  toras: z.array(ToraEntradaRomaneioSchema).min(1, "Informe ao menos uma plaqueta serrada"),
   dataProducao: DataSchema,
   fita: z.string().trim().max(100).nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),

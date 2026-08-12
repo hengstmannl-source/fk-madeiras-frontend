@@ -187,3 +187,7 @@
 - [x] Corrigir transbordamentos e informações cortadas no formulário de Produção Diária em telas estreitas
 - [x] Remover o botão duplicado de criação de Produção Diária, mantendo uma única ação clara
 - [x] Cobrir e validar visualmente o layout responsivo corrigido da Produção
+- [x] Reorganizar o campo de plaqueta e os botões do romaneio para não comprimir textos em telas estreitas
+- [x] Permitir cadastrar uma plaqueta ainda inexistente diretamente na Produção, com essência e medidas obrigatórias
+- [x] Registrar e consumir a plaqueta avulsa no mesmo romaneio, preservando histórico de entrada e saída
+- [x] Cobrir o fluxo de plaqueta avulsa e validar visualmente o formulário em largura estreita

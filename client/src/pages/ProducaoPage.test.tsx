@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("wouter", () => ({ useSearch: () => "" }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
   const queryVazia = { useQuery: () => ({ data: [], isLoading: false }) };
   const plaquetas = [{ id: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "4.20", volumeInicial: "0.380000", volumeDisponivel: "0.380000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" }];
@@ -63,6 +63,19 @@ describe("ProducaoPage", () => {
     await user.click(screen.getByRole("button", { name: "PDF" }));
     expect(abrirJanela).toHaveBeenCalledWith("/api/pdf/romaneio/14", "_blank", "noopener,noreferrer");
     abrirJanela.mockRestore();
+  });
+
+  it("permite preparar uma nova plaqueta digitada para entrada e consumo imediato", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "AVU-001");
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByText("AVU-001")).toBeInTheDocument();
+    expect(screen.getAllByText(/Ajuste as medidas/i)).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
   });
 
   it("oferece a importação de plaquetas por planilha dentro do romaneio", async () => {

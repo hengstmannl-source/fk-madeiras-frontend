@@ -20,6 +20,17 @@ type PlaquetaDisponivel = {
   volumeDisponivel: string | number;
 };
 
+export type ToraPreparadaImportacao = {
+  plaquetaId?: number;
+  novaPlaqueta?: { codigo: string };
+  codigo: string;
+  madeiraNome: string;
+  diametro: string;
+  comprimento: string;
+  volume: string;
+  origem: "estoque" | "entrada_imediata";
+};
+
 function lerLinhasCsv(conteudo: string): string[][] {
   const linhas: string[][] = [];
   let linha: string[] = [];
@@ -87,12 +98,26 @@ export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): {
 
 export function prepararImportacaoTorasProducao(input: { conteudo: string; plaquetas: PlaquetaDisponivel[] }) {
   const validacao = validarCsvTorasProducao(input.conteudo);
-  if (validacao.erros.length) return { toras: [] as Array<{ plaquetaId: number; codigo: string; madeiraNome: string; diametro: string; comprimento: string; volume: string }>, erros: validacao.erros };
+  if (validacao.erros.length) return { toras: [] as ToraPreparadaImportacao[], erros: validacao.erros };
   const porCodigo = new Map(input.plaquetas.map((plaqueta) => [normalizarCodigoPlaqueta(plaqueta.codigo), plaqueta]));
   const erros: string[] = [];
-  const toras = validacao.linhas.flatMap((linha) => {
+  const toras: ToraPreparadaImportacao[] = validacao.linhas.flatMap((linha): ToraPreparadaImportacao[] => {
     const plaqueta = porCodigo.get(linha.codigo);
-    if (!plaqueta) { erros.push(`A plaqueta ${linha.codigo} não foi encontrada no estoque`); return []; }
+    if (!plaqueta) {
+      if (!linha.madeiraNome || !linha.volume) {
+        erros.push(`Linha da plaqueta ${linha.codigo}: informe essência e volume para registrar uma nova entrada na Produção`);
+        return [];
+      }
+      return [{
+        novaPlaqueta: { codigo: linha.codigo },
+        codigo: linha.codigo,
+        madeiraNome: linha.madeiraNome,
+        diametro: linha.diametro ?? "",
+        comprimento: linha.comprimento ?? "",
+        volume: linha.volume,
+        origem: "entrada_imediata" as const,
+      }];
+    }
     if (plaqueta.estado !== "disponivel") { erros.push(`A plaqueta ${linha.codigo} não está disponível para produção`); return []; }
     const volume = linha.volume ?? String(plaqueta.volumeDisponivel ?? "");
     if (Number(volume) <= 0) { erros.push(`A plaqueta ${linha.codigo} não possui volume disponível válido`); return []; }
@@ -103,6 +128,7 @@ export function prepararImportacaoTorasProducao(input: { conteudo: string; plaqu
       diametro: linha.diametro ?? String(plaqueta.diametro ?? ""),
       comprimento: linha.comprimento ?? String(plaqueta.comprimento ?? ""),
       volume,
+      origem: "estoque" as const,
     }];
   });
   return erros.length ? { toras: [] as typeof toras, erros } : { toras, erros: [] as string[] };
