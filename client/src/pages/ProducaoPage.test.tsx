@@ -17,7 +17,7 @@ vi.mock("@/lib/trpc", () => {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar }, estoque: { resumo: invalidar } } }),
       producao: {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 1, totalDisponiveis: 1, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
-        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte },
+        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
       },
     },
@@ -43,15 +43,14 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
   });
 
-  it("adiciona a tora do estoque ao romaneio diário, permite conferir o resultado consolidado e disponibiliza o PDF", async () => {
+  it("adiciona a tora por digitação da plaqueta, permite conferir o resultado consolidado e disponibiliza o PDF", async () => {
     const user = userEvent.setup();
     const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<ProducaoPage />);
 
     await user.click(screen.getByRole("button", { name: "Nova produção" }));
-    await user.click(screen.getByRole("combobox"));
-    await user.click(screen.getByText(/TOR-0008 · Cedrinho · 0,38 m³/));
-    await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "TOR-0008");
+    await user.keyboard("{Enter}");
 
     expect(screen.getByDisplayValue("Cedrinho")).toBeInTheDocument();
     expect(screen.getByDisplayValue("30.00")).toBeInTheDocument();
@@ -63,5 +62,17 @@ describe("ProducaoPage", () => {
     await user.click(screen.getByRole("button", { name: "PDF" }));
     expect(abrirJanela).toHaveBeenCalledWith("/api/pdf/romaneio/14", "_blank", "noopener,noreferrer");
     abrirJanela.mockRestore();
+  });
+
+  it("oferece a importação de plaquetas por planilha dentro do romaneio", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção" }));
+    await user.click(screen.getByRole("button", { name: "Importar planilha" }));
+
+    expect(screen.getByRole("heading", { name: "Importar plaquetas para produção" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Baixar modelo CSV" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Planilha CSV de produção")).toBeInTheDocument();
   });
 });

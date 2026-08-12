@@ -179,3 +179,8 @@
 - [x] Exibir o aproveitamento diário entre volume de toras serradas e volume de madeira serrada produzida
 - [x] Atualizar as baixas de estoque e a rastreabilidade entre tora, romaneio de produção e peças produzidas
 - [x] Cobrir o fluxo completo de produção diária com testes e validação visual
+- [x] Permitir digitar e localizar a plaqueta diretamente no romaneio diário, sem seleção obrigatória em lista
+- [x] Preencher automaticamente as medidas da plaqueta digitada e permitir correções no romaneio
+- [x] Definir e disponibilizar planilha de importação de plaquetas para a produção diária
+- [x] Importar plaquetas do estoque por planilha, com validação integral e correção das medidas antes da confirmação
+- [x] Cobrir a digitação e a importação de plaquetas de produção com testes e validação visual

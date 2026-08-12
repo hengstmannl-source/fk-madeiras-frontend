@@ -16,6 +16,7 @@ import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVen
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasParaEntrega, agruparEstoquePecas, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
+import { criarModeloCsvTorasProducao, prepararImportacaoTorasProducao } from "./producao.intercambio";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1113,6 +1114,25 @@ export async function listPlaquetas(parametros: { busca?: string; limite?: numbe
   const itens = filtradas.slice(deslocamento, deslocamento + limite);
   const proximoDeslocamento = deslocamento + itens.length < filtradas.length ? deslocamento + itens.length : null;
   return { itens, total: filtradas.length, totalDisponiveis: todas.filter((item) => item.estado === "disponivel").length, proximoDeslocamento };
+}
+
+export function getModeloImportacaoTorasProducaoCsv() {
+  return criarModeloCsvTorasProducao();
+}
+
+export async function prepararTorasProducaoCsv(conteudo: string) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const estoque = await db.select({
+    id: plaquetas.id,
+    codigo: plaquetas.codigo,
+    estado: plaquetas.estado,
+    madeiraNome: plaquetas.madeiraNome,
+    diametro: plaquetas.diametro,
+    comprimento: plaquetas.comprimento,
+    volumeDisponivel: plaquetas.volumeDisponivel,
+  }).from(plaquetas);
+  return prepararImportacaoTorasProducao({ conteudo, plaquetas: estoque });
 }
 
 export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}) {

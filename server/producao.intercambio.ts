@@ -1,0 +1,109 @@
+import { normalizarCodigoPlaqueta } from "./producao.logic";
+
+export const CABECALHOS_CSV_TORAS_PRODUCAO = ["plaqueta", "essencia", "diametro_cm", "comprimento_m", "volume_m3"] as const;
+
+export type LinhaImportacaoToraProducao = {
+  codigo: string;
+  madeiraNome?: string;
+  diametro?: string;
+  comprimento?: string;
+  volume?: string;
+};
+
+type PlaquetaDisponivel = {
+  id: number;
+  codigo: string;
+  estado: "disponivel" | "consumida" | "cancelada";
+  madeiraNome: string;
+  diametro?: string | number | null;
+  comprimento?: string | number | null;
+  volumeDisponivel: string | number;
+};
+
+function lerLinhasCsv(conteudo: string): string[][] {
+  const linhas: string[][] = [];
+  let linha: string[] = [];
+  let celula = "";
+  let entreAspas = false;
+  for (let indice = 0; indice < conteudo.length; indice += 1) {
+    const caractere = conteudo[indice];
+    if (caractere === '"') {
+      if (entreAspas && conteudo[indice + 1] === '"') { celula += '"'; indice += 1; }
+      else entreAspas = !entreAspas;
+    } else if (caractere === ";" && !entreAspas) { linha.push(celula); celula = ""; }
+    else if (caractere === "\n" && !entreAspas) { linha.push(celula); linhas.push(linha); linha = []; celula = ""; }
+    else if (caractere !== "\r") celula += caractere;
+  }
+  if (entreAspas) throw new Error("O arquivo CSV possui aspas sem fechamento");
+  if (celula || linha.length) { linha.push(celula); linhas.push(linha); }
+  return linhas;
+}
+
+function decimalOpcional(valor: string, campo: string, linha: number): string | undefined {
+  const texto = valor.trim();
+  if (!texto) return undefined;
+  const normalizado = texto.includes(",") ? texto.replace(/\./g, "").replace(",", ".") : texto;
+  const numero = Number(normalizado);
+  if (!Number.isFinite(numero) || numero <= 0) throw new Error(`Linha ${linha}: informe ${campo} como número positivo`);
+  return String(numero);
+}
+
+export function criarModeloCsvTorasProducao(): string {
+  return `\uFEFF${CABECALHOS_CSV_TORAS_PRODUCAO.join(";")}\nTOR-0001;;;;`;
+}
+
+export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): { linhas: LinhaImportacaoToraProducao[]; erros: string[] } {
+  if (conteudo.length > 1_000_000) return { linhas: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
+  let tabela: string[][];
+  try { tabela = lerLinhasCsv(conteudo); } catch (erro) { return { linhas: [], erros: [erro instanceof Error ? erro.message : "Não foi possível ler o CSV"] }; }
+  const cabecalho = (tabela.shift() ?? []).map((campo) => campo.replace(/^\uFEFF/, "").trim().toLowerCase());
+  const indices = CABECALHOS_CSV_TORAS_PRODUCAO.map((campo) => cabecalho.indexOf(campo));
+  if (indices.some((indice) => indice < 0)) return { linhas: [], erros: [`Use o modelo CSV com os cabeçalhos: ${CABECALHOS_CSV_TORAS_PRODUCAO.join(", ")}`] };
+  const dados = tabela.filter((linha) => linha.some((campo) => campo.trim()));
+  if (!dados.length) return { linhas: [], erros: ["O arquivo CSV não possui plaquetas para importar"] };
+  if (dados.length > maximoLinhas) return { linhas: [], erros: [`O limite por importação é de ${maximoLinhas} plaquetas`] };
+  const codigos = new Set<string>();
+  const linhas: LinhaImportacaoToraProducao[] = [];
+  const erros: string[] = [];
+  dados.forEach((colunas, indice) => {
+    const numeroLinha = indice + 2;
+    const valor = (campo: typeof CABECALHOS_CSV_TORAS_PRODUCAO[number]) => (colunas[indices[CABECALHOS_CSV_TORAS_PRODUCAO.indexOf(campo)]] ?? "").trim();
+    const codigo = normalizarCodigoPlaqueta(valor("plaqueta"));
+    if (codigo.length < 2) { erros.push(`Linha ${numeroLinha}: informe a plaqueta`); return; }
+    if (codigos.has(codigo)) { erros.push(`Linha ${numeroLinha}: a plaqueta ${codigo} está repetida na planilha`); return; }
+    codigos.add(codigo);
+    try {
+      linhas.push({
+        codigo,
+        madeiraNome: valor("essencia") || undefined,
+        diametro: decimalOpcional(valor("diametro_cm"), "o diâmetro", numeroLinha),
+        comprimento: decimalOpcional(valor("comprimento_m"), "o comprimento", numeroLinha),
+        volume: decimalOpcional(valor("volume_m3"), "o volume", numeroLinha),
+      });
+    } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: dados inválidos`); }
+  });
+  return erros.length ? { linhas: [], erros } : { linhas, erros: [] };
+}
+
+export function prepararImportacaoTorasProducao(input: { conteudo: string; plaquetas: PlaquetaDisponivel[] }) {
+  const validacao = validarCsvTorasProducao(input.conteudo);
+  if (validacao.erros.length) return { toras: [] as Array<{ plaquetaId: number; codigo: string; madeiraNome: string; diametro: string; comprimento: string; volume: string }>, erros: validacao.erros };
+  const porCodigo = new Map(input.plaquetas.map((plaqueta) => [normalizarCodigoPlaqueta(plaqueta.codigo), plaqueta]));
+  const erros: string[] = [];
+  const toras = validacao.linhas.flatMap((linha) => {
+    const plaqueta = porCodigo.get(linha.codigo);
+    if (!plaqueta) { erros.push(`A plaqueta ${linha.codigo} não foi encontrada no estoque`); return []; }
+    if (plaqueta.estado !== "disponivel") { erros.push(`A plaqueta ${linha.codigo} não está disponível para produção`); return []; }
+    const volume = linha.volume ?? String(plaqueta.volumeDisponivel ?? "");
+    if (Number(volume) <= 0) { erros.push(`A plaqueta ${linha.codigo} não possui volume disponível válido`); return []; }
+    return [{
+      plaquetaId: plaqueta.id,
+      codigo: plaqueta.codigo,
+      madeiraNome: linha.madeiraNome ?? plaqueta.madeiraNome,
+      diametro: linha.diametro ?? String(plaqueta.diametro ?? ""),
+      comprimento: linha.comprimento ?? String(plaqueta.comprimento ?? ""),
+      volume,
+    }];
+  });
+  return erros.length ? { toras: [] as typeof toras, erros } : { toras, erros: [] as string[] };
+}

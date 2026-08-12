@@ -1,12 +1,11 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { BarChart3, ChevronLeft, Factory, FileText, Layers3, Loader2, Plus, Scissors, TreePine, X } from "lucide-react";
+import { BarChart3, ChevronLeft, Download, Factory, FileSpreadsheet, FileText, Layers3, Loader2, Plus, Scissors, TreePine, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
@@ -25,17 +24,33 @@ const novoRomaneio = (): RomaneioForm => ({ toras: [], dataProducao: hoje(), fit
 const calcularVolumePecas = (espessura: string | number, largura: string | number, comprimento: string | number) => (num(espessura) * num(largura) * num(comprimento)) / 10000;
 const calcularVolumeTora = (diametro: string | number, comprimento: string | number) => Math.PI * (num(diametro) / 200) ** 2 * num(comprimento);
 const calcularItem = (item: ItemForm) => ({ quantidade: num(item.quantidade), metrosLineares: num(item.comprimento) * num(item.quantidade), volume: calcularVolumePecas(item.espessura, item.largura, num(item.comprimento) * num(item.quantidade)) });
+const normalizarCodigo = (codigo: string) => codigo.trim().toLocaleUpperCase("pt-BR").replace(/\s+/g, "-");
+const baixarCsv = (conteudo: string, nomeArquivo: string) => {
+  const url = URL.createObjectURL(new Blob([conteudo], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = nomeArquivo;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
 
 export default function ProducaoPage() {
   const [dialogRomaneio, setDialogRomaneio] = useState(false);
   const [etapa, setEtapa] = useState<"toras" | "pecas">("toras");
-  const [plaquetaSelecionada, setPlaquetaSelecionada] = useState("");
+  const [codigoPlaqueta, setCodigoPlaqueta] = useState("");
+  const [dialogImportacao, setDialogImportacao] = useState(false);
+  const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
+  const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
   const [romaneio, setRomaneio] = useState<RomaneioForm>(novoRomaneio);
   const utils = trpc.useUtils();
-  const plaquetas = trpc.producao.plaquetas.list.useQuery({ limite: 500 });
+  const plaquetas = trpc.producao.plaquetas.list.useQuery({ busca: codigoPlaqueta.trim() ? normalizarCodigo(codigoPlaqueta) : undefined, limite: 10 });
   const romaneios = trpc.producao.romaneios.list.useQuery();
   const estoque = trpc.producao.estoque.resumo.useQuery();
   const confirmarRomaneio = trpc.producao.romaneios.confirmar.useMutation();
+  const modeloTorasCsv = trpc.producao.romaneios.modeloTorasCsv.useQuery(undefined, { enabled: false });
+  const importarTorasCsv = trpc.producao.romaneios.importarTorasCsv.useMutation();
   const torasDisponiveis = useMemo(() => (plaquetas.data?.itens ?? []).filter((item: any) => item.estado === "disponivel"), [plaquetas.data]);
   const totalToras = useMemo(() => romaneio.toras.reduce((total, tora) => total + num(tora.volume), 0), [romaneio.toras]);
   const totaisPecas = useMemo(() => romaneio.itens.reduce((total, item) => {
@@ -54,16 +69,49 @@ export default function ProducaoPage() {
     utils.producao.romaneios.list.invalidate();
     utils.producao.estoque.resumo.invalidate();
   };
-  const abrirRomaneio = () => { setEtapa("toras"); setPlaquetaSelecionada(""); setRomaneio(novoRomaneio()); setDialogRomaneio(true); };
+  const abrirRomaneio = () => { setEtapa("toras"); setCodigoPlaqueta(""); setRomaneio(novoRomaneio()); setDialogRomaneio(true); };
+  const abrirImportacao = () => { setArquivoImportacao(null); setErrosImportacao([]); setDialogImportacao(true); };
+  const baixarModeloImportacao = async () => {
+    const resposta = await modeloTorasCsv.refetch();
+    if (!resposta.data) { toast.error("Não foi possível gerar o modelo de planilha"); return; }
+    baixarCsv(resposta.data, "modelo-plaquetas-producao-fk-madeiras.csv");
+    toast.success("Modelo de planilha baixado");
+  };
+  const importarArquivo = async () => {
+    if (!arquivoImportacao) { toast.error("Selecione uma planilha CSV para importar"); return; }
+    try {
+      const conteudo = await arquivoImportacao.text();
+      importarTorasCsv.mutate({ conteudo }, {
+        onSuccess: (resultado) => {
+          if (resultado.erros.length) { setErrosImportacao(resultado.erros); toast.error("A importação foi recusada. Revise as linhas indicadas."); return; }
+          const idsAtuais = new Set(romaneio.toras.map((tora) => tora.plaquetaId));
+          const repetidas = resultado.toras.filter((tora) => idsAtuais.has(String(tora.plaquetaId)));
+          if (repetidas.length) { setErrosImportacao(repetidas.map((tora) => `A plaqueta ${tora.codigo} já foi adicionada ao romaneio atual`)); toast.error("A planilha contém plaquetas já adicionadas ao romaneio."); return; }
+          setRomaneio((atual) => {
+            const novasToras = resultado.toras.map((tora) => ({ ...tora, plaquetaId: String(tora.plaquetaId) }));
+            const primeiraEssencia = novasToras[0]?.madeiraNome ?? "";
+            return { ...atual, toras: [...atual.toras, ...novasToras], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: primeiraEssencia }) };
+          });
+          setDialogImportacao(false);
+          setArquivoImportacao(null);
+          setErrosImportacao([]);
+          toast.success(`${resultado.toras.length} plaqueta(s) adicionada(s) ao romaneio`);
+        },
+        onError: (erro) => toast.error(erro.message),
+      });
+    } catch { toast.error("Não foi possível ler o arquivo selecionado"); }
+  };
   const adicionarTora = () => {
-    const plaqueta: any = torasDisponiveis.find((item: any) => String(item.id) === plaquetaSelecionada);
-    if (!plaqueta) return;
-    if (romaneio.toras.some((tora) => tora.plaquetaId === plaquetaSelecionada)) {
+    const codigoNormalizado = normalizarCodigo(codigoPlaqueta);
+    if (!codigoNormalizado) { toast.error("Digite o código da plaqueta"); return; }
+    const plaqueta: any = torasDisponiveis.find((item: any) => normalizarCodigo(item.codigo) === codigoNormalizado);
+    if (!plaqueta) { toast.error("Plaqueta não encontrada ou indisponível. Confira o código digitado."); return; }
+    if (romaneio.toras.some((tora) => tora.plaquetaId === String(plaqueta.id))) {
       toast.error("Essa plaqueta já foi adicionada ao romaneio diário");
       return;
     }
     const tora: ToraForm = {
-      plaquetaId: plaquetaSelecionada,
+      plaquetaId: String(plaqueta.id),
       codigo: plaqueta.codigo,
       madeiraNome: plaqueta.madeiraNome ?? "",
       diametro: String(plaqueta.diametro ?? ""),
@@ -71,7 +119,7 @@ export default function ProducaoPage() {
       volume: String(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial ?? ""),
     };
     setRomaneio((atual) => ({ ...atual, toras: [...atual.toras, tora], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: tora.madeiraNome }) }));
-    setPlaquetaSelecionada("");
+    setCodigoPlaqueta("");
   };
   const atualizarTora = (indice: number, campo: keyof ToraForm, valor: string) => setRomaneio((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, [campo]: valor } : tora) }));
   const removerTora = (indice: number) => setRomaneio((atual) => ({ ...atual, toras: atual.toras.filter((_, posicao) => posicao !== indice) }));
@@ -91,11 +139,12 @@ export default function ProducaoPage() {
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Resumo icon={<TreePine />} titulo="Toras disponíveis" valor={torasDisponiveis.length} detalhe="Prontas para serragem" cor="emerald" /><Resumo icon={<Factory />} titulo="Romaneios" valor={(romaneios.data ?? []).length} detalhe="Produção confirmada" cor="sky" /><Resumo icon={<Layers3 />} titulo="Peças em estoque" valor={(estoque.data ?? []).reduce((total: number, item: any) => total + item.quantidadeDisponivel, 0)} detalhe="Disponíveis para entrega" cor="amber" /><Resumo icon={<BarChart3 />} titulo="Volume serrado" valor={`${formatarNumero((estoque.data ?? []).reduce((total: number, item: any) => total + item.volumeDisponivel, 0))} m³`} detalhe="Saldo por dimensões" cor="violet" /></div>
     <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><Cabecalho titulo="Romaneios diários" texto="Cada romaneio consolida as toras serradas, as peças produzidas e o aproveitamento do dia." acao={<Button size="sm" onClick={abrirRomaneio}><Plus className="mr-1.5 h-3.5 w-3.5" />Nova produção</Button>} />{romaneios.isLoading ? <Carregando /> : romaneios.data?.length ? <TabelaRomaneios romaneios={romaneios.data} /> : <Vazio icone={<Scissors />} texto="Nenhuma produção diária confirmada. Primeiro, registre as toras em Estoque." />}</section>
 
-    <Dialog open={dialogRomaneio} onOpenChange={setDialogRomaneio}><DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-6xl overflow-y-auto"><DialogHeader><DialogTitle>Romaneio de produção diária</DialogTitle></DialogHeader><div className="space-y-5"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">Adicione as plaquetas serradas no dia. Os dados do estoque são sugeridos, mas podem ser corrigidos neste romaneio para representar o volume efetivamente aproveitado.</div><Tabs value={etapa} onValueChange={(valor) => setEtapa(valor as typeof etapa)}><TabsList className="grid w-full grid-cols-2"><TabsTrigger value="toras">1. Toras serradas</TabsTrigger><TabsTrigger value="pecas" disabled={!romaneio.toras.length}>2. Peças produzidas</TabsTrigger></TabsList></Tabs>
+    <Dialog open={dialogRomaneio} onOpenChange={setDialogRomaneio}><DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] max-w-6xl overflow-y-auto"><DialogHeader><DialogTitle>Romaneio de produção diária</DialogTitle><DialogDescription>Informe as toras serradas e as peças produzidas para calcular o aproveitamento diário.</DialogDescription></DialogHeader><div className="space-y-5"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">Adicione as plaquetas serradas no dia. Os dados do estoque são sugeridos, mas podem ser corrigidos neste romaneio para representar o volume efetivamente aproveitado.</div><Tabs value={etapa} onValueChange={(valor) => setEtapa(valor as typeof etapa)}><TabsList className="grid w-full grid-cols-2"><TabsTrigger value="toras">1. Toras serradas</TabsTrigger><TabsTrigger value="pecas" disabled={!romaneio.toras.length}>2. Peças produzidas</TabsTrigger></TabsList></Tabs>
       {etapa === "toras" ? <div className="space-y-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Campo label="Data da produção *"><Input type="date" value={romaneio.dataProducao} onChange={(e) => setRomaneio({ ...romaneio, dataProducao: e.target.value })} /></Campo><Campo label="Fita / linha"><Input value={romaneio.fita} onChange={(e) => setRomaneio({ ...romaneio, fita: e.target.value })} placeholder="Ex.: Fita 1" /></Campo><Campo label="Responsável"><Input value={romaneio.responsavel} onChange={(e) => setRomaneio({ ...romaneio, responsavel: e.target.value })} placeholder="Nome do responsável" /></Campo><Campo label="Toras no romaneio"><div className="flex h-9 items-center rounded-md border bg-muted/20 px-3 text-sm font-semibold">{romaneio.toras.length} plaqueta(s)</div></Campo></div>
-        <div className="rounded-xl border bg-muted/20 p-4"><div className="grid gap-3 md:grid-cols-[1fr_auto]"><Campo label="Adicionar plaqueta do estoque"><Select value={plaquetaSelecionada} onValueChange={setPlaquetaSelecionada}><SelectTrigger><SelectValue placeholder="Selecione a plaqueta serrada" /></SelectTrigger><SelectContent>{torasDisponiveis.filter((tora: any) => !romaneio.toras.some((selecionada) => selecionada.plaquetaId === String(tora.id))).map((tora: any) => <SelectItem value={String(tora.id)} key={tora.id}>{tora.codigo} · {tora.madeiraNome} · {formatarNumero(tora.volumeDisponivel)} m³</SelectItem>)}</SelectContent></Select></Campo><Button className="self-end" type="button" onClick={adicionarTora} disabled={!plaquetaSelecionada}><Plus className="mr-1.5 h-4 w-4" />Adicionar tora</Button></div></div>
-        {romaneio.toras.length ? <div className="space-y-3">{romaneio.toras.map((tora, indice) => { const volumePelasMedidas = calcularVolumeTora(tora.diametro, tora.comprimento); return <div key={tora.plaquetaId} className="rounded-xl border p-4"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{tora.codigo} <span className="font-normal text-muted-foreground">· tora {indice + 1}</span></p><p className="text-xs text-muted-foreground">Ajuste as medidas se a serragem aproveitou menos madeira que a medida registrada no estoque.</p></div><Button type="button" size="sm" variant="ghost" className="text-rose-700 hover:text-rose-800" onClick={() => removerTora(indice)}><X className="mr-1 h-4 w-4" />Remover</Button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Campo label="Essência *"><Input value={tora.madeiraNome} onChange={(e) => atualizarTora(indice, "madeiraNome", e.target.value)} /></Campo><Campo label="Diâmetro (cm)"><Input inputMode="decimal" value={tora.diametro} onChange={(e) => atualizarTora(indice, "diametro", e.target.value)} /></Campo><Campo label="Comprimento (m)"><Input inputMode="decimal" value={tora.comprimento} onChange={(e) => atualizarTora(indice, "comprimento", e.target.value)} /></Campo><Campo label="Volume efetivo (m³) *"><Input inputMode="decimal" value={tora.volume} onChange={(e) => atualizarTora(indice, "volume", e.target.value)} /></Campo></div>{volumePelasMedidas > 0 && <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground"><span>Volume cilíndrico pelas medidas: <strong className="text-foreground">{formatarNumero(volumePelasMedidas)} m³</strong></span><Button type="button" size="sm" variant="outline" onClick={() => usarVolumeCalculado(indice)}>Usar cálculo</Button></div>}</div>; })}</div> : <Vazio icone={<TreePine />} texto="Selecione no mínimo uma plaqueta do estoque para iniciar o romaneio do dia." />}
+        <div className="rounded-xl border bg-muted/20 p-4"><div className="grid gap-3 md:grid-cols-[1fr_auto_auto]"><Campo label="Código da plaqueta"><Input aria-label="Código da plaqueta" value={codigoPlaqueta} onChange={(evento) => setCodigoPlaqueta(evento.target.value)} onKeyDown={(evento) => { if (evento.key === "Enter") { evento.preventDefault(); adicionarTora(); } }} placeholder="Digite a plaqueta, ex.: TOR-0008" autoComplete="off" /><p className="text-xs text-muted-foreground">Digite o código e pressione Enter. As medidas registradas no Estoque serão preenchidas automaticamente e continuarão editáveis.</p>{codigoPlaqueta.trim() && !plaquetas.isLoading && <p className={`text-xs ${torasDisponiveis.some((item: any) => normalizarCodigo(item.codigo) === normalizarCodigo(codigoPlaqueta)) ? "text-emerald-700" : "text-amber-700"}`}>{torasDisponiveis.some((item: any) => normalizarCodigo(item.codigo) === normalizarCodigo(codigoPlaqueta)) ? "Plaqueta disponível encontrada. Pressione Enter para adicionar." : "Aguardando uma plaqueta disponível com este código."}</p>}</Campo><Button className="self-end" type="button" onClick={adicionarTora} disabled={!codigoPlaqueta.trim()}><Plus className="mr-1.5 h-4 w-4" />Adicionar tora</Button><Button className="self-end" type="button" variant="outline" onClick={abrirImportacao}><Upload className="mr-1.5 h-4 w-4" />Importar planilha</Button></div></div>
+        {romaneio.toras.length ? <div className="space-y-3">{romaneio.toras.map((tora, indice) => { const volumePelasMedidas = calcularVolumeTora(tora.diametro, tora.comprimento); return <div key={tora.plaquetaId} className="rounded-xl border p-4"><div className="mb-3 flex flex-wrap items-start justify-between gap-2"><div><p className="font-semibold">{tora.codigo} <span className="font-normal text-muted-foreground">· tora {indice + 1}</span></p><p className="text-xs text-muted-foreground">Ajuste as medidas se a serragem aproveitou menos madeira que a medida registrada no estoque.</p></div><Button type="button" size="sm" variant="ghost" className="text-rose-700 hover:text-rose-800" onClick={() => removerTora(indice)}><X className="mr-1 h-4 w-4" />Remover</Button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"><Campo label="Essência *"><Input value={tora.madeiraNome} onChange={(e) => atualizarTora(indice, "madeiraNome", e.target.value)} /></Campo><Campo label="Diâmetro (cm)"><Input inputMode="decimal" value={tora.diametro} onChange={(e) => atualizarTora(indice, "diametro", e.target.value)} /></Campo><Campo label="Comprimento (m)"><Input inputMode="decimal" value={tora.comprimento} onChange={(e) => atualizarTora(indice, "comprimento", e.target.value)} /></Campo><Campo label="Volume efetivo (m³) *"><Input inputMode="decimal" value={tora.volume} onChange={(e) => atualizarTora(indice, "volume", e.target.value)} /></Campo></div>{volumePelasMedidas > 0 && <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground"><span>Volume cilíndrico pelas medidas: <strong className="text-foreground">{formatarNumero(volumePelasMedidas)} m³</strong></span><Button type="button" size="sm" variant="outline" onClick={() => usarVolumeCalculado(indice)}>Usar cálculo</Button></div>}</div>; })}</div> : <Vazio icone={<TreePine />} texto="Digite ou importe ao menos uma plaqueta disponível do estoque para iniciar o romaneio do dia." />}
         {romaneio.toras.length > 0 && <><div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4"><p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">Resultado das toras serradas</p><div className="mt-2 flex flex-wrap gap-x-5 gap-y-1"><strong className="text-xl text-emerald-950">{formatarNumero(totalToras)} m³</strong>{resumoEssencias.map(([essencia, volume]) => <span key={essencia} className="text-sm text-emerald-900">{formatarNumero(volume)} m³ de {essencia}</span>)}</div></div><div className="flex justify-end"><Button onClick={() => setEtapa("pecas")} disabled={romaneio.toras.some((tora) => !tora.madeiraNome.trim() || num(tora.volume) <= 0)}>Continuar para peças</Button></div></>}</div> : <div className="space-y-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center"><div><p className="font-semibold">Romaneio de madeira serrada</p><p className="text-xs text-muted-foreground">Informe as bitolas e a quantidade de peças produzidas no dia. O volume é calculado automaticamente.</p></div><Button type="button" variant="outline" size="sm" onClick={() => setRomaneio((atual) => ({ ...atual, itens: [...atual.itens, novoItem(atual.toras[0]?.madeiraNome ?? "") ] }))}><Plus className="mr-1 h-3.5 w-3.5" />Adicionar bitola</Button></div><div className="space-y-3">{romaneio.itens.map((item, indice) => { const calculo = calcularItem(item); return <div key={indice} className="rounded-xl border p-4"><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.3fr_.8fr_.8fr_.8fr_.7fr_auto]"><Campo label="Essência"><Input value={item.madeiraNome} onChange={(e) => atualizarItem(indice, "madeiraNome", e.target.value)} /></Campo><Campo label="Espessura (cm)"><Input inputMode="decimal" value={item.espessura} onChange={(e) => atualizarItem(indice, "espessura", e.target.value)} /></Campo><Campo label="Largura (cm)"><Input inputMode="decimal" value={item.largura} onChange={(e) => atualizarItem(indice, "largura", e.target.value)} /></Campo><Campo label="Comprimento (m)"><Input inputMode="decimal" value={item.comprimento} onChange={(e) => atualizarItem(indice, "comprimento", e.target.value)} /></Campo><Campo label="Quantidade"><Input inputMode="numeric" value={item.quantidade} onChange={(e) => atualizarItem(indice, "quantidade", e.target.value)} /></Campo><div className="flex items-end">{romaneio.itens.length > 1 && <Button type="button" size="icon" variant="outline" className="text-rose-700" onClick={() => setRomaneio((atual) => ({ ...atual, itens: atual.itens.filter((_, posicao) => posicao !== indice) }))}><X className="h-4 w-4" /></Button>}</div></div><p className="mt-3 text-sm text-muted-foreground">Volume da bitola: <strong className="text-foreground">{formatarNumero(calculo.volume)} m³</strong> · {formatarNumero(calculo.metrosLineares)} m lineares</p></div>; })}</div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><Indicador texto="Toras serradas" valor={`${formatarNumero(totalToras)} m³`} destaque="primary" /><Indicador texto="Peças" valor={totaisPecas.pecas} /><Indicador texto="M. lineares" valor={`${formatarNumero(totaisPecas.metrosLineares)} m`} /><Indicador texto="Madeira serrada" valor={`${formatarNumero(totaisPecas.volume)} m³`} /><Indicador texto="Aproveitamento" valor={`${formatarNumero(aproveitamento, 2)}%`} destaque={aproveitamento > 100 ? "destructive" : "primary"} /></div><Campo label="Observações"><Textarea value={romaneio.observacoes} onChange={(e) => setRomaneio({ ...romaneio, observacoes: e.target.value })} /></Campo><div className="flex justify-between gap-2"><Button variant="outline" onClick={() => setEtapa("toras")}><ChevronLeft className="mr-1.5 h-4 w-4" />Voltar</Button><Acoes cancelar={() => setDialogRomaneio(false)} confirmar={salvarRomaneio} carregando={confirmarRomaneio.isPending} texto="Confirmar romaneio" /></div></div>}</div></DialogContent></Dialog>
+    <Dialog open={dialogImportacao} onOpenChange={(aberto) => { setDialogImportacao(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); } }}><DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] overflow-y-auto p-4 sm:max-w-2xl sm:p-6"><DialogHeader><DialogTitle>Importar plaquetas para produção</DialogTitle><DialogDescription>Carregue um CSV de plaquetas cadastradas e revise as medidas antes de confirmar o romaneio.</DialogDescription></DialogHeader><div className="space-y-5"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm leading-5 text-sky-950"><p className="font-medium">Use as plaquetas já cadastradas no Estoque</p><p className="mt-1 text-xs">A coluna <strong>plaqueta</strong> é obrigatória. Essência, diâmetro, comprimento e volume são opcionais: quando vazios, o sistema preenche as medidas do estoque. Você ainda pode revisar tudo antes de continuar para as peças.</p></div><Button variant="outline" size="sm" onClick={baixarModeloImportacao}><Download className="mr-2 h-4 w-4" />Baixar modelo CSV</Button><Campo label="Planilha CSV *"><Input aria-label="Planilha CSV de produção" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); }} /><p className="text-xs text-muted-foreground">Máximo de 200 plaquetas e 1 MB por importação.</p></Campo>{arquivoImportacao && <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="min-w-0 truncate">{arquivoImportacao.name}</span></div>}{errosImportacao.length > 0 && <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"><p className="text-sm font-medium text-destructive">Corrija a planilha antes de importar</p><ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-destructive">{errosImportacao.map((erro, indice) => <li key={`${erro}-${indice}`}>{erro}</li>)}</ul></div>}<div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button variant="outline" onClick={() => setDialogImportacao(false)} disabled={importarTorasCsv.isPending}>Cancelar</Button><Button onClick={importarArquivo} disabled={importarTorasCsv.isPending}>{importarTorasCsv.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Importar plaquetas</Button></div></div></DialogContent></Dialog>
   </div>;
 }
 
