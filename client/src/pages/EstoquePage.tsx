@@ -24,7 +24,9 @@ type PlaquetaCarga = {
 
 type CargaFormulario = {
   dataCarga: string;
+  dataVencimento: string;
   origem: string;
+  fornecedorId: string;
   responsavel: string;
   observacoes: string;
   fretePorMetroCubico: string;
@@ -41,7 +43,7 @@ const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFor
 const formatarMoeda = (valor: number | string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor ?? 0));
 const formatarData = (valor: string | Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(valor));
 const novaPlaqueta = (): PlaquetaCarga => ({ codigo: "", madeiraNome: "", diametro: "", comprimento: "", valorMetroCubico: "", observacoes: "" });
-const novoCabecalhoCarga = (): CabecalhoCarga => ({ dataCarga: hoje(), origem: "", responsavel: "", observacoes: "", fretePorMetroCubico: "0" });
+const novoCabecalhoCarga = (): CabecalhoCarga => ({ dataCarga: hoje(), dataVencimento: hoje(), origem: "", fornecedorId: "", responsavel: "", observacoes: "", fretePorMetroCubico: "0" });
 const novaCarga = (): CargaFormulario => ({ ...novoCabecalhoCarga(), plaquetas: [novaPlaqueta()] });
 
 function baixarCsv(conteudo: string, nomeArquivo: string) {
@@ -95,6 +97,7 @@ export default function EstoquePage() {
     origem: filtrosCargas.origem || undefined,
   }), [filtrosCargas]);
   const cargas = trpc.producao.cargas.list.useQuery(filtrosCargasAtivos);
+  const fornecedores = trpc.financeiro.fornecedores.list.useQuery();
   const detalheCarga = trpc.producao.cargas.get.useQuery({ id: cargaEmEdicao ?? 1 }, { enabled: cargaEmEdicao !== null });
   const modeloPlaquetasCsv = trpc.producao.cargas.modeloPlaquetasCsv.useQuery(undefined, { enabled: false });
   const plaquetas = trpc.producao.plaquetas.list.useQuery({ busca: buscaPlaquetas || undefined, limite: 10, deslocamento: deslocamentoPlaquetas });
@@ -140,7 +143,9 @@ export default function EstoquePage() {
     carregouEdicao.current = cargaEmEdicao;
     setCarga({
       dataCarga: new Date(detalhe.carga.dataCarga).toISOString().slice(0, 10),
+      dataVencimento: new Date(detalhe.carga.dataVencimento).toISOString().slice(0, 10),
       origem: detalhe.carga.origem ?? "",
+      fornecedorId: detalhe.carga.fornecedorId ? String(detalhe.carga.fornecedorId) : "",
       responsavel: detalhe.carga.responsavel ?? "",
       observacoes: detalhe.carga.observacoes ?? "",
       fretePorMetroCubico: String(taxaFrete(detalhe.carga)),
@@ -214,9 +219,10 @@ export default function EstoquePage() {
     try {
       const conteudo = await arquivoImportacao.text();
       importarPlaquetasCsv.mutate({
-        ...cabecalhoImportacao,
-        origem: cabecalhoImportacao.origem || null,
-        responsavel: cabecalhoImportacao.responsavel || null,
+      ...cabecalhoImportacao,
+      origem: cabecalhoImportacao.origem || null,
+      fornecedorId: cabecalhoImportacao.fornecedorId ? Number(cabecalhoImportacao.fornecedorId) : null,
+      responsavel: cabecalhoImportacao.responsavel || null,
         observacoes: cabecalhoImportacao.observacoes || null,
         conteudo,
       }, {
@@ -240,6 +246,7 @@ export default function EstoquePage() {
     const entrada = {
       ...carga,
       origem: carga.origem || null,
+      fornecedorId: carga.fornecedorId ? Number(carga.fornecedorId) : null,
       responsavel: carga.responsavel || null,
       observacoes: carga.observacoes || null,
       plaquetas: carga.plaquetas.map((item) => ({ ...item, observacoes: item.observacoes || null })),
@@ -290,9 +297,11 @@ export default function EstoquePage() {
         <DialogHeader><DialogTitle>{cargaEmEdicao ? "Editar romaneio de carga" : "Novo romaneio de carga"}</DialogTitle><DialogDescription>Informe as toras recebidas; valores e frete são calculados automaticamente.</DialogDescription></DialogHeader>
         <div className="space-y-5">
           {detalheCarga.isLoading && cargaEmEdicao ? <Carregando /> : <>
-            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm leading-5 text-emerald-950">O frete é informado por m³ e multiplicado pelo volume total da carga. O valor final soma o custo das toras e o frete calculado.</div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm leading-5 text-emerald-950">Ao confirmar, esta entrada cria ou atualiza uma conta a pagar de <strong>custo de matéria-prima</strong> com o valor total da carga, incluindo o frete calculado.</div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Campo label="Data da carga *"><Input type="date" value={carga.dataCarga} onChange={(evento) => setCarga((anterior) => ({ ...anterior, dataCarga: evento.target.value }))} /></Campo>
+              <Campo label="Vencimento da conta a pagar *"><Input aria-label="Vencimento da conta a pagar" type="date" value={carga.dataVencimento} onChange={(evento) => setCarga((anterior) => ({ ...anterior, dataVencimento: evento.target.value }))} /></Campo>
+              <Campo label="Fornecedor"><select aria-label="Fornecedor da carga" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" value={carga.fornecedorId} onChange={(evento) => setCarga((anterior) => ({ ...anterior, fornecedorId: evento.target.value }))}><option value="">Usar origem como contraparte</option>{(fornecedores.data ?? []).map((fornecedor: any) => <option key={fornecedor.id} value={String(fornecedor.id)}>{fornecedor.nome}</option>)}</select></Campo>
               <Campo label="Origem"><Input value={carga.origem} onChange={(evento) => setCarga((anterior) => ({ ...anterior, origem: evento.target.value }))} placeholder="Fornecedor ou fazenda" /></Campo>
               <Campo label="Responsável"><Input value={carga.responsavel} onChange={(evento) => setCarga((anterior) => ({ ...anterior, responsavel: evento.target.value }))} placeholder="Quem recebeu" /></Campo>
               <Campo label="Frete por m³ (R$)" ajuda="Ex.: R$ 30,00 × volume total"><Input aria-label="Frete por m³ (R$)" inputMode="decimal" value={carga.fretePorMetroCubico} onChange={(evento) => setCarga((anterior) => ({ ...anterior, fretePorMetroCubico: evento.target.value }))} placeholder="0,00" /></Campo>
@@ -332,8 +341,10 @@ export default function EstoquePage() {
         <div className="space-y-5">
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm leading-5 text-sky-950"><p className="font-medium">Formato esperado da planilha</p><p className="mt-1 text-xs">Código, essência, diâmetro em cm, comprimento em m, preço por m³ e observações opcionais. Baixe o modelo para manter os cabeçalhos corretos.</p></div>
           <Button variant="outline" size="sm" onClick={baixarModeloImportacao}><Download className="mr-2 h-4 w-4" />Baixar modelo CSV</Button>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Campo label="Data da carga *"><Input type="date" value={cabecalhoImportacao.dataCarga} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, dataCarga: evento.target.value }))} /></Campo>
+            <Campo label="Vencimento da conta a pagar *"><Input aria-label="Vencimento da conta a pagar (importação)" type="date" value={cabecalhoImportacao.dataVencimento} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, dataVencimento: evento.target.value }))} /></Campo>
+            <Campo label="Fornecedor"><select aria-label="Fornecedor da carga importada" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" value={cabecalhoImportacao.fornecedorId} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, fornecedorId: evento.target.value }))}><option value="">Usar origem como contraparte</option>{(fornecedores.data ?? []).map((fornecedor: any) => <option key={fornecedor.id} value={String(fornecedor.id)}>{fornecedor.nome}</option>)}</select></Campo>
             <Campo label="Frete por m³ (R$)" ajuda="Ex.: R$ 30,00 × volume total"><Input inputMode="decimal" value={cabecalhoImportacao.fretePorMetroCubico} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, fretePorMetroCubico: evento.target.value }))} placeholder="0,00" /></Campo>
             <Campo label="Origem"><Input value={cabecalhoImportacao.origem} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, origem: evento.target.value }))} placeholder="Fornecedor ou fazenda" /></Campo>
             <Campo label="Responsável"><Input value={cabecalhoImportacao.responsavel} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, responsavel: evento.target.value }))} placeholder="Quem recebeu" /></Campo>

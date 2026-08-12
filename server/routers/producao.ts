@@ -35,7 +35,9 @@ const PlaquetaCargaSchema = z.object({
 
 const RomaneioCargaSchema = z.object({
   dataCarga: DataSchema,
+  dataVencimento: DataSchema.optional(),
   origem: z.string().trim().max(200).nullable().optional(),
+  fornecedorId: z.number().int().positive().nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),
   observacoes: z.string().max(4000).nullable().optional(),
   fretePorMetroCubico: DecimalNaoNegativo.default("0"),
@@ -114,17 +116,20 @@ export const producaoRouter = router({
     })).mutation(({ ctx, input }) => db.importarPlaquetasCargaCsv({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
+      dataVencimento: dataLocal(input.dataVencimento ?? input.dataCarga),
     }, ctx.user.id)),
     create: protectedProcedure.input(RomaneioCargaSchema).mutation(({ ctx, input }) => db.criarRomaneioCargaToras({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
+      dataVencimento: dataLocal(input.dataVencimento ?? input.dataCarga),
       criadoPor: ctx.user.id,
     })),
     update: protectedProcedure.input(RomaneioCargaSchema.extend({ id: z.number().int().positive() })).mutation(({ input }) => db.atualizarRomaneioCargaToras(input.id, {
       ...input,
       dataCarga: dataLocal(input.dataCarga),
+      dataVencimento: dataLocal(input.dataVencimento ?? input.dataCarga),
     })),
-    excluir: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => db.excluirRomaneioCargaToras(input.id)),
+    excluir: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.excluirRomaneioCargaToras(input.id, ctx.user.id)),
   }),
   plaquetas: router({
     list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ input }) => db.listPlaquetas(input)),

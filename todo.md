@@ -221,3 +221,6 @@
 - [x] Corrigir a normalização de bitolas decimais na criação de déficits de estoque por entrega
 - [x] Reparar os lotes de déficit existentes com dimensões e volumes ampliados indevidamente
 - [x] Cobrir a conversão decimal e a reparação de déficits com testes e validação visual
+- [x] Gerar uma conta a pagar de custo de matéria-prima ao confirmar cada romaneio de carga de toras
+- [x] Vincular romaneio de carga, fornecedor, vencimento e título financeiro sem permitir duplicidade
+- [x] Cobrir a integração de entrada de toras e contas a pagar com testes e validação visual

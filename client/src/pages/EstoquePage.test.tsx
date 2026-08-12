@@ -4,11 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
-const { importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
+const { criarCargaMutate, importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
+  criarCargaMutate: vi.fn(),
   importarMutate: vi.fn(),
   excluirMutate: vi.fn(),
   perfilAtual: { role: "admin" },
-  cargasListQuery: vi.fn(() => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false })),
+  cargasListQuery: vi.fn(() => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", dataVencimento: "2026-08-20T12:00:00.000Z", origem: "Fazenda Norte", fornecedorId: 7, responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false })),
   plaquetasListQuery: vi.fn(() => ({ data: { itens: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], total: 20, totalDisponiveis: 20, proximoDeslocamento: 10 }, isLoading: false })),
   estoqueResumoQuery: vi.fn(() => ({ data: [
     { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
@@ -27,9 +28,9 @@ vi.mock("@/lib/trpc", () => {
       producao: {
         cargas: {
           list: { useQuery: cargasListQuery },
-          get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) },
+          get: { useQuery: () => ({ data: { carga: { id: 1, dataCarga: "2026-08-12T12:00:00.000Z", dataVencimento: "2026-08-20T12:00:00.000Z", origem: "Fazenda Norte", fornecedorId: 7, responsavel: "João", observacoes: null, volumeTotal: "1.200000", fretePorMetroCubico: "100.00", frete: "120.00" }, plaquetas: [{ codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", valorMetroCubico: "900.00", observacoes: null }] }, isLoading: false }) },
           modeloPlaquetasCsv: { useQuery: () => ({ refetch: vi.fn() }) },
-          create: mutation,
+          create: { useMutation: () => ({ mutate: criarCargaMutate, isPending: false }) },
           update: mutation,
           excluir: { useMutation: () => ({ mutate: excluirMutate, isPending: false }) },
           importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) },
@@ -37,6 +38,7 @@ vi.mock("@/lib/trpc", () => {
         plaquetas: { list: { useQuery: plaquetasListQuery }, create: mutation },
         estoque: { resumo: { useQuery: estoqueResumoQuery } },
       },
+      financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Madeiras Norte" }], isLoading: false }) } } },
     },
   };
 });
@@ -45,6 +47,7 @@ import EstoquePage from "./EstoquePage";
 
 afterEach(() => {
   cleanup();
+  criarCargaMutate.mockReset();
   importarMutate.mockReset();
   excluirMutate.mockReset();
   cargasListQuery.mockClear();
@@ -141,10 +144,29 @@ describe("EstoquePage", () => {
     expect(screen.getByText("Valor das toras")).toBeInTheDocument();
     expect(screen.getByText(/Frete \(R\$\s?100,00\/m³\)/)).toBeInTheDocument();
     expect(screen.getByText("Valor total da carga")).toBeInTheDocument();
+    expect(screen.getByLabelText("Vencimento da conta a pagar")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Fornecedor da carga" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Adicionar plaqueta" }));
     expect(screen.getAllByPlaceholderText("PLQ-001")).toHaveLength(2);
     expect(screen.getAllByPlaceholderText("Ex.: Cedrinho")[1]).toHaveValue("Piqui");
     expect(screen.getAllByPlaceholderText("900,00")[1]).toHaveValue("900");
+  });
+
+  it("envia fornecedor e vencimento para a conta a pagar automática da carga", async () => {
+    const user = userEvent.setup();
+    criarCargaMutate.mockImplementationOnce((_entrada, opcoes) => opcoes.onSuccess({ numero: "CARGA-000100", totalPlaquetas: 1 }));
+    render(<EstoquePage />);
+    await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
+    await user.clear(screen.getByLabelText("Vencimento da conta a pagar"));
+    await user.type(screen.getByLabelText("Vencimento da conta a pagar"), "2026-09-10");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Fornecedor da carga" }), "7");
+    await user.type(screen.getByPlaceholderText("PLQ-001"), "TOR-0200");
+    await user.type(screen.getByPlaceholderText("Ex.: Cedrinho"), "Cumaru");
+    await user.type(screen.getByRole("textbox", { name: "Diâmetro (cm)" }), "25");
+    await user.type(screen.getByRole("textbox", { name: "Comprimento (m)" }), "6");
+    await user.type(screen.getByPlaceholderText("900,00"), "900");
+    await user.click(screen.getByRole("button", { name: "Confirmar entrada" }));
+    expect(criarCargaMutate).toHaveBeenCalledWith(expect.objectContaining({ dataVencimento: "2026-09-10", fornecedorId: 7 }), expect.any(Object));
   });
 
   it("oferece importação por planilha CSV com modelo e dados do romaneio", async () => {
