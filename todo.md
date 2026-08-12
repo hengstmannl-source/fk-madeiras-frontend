@@ -191,3 +191,7 @@
 - [x] Permitir cadastrar uma plaqueta ainda inexistente diretamente na Produção, com essência e medidas obrigatórias
 - [x] Registrar e consumir a plaqueta avulsa no mesmo romaneio, preservando histórico de entrada e saída
 - [x] Cobrir o fluxo de plaqueta avulsa e validar visualmente o formulário em largura estreita
+- [x] Substituir a criação de linhas vazias por um lançamento único e rápido de bitolas
+- [x] Manter essência, espessura e largura da última peça ao adicionar uma nova bitola, permitindo alterar comprimento e quantidade
+- [x] Empilhar os cartões de toras no romaneio em telas estreitas, sem colunas comprimidas
+- [x] Cobrir o lançamento rápido de peças e validar visualmente a etapa em celular

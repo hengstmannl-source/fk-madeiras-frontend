@@ -89,4 +89,29 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("button", { name: "Baixar modelo CSV" })).toBeInTheDocument();
     expect(screen.getByLabelText("Planilha CSV de produção")).toBeInTheDocument();
   });
+
+  it("adiciona bitolas por uma ficha única e mantém a última medida para o próximo lançamento", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "TOR-0008");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
+
+    expect(screen.getByText(/Nenhuma bitola adicionada/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Essência da bitola")).toHaveValue("Cedrinho");
+
+    await user.type(screen.getByLabelText("Espessura da bitola"), "3");
+    await user.type(screen.getByLabelText("Largura da bitola"), "5");
+    await user.type(screen.getByLabelText("Comprimento da bitola"), "2");
+    await user.type(screen.getByLabelText("Quantidade da bitola"), "11");
+    await user.click(screen.getByRole("button", { name: "Adicionar bitola" }));
+
+    expect(screen.getByText(/Cedrinho · 3 × 5 cm · 2 m/)).toBeInTheDocument();
+    expect(screen.getByText(/11 peças/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Essência da bitola")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Espessura da bitola")).toHaveValue("3");
+    expect(screen.getByLabelText("Largura da bitola")).toHaveValue("5");
+  });
 });
