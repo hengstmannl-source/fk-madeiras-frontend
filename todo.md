@@ -195,3 +195,7 @@
 - [x] Manter essência, espessura e largura da última peça ao adicionar uma nova bitola, permitindo alterar comprimento e quantidade
 - [x] Empilhar os cartões de toras no romaneio em telas estreitas, sem colunas comprimidas
 - [x] Cobrir o lançamento rápido de peças e validar visualmente a etapa em celular
+- [x] Definir modelo CSV de peças serradas com essência, espessura, largura, comprimento e quantidade
+- [x] Validar integralmente a planilha de peças antes de adicioná-las ao romaneio diário
+- [x] Adicionar modelo baixável, importação e feedback de erros à etapa de peças produzidas
+- [x] Cobrir e validar visualmente a importação de peças serradas por planilha

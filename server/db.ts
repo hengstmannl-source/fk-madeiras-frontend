@@ -16,7 +16,7 @@ import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVen
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasParaEntrega, agruparEstoquePecas, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
-import { criarModeloCsvTorasProducao, prepararImportacaoTorasProducao } from "./producao.intercambio";
+import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1118,6 +1118,14 @@ export async function listPlaquetas(parametros: { busca?: string; limite?: numbe
 
 export function getModeloImportacaoTorasProducaoCsv() {
   return criarModeloCsvTorasProducao();
+}
+
+export function getModeloImportacaoPecasProducaoCsv() {
+  return criarModeloCsvPecasProducao();
+}
+
+export function prepararPecasProducaoCsv(conteudo: string) {
+  return validarCsvPecasProducao(conteudo);
 }
 
 export async function prepararTorasProducaoCsv(conteudo: string) {

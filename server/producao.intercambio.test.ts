@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvTorasProducao } from "./producao.intercambio";
+import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasProducao } from "./producao.intercambio";
 
 describe("intercâmbio de plaquetas para produção", () => {
   it("fornece um modelo compatível e preserva os campos opcionais de correção", () => {
@@ -28,5 +28,19 @@ describe("intercâmbio de plaquetas para produção", () => {
       erros: [],
       toras: [expect.objectContaining({ novaPlaqueta: { codigo: "AVU-001" }, origem: "entrada_imediata", madeiraNome: "Cedrinho", volume: "0.362" })],
     });
+  });
+
+  it("fornece modelo e importa peças serradas com medidas brasileiras", () => {
+    expect(criarModeloCsvPecasProducao()).toContain("essencia;espessura_cm;largura_cm;comprimento_m;quantidade");
+    expect(validarCsvPecasProducao("essencia;espessura_cm;largura_cm;comprimento_m;quantidade\nCedrinho;3;5;2,5;11")).toEqual({
+      itens: [expect.objectContaining({ madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2.5", quantidade: 11 })],
+      erros: [],
+    });
+  });
+
+  it("recusa peças com quantidade fracionária ou medidas ausentes", () => {
+    const resultado = validarCsvPecasProducao("essencia;espessura_cm;largura_cm;comprimento_m;quantidade\nCedrinho;3;5;2;11,5\nPinho;;5;2;2");
+    expect(resultado.itens).toEqual([]);
+    expect(resultado.erros.join(" ")).toMatch(/quantidade.*inteiro.*medidas da peça/i);
   });
 });

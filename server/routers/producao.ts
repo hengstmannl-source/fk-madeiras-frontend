@@ -126,6 +126,8 @@ export const producaoRouter = router({
     detalhe: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioProducaoComItens(input.id)),
     modeloTorasCsv: protectedProcedure.query(() => db.getModeloImportacaoTorasProducaoCsv()),
     importarTorasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ input }) => db.prepararTorasProducaoCsv(input.conteudo)),
+    modeloPecasCsv: protectedProcedure.query(() => db.getModeloImportacaoPecasProducaoCsv()),
+    importarPecasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ input }) => db.prepararPecasProducaoCsv(input.conteudo)),
     confirmar: protectedProcedure.input(RomaneioSchema).mutation(({ ctx, input }) => db.confirmarRomaneioProducao({
       ...input,
       dataProducao: dataLocal(input.dataProducao),

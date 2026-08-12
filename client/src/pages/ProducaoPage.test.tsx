@@ -17,7 +17,7 @@ vi.mock("@/lib/trpc", () => {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar }, estoque: { resumo: invalidar } } }),
       producao: {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 1, totalDisponiveis: 1, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
-        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte },
+        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
       },
     },
@@ -113,5 +113,20 @@ describe("ProducaoPage", () => {
     expect(screen.getByLabelText("Essência da bitola")).toHaveValue("Cedrinho");
     expect(screen.getByLabelText("Espessura da bitola")).toHaveValue("3");
     expect(screen.getByLabelText("Largura da bitola")).toHaveValue("5");
+  });
+
+  it("oferece a importação de peças serradas por planilha na etapa de bitolas", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "TOR-0008");
+    await user.keyboard("{Enter}");
+    await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
+    await user.click(screen.getByRole("button", { name: "Importar planilha" }));
+
+    expect(screen.getByRole("heading", { name: "Importar peças serradas" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Baixar modelo CSV" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Planilha CSV de peças")).toBeInTheDocument();
   });
 });

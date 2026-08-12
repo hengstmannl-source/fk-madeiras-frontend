@@ -1,6 +1,7 @@
 import { normalizarCodigoPlaqueta } from "./producao.logic";
 
 export const CABECALHOS_CSV_TORAS_PRODUCAO = ["plaqueta", "essencia", "diametro_cm", "comprimento_m", "volume_m3"] as const;
+export const CABECALHOS_CSV_PECAS_PRODUCAO = ["essencia", "espessura_cm", "largura_cm", "comprimento_m", "quantidade"] as const;
 
 export type LinhaImportacaoToraProducao = {
   codigo: string;
@@ -8,6 +9,14 @@ export type LinhaImportacaoToraProducao = {
   diametro?: string;
   comprimento?: string;
   volume?: string;
+};
+
+export type LinhaImportacaoPecaProducao = {
+  madeiraNome: string;
+  espessura: string;
+  largura: string;
+  comprimento: string;
+  quantidade: number;
 };
 
 type PlaquetaDisponivel = {
@@ -63,6 +72,10 @@ export function criarModeloCsvTorasProducao(): string {
   return `\uFEFF${CABECALHOS_CSV_TORAS_PRODUCAO.join(";")}\nTOR-0001;;;;`;
 }
 
+export function criarModeloCsvPecasProducao(): string {
+  return `\uFEFF${CABECALHOS_CSV_PECAS_PRODUCAO.join(";")}\nCedrinho;3;5;2;11`;
+}
+
 export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): { linhas: LinhaImportacaoToraProducao[]; erros: string[] } {
   if (conteudo.length > 1_000_000) return { linhas: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
   let tabela: string[][];
@@ -94,6 +107,36 @@ export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): {
     } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: dados inválidos`); }
   });
   return erros.length ? { linhas: [], erros } : { linhas, erros: [] };
+}
+
+export function validarCsvPecasProducao(conteudo: string, maximoLinhas = 1000): { itens: LinhaImportacaoPecaProducao[]; erros: string[] } {
+  if (conteudo.length > 1_000_000) return { itens: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
+  let tabela: string[][];
+  try { tabela = lerLinhasCsv(conteudo); } catch (erro) { return { itens: [], erros: [erro instanceof Error ? erro.message : "Não foi possível ler o CSV"] }; }
+  const cabecalho = (tabela.shift() ?? []).map((campo) => campo.replace(/^\uFEFF/, "").trim().toLowerCase());
+  const indices = CABECALHOS_CSV_PECAS_PRODUCAO.map((campo) => cabecalho.indexOf(campo));
+  if (indices.some((indice) => indice < 0)) return { itens: [], erros: [`Use o modelo CSV com os cabeçalhos: ${CABECALHOS_CSV_PECAS_PRODUCAO.join(", ")}`] };
+  const dados = tabela.filter((linha) => linha.some((campo) => campo.trim()));
+  if (!dados.length) return { itens: [], erros: ["O arquivo CSV não possui peças para importar"] };
+  if (dados.length > maximoLinhas) return { itens: [], erros: [`O limite por importação é de ${maximoLinhas} peças`] };
+  const itens: LinhaImportacaoPecaProducao[] = [];
+  const erros: string[] = [];
+  dados.forEach((colunas, indice) => {
+    const numeroLinha = indice + 2;
+    const valor = (campo: typeof CABECALHOS_CSV_PECAS_PRODUCAO[number]) => (colunas[indices[CABECALHOS_CSV_PECAS_PRODUCAO.indexOf(campo)]] ?? "").trim();
+    const madeiraNome = valor("essencia");
+    if (madeiraNome.length < 2) { erros.push(`Linha ${numeroLinha}: informe a essência`); return; }
+    try {
+      const espessura = decimalOpcional(valor("espessura_cm"), "a espessura", numeroLinha);
+      const largura = decimalOpcional(valor("largura_cm"), "a largura", numeroLinha);
+      const comprimento = decimalOpcional(valor("comprimento_m"), "o comprimento", numeroLinha);
+      const quantidade = Number(valor("quantidade").replace(",", "."));
+      if (!espessura || !largura || !comprimento) throw new Error(`Linha ${numeroLinha}: informe todas as medidas da peça`);
+      if (!Number.isInteger(quantidade) || quantidade <= 0) throw new Error(`Linha ${numeroLinha}: informe a quantidade como número inteiro positivo`);
+      itens.push({ madeiraNome, espessura, largura, comprimento, quantidade });
+    } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: dados inválidos`); }
+  });
+  return erros.length ? { itens: [], erros } : { itens, erros: [] };
 }
 
 export function prepararImportacaoTorasProducao(input: { conteudo: string; plaquetas: PlaquetaDisponivel[] }) {
