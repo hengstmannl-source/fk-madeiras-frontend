@@ -5,7 +5,7 @@ import {
   orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
-  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado,
+  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -1425,15 +1425,27 @@ export async function getRomaneioProducaoComItens(romaneioId: number) {
     plaquetaCodigo: plaquetas.codigo,
     origemPlaqueta: plaquetas.origem,
     localizacaoPlaqueta: plaquetas.localizacao,
-  }).from(romaneiosProducao).innerJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id)).where(eq(romaneiosProducao.id, romaneioId)).limit(1))[0];
+  }).from(romaneiosProducao).leftJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id)).where(eq(romaneiosProducao.id, romaneioId)).limit(1))[0];
   if (!romaneio) return null;
-  const itens = await listItensRomaneioProducao(romaneioId);
-  return { romaneio, itens };
+  const [itens, toras] = await Promise.all([
+    listItensRomaneioProducao(romaneioId),
+    db.select({
+      id: itensRomaneioToras.id,
+      plaquetaId: itensRomaneioToras.plaquetaId,
+      codigo: plaquetas.codigo,
+      madeiraNome: itensRomaneioToras.madeiraNome,
+      diametro: itensRomaneioToras.diametro,
+      comprimento: itensRomaneioToras.comprimento,
+      volume: itensRomaneioToras.volume,
+    }).from(itensRomaneioToras).innerJoin(plaquetas, eq(itensRomaneioToras.plaquetaId, plaquetas.id)).where(eq(itensRomaneioToras.romaneioId, romaneioId)),
+  ]);
+  return { romaneio, itens, toras };
 }
 
 export async function confirmarRomaneioProducao(data: {
-  plaquetaId: number;
-  tora: { madeiraNome: string; espessura?: string | null; largura?: string | null; comprimento?: string | null; volume: string };
+  plaquetaId?: number;
+  tora?: { madeiraNome: string; diametro?: string | null; espessura?: string | null; largura?: string | null; comprimento?: string | null; volume: string };
+  toras?: Array<{ plaquetaId: number; tora: { madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume: string } }>;
   dataProducao: Date;
   fita?: string | null;
   responsavel?: string | null;
@@ -1444,16 +1456,24 @@ export async function confirmarRomaneioProducao(data: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx) => {
-    const plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, data.plaquetaId)).limit(1))[0];
-    const calculo = validarConfirmacaoRomaneio({ plaqueta, tora: data.tora, itens: data.itens });
+    const entradasToras = data.toras ?? (data.plaquetaId && data.tora ? [{ plaquetaId: data.plaquetaId, tora: data.tora }] : []);
+    if (!entradasToras.length) throw new Error("Selecione ao menos uma plaqueta para o romaneio");
+    const plaquetasSelecionadas = [];
+    for (const entrada of entradasToras) {
+      const plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, entrada.plaquetaId)).limit(1))[0];
+      plaquetasSelecionadas.push({ plaqueta, tora: entrada.tora });
+    }
+    const calculo = validarConfirmacaoRomaneio({ toras: plaquetasSelecionadas, itens: data.itens });
+    const primeiraTora = calculo.toras[0];
     const numeroTemporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
     const insercaoRomaneio = await tx.insert(romaneiosProducao).values({
       numero: numeroTemporario,
-      plaquetaId: data.plaquetaId,
-      madeiraTora: data.tora.madeiraNome.trim(),
-      espessuraTora: data.tora.espessura ? Number(data.tora.espessura).toFixed(2) : null,
-      larguraTora: data.tora.largura ? Number(data.tora.largura).toFixed(2) : null,
-      comprimentoTora: data.tora.comprimento ? Number(data.tora.comprimento).toFixed(2) : null,
+      plaquetaId: primeiraTora.plaqueta.id,
+      totalToras: calculo.totalToras,
+      madeiraTora: primeiraTora.tora.madeiraNome.trim(),
+      espessuraTora: null,
+      larguraTora: null,
+      comprimentoTora: primeiraTora.tora.comprimento ? Number(primeiraTora.tora.comprimento).toFixed(2) : null,
       volumeTora: calculo.volumeTora.toFixed(6),
       aproveitamento: calculo.aproveitamento.toFixed(2),
       dataProducao: data.dataProducao,
@@ -1469,23 +1489,33 @@ export async function confirmarRomaneioProducao(data: {
     const numero = `ROM-${String(romaneioId).padStart(6, "0")}`;
     await tx.update(romaneiosProducao).set({ numero }).where(eq(romaneiosProducao.id, romaneioId));
 
-    await tx.update(plaquetas).set({
-      madeiraNome: data.tora.madeiraNome.trim(),
-      espessura: data.tora.espessura ? Number(data.tora.espessura).toFixed(2) : null,
-      largura: data.tora.largura ? Number(data.tora.largura).toFixed(2) : null,
-      comprimento: data.tora.comprimento ? Number(data.tora.comprimento).toFixed(2) : null,
-      volumeInicial: calculo.volumeTora.toFixed(6),
-      volumeDisponivel: "0.000000",
-      estado: "consumida",
-    }).where(eq(plaquetas.id, data.plaquetaId));
-    await tx.insert(movimentacoesPlaquetas).values({
-      plaquetaId: data.plaquetaId,
-      romaneioId,
-      tipo: "consumo",
-      volume: calculo.volumeTora.toFixed(6),
-      motivo: `Consumo no romaneio ${numero}`,
-      criadoPor: data.criadoPor,
-    });
+    for (const entrada of calculo.toras) {
+      const plaquetaId = entrada.plaqueta.id!;
+      await tx.insert(itensRomaneioToras).values({
+        romaneioId,
+        plaquetaId,
+        madeiraNome: entrada.tora.madeiraNome.trim(),
+        diametro: entrada.tora.diametro ? Number(entrada.tora.diametro).toFixed(2) : null,
+        comprimento: entrada.tora.comprimento ? Number(entrada.tora.comprimento).toFixed(2) : null,
+        volume: entrada.volume.toFixed(6),
+      });
+      await tx.update(plaquetas).set({
+        madeiraNome: entrada.tora.madeiraNome.trim(),
+        diametro: entrada.tora.diametro ? Number(entrada.tora.diametro).toFixed(2) : null,
+        comprimento: entrada.tora.comprimento ? Number(entrada.tora.comprimento).toFixed(2) : null,
+        volumeInicial: entrada.volume.toFixed(6),
+        volumeDisponivel: "0.000000",
+        estado: "consumida",
+      }).where(eq(plaquetas.id, plaquetaId));
+      await tx.insert(movimentacoesPlaquetas).values({
+        plaquetaId,
+        romaneioId,
+        tipo: "consumo",
+        volume: entrada.volume.toFixed(6),
+        motivo: `Consumo no romaneio ${numero}`,
+        criadoPor: data.criadoPor,
+      });
+    }
 
     for (const item of calculo.itens) {
       const dimensoes = {

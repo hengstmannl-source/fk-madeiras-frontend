@@ -173,3 +173,9 @@
 - [x] Cobrir filtros, paginação, pesquisa e autorização administrativa com testes e validação visual
 - [x] Garantir a ordenação decrescente por entrada na consulta paginada de plaquetas e testar que a listagem inicial exibe as 10 mais recentes
 - [x] Executar e confirmar a cobertura automatizada da ordenação das 10 plaquetas mais recentes antes da paginação
+- [x] Permitir selecionar as plaquetas de toras disponíveis serradas no dia, carregando suas medidas com opção de correção
+- [x] Consolidar o volume efetivo das toras utilizadas no romaneio diário de produção
+- [x] Lançar as peças serradas por bitola e quantidade, calculando automaticamente seus metros cúbicos
+- [x] Exibir o aproveitamento diário entre volume de toras serradas e volume de madeira serrada produzida
+- [x] Atualizar as baixas de estoque e a rastreabilidade entre tora, romaneio de produção e peças produzidas
+- [x] Cobrir o fluxo completo de produção diária com testes e validação visual

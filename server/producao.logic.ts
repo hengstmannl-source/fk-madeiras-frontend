@@ -7,13 +7,18 @@ export type ItemProducaoEntrada = {
 };
 
 export type PlaquetaParaConfirmacao = {
+  id?: number;
   codigo: string;
   estado: "disponivel" | "consumida" | "cancelada";
   volumeDisponivel: string | number;
+  madeiraNome?: string;
+  diametro?: string | number | null;
+  comprimento?: string | number | null;
 };
 
 export type ToraParaRomaneio = {
   madeiraNome: string;
+  diametro?: string | number | null;
   espessura?: string | number | null;
   largura?: string | number | null;
   comprimento?: string | number | null;
@@ -69,25 +74,38 @@ export function calcularItemRomaneio(item: ItemProducaoEntrada) {
 }
 
 export function validarConfirmacaoRomaneio(input: {
-  plaqueta: PlaquetaParaConfirmacao | null | undefined;
+  plaqueta?: PlaquetaParaConfirmacao | null | undefined;
   tora?: ToraParaRomaneio;
+  toras?: Array<{ plaqueta: PlaquetaParaConfirmacao | null | undefined; tora: ToraParaRomaneio }>;
   itens: ItemProducaoEntrada[];
 }) {
-  if (!input.plaqueta) throw new Error("Selecione uma plaqueta para o romaneio");
-  if (input.plaqueta.estado !== "disponivel") {
-    throw new Error(`A plaqueta ${input.plaqueta.codigo} não está disponível para produção`);
-  }
+  const entradasToras = input.toras ?? (input.plaqueta && input.tora ? [{ plaqueta: input.plaqueta, tora: input.tora }] : []);
+  if (!entradasToras.length) throw new Error("Selecione ao menos uma plaqueta para o romaneio");
   if (!input.itens.length) throw new Error("Adicione ao menos uma peça produzida ao romaneio");
+  const codigos = new Set<string>();
+  const toras = entradasToras.map(({ plaqueta, tora }) => {
+    if (!plaqueta) throw new Error("Selecione uma plaqueta para o romaneio");
+    if (plaqueta.estado !== "disponivel") throw new Error(`A plaqueta ${plaqueta.codigo} não está disponível para produção`);
+    const codigo = normalizarCodigoPlaqueta(plaqueta.codigo);
+    if (codigos.has(codigo)) throw new Error(`A plaqueta ${plaqueta.codigo} foi selecionada mais de uma vez`);
+    codigos.add(codigo);
+    const volume = numero(tora.volume);
+    const volumeDisponivel = numero(plaqueta.volumeDisponivel);
+    if (!tora.madeiraNome?.trim() || volume <= 0) throw new Error("Informe a essência e o volume válido de cada tora para o romaneio");
+    if (volume > volumeDisponivel + 0.000001) {
+      throw new Error(`O volume informado para a plaqueta ${plaqueta.codigo} excede o volume disponível em estoque`);
+    }
+    return { plaqueta, tora, volume: Number(volume.toFixed(6)) };
+  });
   const itens = input.itens.map(calcularItemRomaneio);
   const volumeProduzido = itens.reduce((total, item) => total + item.volume, 0);
-  const volumeTora = numero(input.tora?.volume ?? input.plaqueta.volumeDisponivel);
-  if (!input.tora?.madeiraNome?.trim() || volumeTora <= 0) {
-    throw new Error("Informe a essência e o volume válido da tora para o romaneio");
-  }
+  const volumeTora = toras.reduce((total, entrada) => total + entrada.volume, 0);
   if (volumeProduzido > volumeTora + 0.000001) {
-    throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o volume informado da tora (${volumeTora.toFixed(6)} m³)`);
+    throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o volume total das toras (${volumeTora.toFixed(6)} m³)`);
   }
   return {
+    toras,
+    totalToras: toras.length,
     itens,
     totalPecas: itens.reduce((total, item) => total + item.quantidade, 0),
     metrosLineares: Number(itens.reduce((total, item) => total + item.metrosLineares, 0).toFixed(4)),

@@ -198,7 +198,8 @@ export type InsertPlaqueta = typeof plaquetas.$inferInsert;
 export const romaneiosProducao = mysqlTable("romaneiosProducao", {
   id: int("id").autoincrement().primaryKey(),
   numero: varchar("numero", { length: 30 }).notNull().unique(),
-  plaquetaId: int("plaquetaId").notNull().unique(),
+  plaquetaId: int("plaquetaId"),
+  totalToras: int("totalToras").notNull().default(1),
   madeiraTora: varchar("madeiraTora", { length: 200 }),
   espessuraTora: decimal("espessuraTora", { precision: 8, scale: 2 }),
   larguraTora: decimal("larguraTora", { precision: 8, scale: 2 }),
@@ -222,6 +223,20 @@ export const romaneiosProducao = mysqlTable("romaneiosProducao", {
 
 export type RomaneioProducao = typeof romaneiosProducao.$inferSelect;
 export type InsertRomaneioProducao = typeof romaneiosProducao.$inferInsert;
+
+export const itensRomaneioToras = mysqlTable("itensRomaneioToras", {
+  id: int("id").autoincrement().primaryKey(),
+  romaneioId: int("romaneioId").notNull(),
+  plaquetaId: int("plaquetaId").notNull().unique(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  diametro: decimal("diametro", { precision: 8, scale: 2 }),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ItemRomaneioTora = typeof itensRomaneioToras.$inferSelect;
+export type InsertItemRomaneioTora = typeof itensRomaneioToras.$inferInsert;
 
 export const itensRomaneioProducao = mysqlTable("itensRomaneioProducao", {
   id: int("id").autoincrement().primaryKey(),

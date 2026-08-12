@@ -294,7 +294,7 @@ export async function registerPdfRoutes(app: any) {
       if (!data) return res.status(404).json({ error: "Romaneio não encontrado" });
 
       const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595, 842]);
+      let page = pdfDoc.addPage([595, 842]);
       const { width, height } = page.getSize();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
@@ -312,17 +312,27 @@ export async function registerPdfRoutes(app: any) {
       page.drawText(`Produção em ${new Date(data.romaneio.dataProducao).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
       page.drawText(`Aproveitamento: ${formatMeasurement(data.romaneio.aproveitamento ?? "0")}%`, { x: width - 212, y: y - 17, size: 11, font: bold, color: rgb(0.12, 0.42, 0.25) });
       y -= 78;
-      page.drawText("TORA / PLAQUETA DE ORIGEM", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
+      const torasSerradas = data.toras.length
+        ? data.toras
+        : [{
+            codigo: data.romaneio.plaquetaCodigo ?? "Não informada",
+            madeiraNome: data.romaneio.madeiraTora ?? "Não informada",
+            diametro: null,
+            comprimento: data.romaneio.comprimentoTora,
+            volume: data.romaneio.volumeTora ?? "0",
+          }];
+      page.drawText(`TORAS SERRADAS (${torasSerradas.length})`, { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
       y -= 18;
-      page.drawText(`Código: ${data.romaneio.plaquetaCodigo}   •   Essência: ${data.romaneio.madeiraTora}`, { x: 48, y, size: 9, font });
-      y -= 14;
-      const dimensoesTora = [data.romaneio.espessuraTora, data.romaneio.larguraTora, data.romaneio.comprimentoTora].every(Boolean)
-        ? `${formatMeasurement(data.romaneio.espessuraTora ?? "0")} cm × ${formatMeasurement(data.romaneio.larguraTora ?? "0")} cm × ${formatMeasurement(data.romaneio.comprimentoTora ?? "0")} m`
-        : "Medidas não informadas";
-      page.drawText(`Medidas: ${dimensoesTora}   •   Volume: ${formatMeasurement(data.romaneio.volumeTora ?? "0")} m³`, { x: 48, y, size: 9, font });
-      y -= 14;
-      page.drawText(`Fita/Linha: ${data.romaneio.fita ?? "Não informada"}   •   Responsável: ${data.romaneio.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
-      y -= 32;
+      for (const tora of torasSerradas) {
+        page.drawText(`Plaqueta: ${tora.codigo}   •   Essência: ${tora.madeiraNome}`, { x: 48, y, size: 9, font });
+        y -= 13;
+        page.drawText(`Diâmetro: ${formatMeasurement(tora.diametro ?? "0")} cm   •   Comprimento: ${formatMeasurement(tora.comprimento ?? "0")} m   •   Volume efetivo: ${formatMeasurement(tora.volume)} m³`, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35) });
+        y -= 16;
+      }
+      page.drawLine({ start: { x: 48, y }, end: { x: width - 48, y }, thickness: 0.6, color: rgb(0.72, 0.67, 0.58) });
+      y -= 16;
+      page.drawText(`Volume de toras: ${formatMeasurement(data.romaneio.volumeTora ?? "0")} m³   •   Fita/Linha: ${data.romaneio.fita ?? "Não informada"}   •   Responsável: ${data.romaneio.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
+      y -= 28;
       page.drawText("PEÇAS PRODUZIDAS", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
       y -= 18;
       const colunas = [145, 92, 54, 66, 66, 62];

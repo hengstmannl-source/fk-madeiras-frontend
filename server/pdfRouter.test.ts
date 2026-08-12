@@ -99,6 +99,30 @@ describe("rotas de PDF protegidas", () => {
     expect(textos).toContain("VALOR TOTAL DA CARGA: R$ 1.500,00");
   });
 
+  it("gera PDF de produção com várias toras e aproveitamento consolidado", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "getRomaneioProducaoComItens").mockResolvedValue({
+      romaneio: { numero: "ROM-000021", dataProducao: new Date("2026-08-12T12:00:00.000Z"), aproveitamento: "50.00", volumeTora: "2.000000", fita: "1", responsavel: "Adilson", observacoes: null, plaquetaCodigo: "PLA-001", madeiraTora: "Cedrinho", comprimentoTora: "5.00" },
+      toras: [
+        { codigo: "PLA-001", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volume: "1.000000" },
+        { codigo: "PLA-002", madeiraNome: "Cedrinho", diametro: "28.00", comprimento: "5.00", volume: "1.000000" },
+      ],
+      itens: [{ madeiraNome: "Cedrinho", espessura: "2.00", largura: "10.00", comprimento: "3.00", quantidade: 116, metrosLineares: "348.0000", volume: "1.000000" }],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/romaneio/:id"]!({ params: { id: "21" } }, res);
+
+    const textos = pdfCanvas.drawText.mock.calls.map(([texto]) => texto).join(" ");
+    expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
+    expect(textos).toContain("TORAS SERRADAS (2)");
+    expect(textos).toContain("Plaqueta: PLA-001");
+    expect(textos).toContain("Plaqueta: PLA-002");
+    expect(textos).toContain("Volume de toras: 2 m³");
+    expect(textos).toContain("Aproveitamento: 50%");
+  });
+
   it("rejeita recibo de venda ainda não quitada", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({

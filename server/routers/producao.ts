@@ -62,15 +62,18 @@ const ItemRomaneioSchema = z.object({
   quantidade: z.number().int().positive(),
 });
 
-const RomaneioSchema = z.object({
-  plaquetaId: z.number().int().positive(),
-  tora: z.object({
+const ToraRomaneioSchema = z.object({
     madeiraNome: z.string().trim().min(2).max(200),
-    espessura: DecimalPositivo.optional().nullable(),
-    largura: DecimalPositivo.optional().nullable(),
+    diametro: DecimalPositivo.optional().nullable(),
     comprimento: DecimalPositivo.optional().nullable(),
     volume: DecimalPositivo,
-  }),
+  });
+
+const RomaneioSchema = z.object({
+  toras: z.array(z.object({
+    plaquetaId: z.number().int().positive(),
+    tora: ToraRomaneioSchema,
+  })).min(1, "Selecione ao menos uma plaqueta serrada"),
   dataProducao: DataSchema,
   fita: z.string().trim().max(100).nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),
@@ -115,6 +118,7 @@ export const producaoRouter = router({
   romaneios: router({
     list: protectedProcedure.query(() => db.listRomaneiosProducao()),
     itens: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.listItensRomaneioProducao(input.id)),
+    detalhe: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioProducaoComItens(input.id)),
     confirmar: protectedProcedure.input(RomaneioSchema).mutation(({ ctx, input }) => db.confirmarRomaneioProducao({
       ...input,
       dataProducao: dataLocal(input.dataProducao),
