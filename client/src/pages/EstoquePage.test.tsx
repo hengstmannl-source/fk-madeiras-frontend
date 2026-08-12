@@ -4,12 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
-const { importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, perfilAtual } = vi.hoisted(() => ({
+const { importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
   importarMutate: vi.fn(),
   excluirMutate: vi.fn(),
   perfilAtual: { role: "admin" },
   cargasListQuery: vi.fn(() => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", origem: "Fazenda Norte", responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false })),
   plaquetasListQuery: vi.fn(() => ({ data: { itens: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], total: 20, totalDisponiveis: 20, proximoDeslocamento: 10 }, isLoading: false })),
+  estoqueResumoQuery: vi.fn(() => ({ data: [
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
+  ], isLoading: false })),
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
@@ -31,7 +35,7 @@ vi.mock("@/lib/trpc", () => {
           importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) },
         },
         plaquetas: { list: { useQuery: plaquetasListQuery }, create: mutation },
-        estoque: { resumo: { useQuery: () => ({ data: [{ madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" }], isLoading: false }) } },
+        estoque: { resumo: { useQuery: estoqueResumoQuery } },
       },
     },
   };
@@ -45,6 +49,11 @@ afterEach(() => {
   excluirMutate.mockReset();
   cargasListQuery.mockClear();
   plaquetasListQuery.mockClear();
+  estoqueResumoQuery.mockReset();
+  estoqueResumoQuery.mockImplementation(() => ({ data: [
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
+  ], isLoading: false }));
   perfilAtual.role = "admin";
 });
 
@@ -63,7 +72,8 @@ describe("EstoquePage", () => {
 
     await user.click(screen.getByRole("tab", { name: "Serrado" }));
     expect(screen.getByRole("heading", { name: "Estoque serrado" })).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "20" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exibir comprimentos de Cedrinho 2,5 × 15 cm" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("24 peças · 0,285 m³");
   });
 
   it("filtra o estoque serrado por essência, espessura, largura e comprimento", async () => {
@@ -79,7 +89,34 @@ describe("EstoquePage", () => {
     await user.type(screen.getByLabelText("Filtrar espessura serrada"), "2,5");
     await user.type(screen.getByLabelText("Filtrar largura serrada"), "15");
     await user.type(screen.getByLabelText("Filtrar comprimento serrado"), "3");
-    expect(screen.getByRole("cell", { name: "Cedrinho" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Exibir comprimentos de Cedrinho 2,5 × 15 cm" })).toBeInTheDocument();
+    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("20 peças · 0,225 m³");
+  });
+
+  it("expande uma medida para mostrar os saldos de cada comprimento", async () => {
+    const user = userEvent.setup();
+    render(<EstoquePage />);
+    await user.click(screen.getByRole("tab", { name: "Serrado" }));
+
+    const grupo = screen.getByRole("button", { name: "Exibir comprimentos de Cedrinho 2,5 × 15 cm" });
+    await user.click(grupo);
+
+    expect(grupo).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText("3 m")).toBeInTheDocument();
+    expect(screen.getByText("4 m")).toBeInTheDocument();
+  });
+
+  it("destaca o saldo negativo criado por uma entrega sem disponibilidade", async () => {
+    const user = userEvent.setup();
+    estoqueResumoQuery.mockImplementation(() => ({ data: [
+      { madeiraNome: "Itaúba", espessura: "3.00", largura: "5.00", comprimento: "2.00", quantidadeDisponivel: -2, volumeDisponivel: "-0.003000" },
+    ], isLoading: false }));
+    render(<EstoquePage />);
+    await user.click(screen.getByRole("tab", { name: "Serrado" }));
+
+    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("-2 peças · -0,003 m³");
+    expect(screen.getByRole("cell", { name: "-2" })).toHaveClass("text-destructive");
+    expect(screen.getByRole("button", { name: "Exibir comprimentos de Itaúba 3 × 5 cm" })).toBeInTheDocument();
   });
 
   it("calcula frete por metro cúbico, totaliza a carga e mantém valores contidos nos cartões", async () => {

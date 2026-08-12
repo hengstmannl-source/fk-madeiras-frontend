@@ -257,8 +257,8 @@ export type InsertItemRomaneioProducao = typeof itensRomaneioProducao.$inferInse
 
 export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   id: int("id").autoincrement().primaryKey(),
-  romaneioId: int("romaneioId").notNull(),
-  itemRomaneioId: int("itemRomaneioId").notNull().unique(),
+  romaneioId: int("romaneioId"),
+  itemRomaneioId: int("itemRomaneioId").unique(),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
   largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
@@ -267,7 +267,7 @@ export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   quantidadeDisponivel: int("quantidadeDisponivel").notNull(),
   metrosLineares: decimal("metrosLineares", { precision: 14, scale: 4 }).notNull(),
   volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
-  estado: mysqlEnum("estado", ["disponivel", "esgotado", "cancelado"]).notNull().default("disponivel"),
+  estado: mysqlEnum("estado", ["disponivel", "esgotado", "cancelado", "negativo"]).notNull().default("disponivel"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

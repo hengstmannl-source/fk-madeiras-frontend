@@ -23,7 +23,7 @@ vi.mock("@/lib/trpc", () => ({
     orcamento: {
       list: { useQuery: () => ({ data: [state.venda], isLoading: false }) },
       registrarPagamento: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
-      entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4 }); } }) },
+      entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2 }); } }) },
       estornarEntrega: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; motivo: string }, callbacks: { onSuccess?: (resultado: { pecasDevolvidas: number }) => void }) => { state.estornar(input); callbacks.onSuccess?.({ pecasDevolvidas: 4 }); } }) },
     },
   },
@@ -58,6 +58,7 @@ describe("OrcamentosAprovadosPage — entrega física", () => {
     await user.click(screen.getByRole("button", { name: "Registrar entrega" }));
     expect(screen.getByRole("heading", { name: "Confirmar entrega física" })).toBeInTheDocument();
     expect(screen.getByText(/recebimento da venda já foi confirmado/i)).toBeInTheDocument();
+    expect(screen.getByText(/saldo negativo para regularização/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Confirmar entrega e baixa" }));
     expect(state.entregar).toHaveBeenCalledWith({ id: 25 });

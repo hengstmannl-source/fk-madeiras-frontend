@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Trash2, TreePine, Upload, Warehouse } from "lucide-react";
+import { Box, ChevronDown, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Trash2, TreePine, Upload, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -75,6 +75,7 @@ export default function EstoquePage() {
   const [categoria, setCategoria] = useState<"toras" | "serrado">("toras");
   const [filtrosCargas, setFiltrosCargas] = useState({ dataInicial: "", dataFinal: "", origem: "" });
   const [filtrosSerrado, setFiltrosSerrado] = useState({ essencia: "", espessura: "", largura: "", comprimento: "" });
+  const [gruposSerradoExpandidos, setGruposSerradoExpandidos] = useState<Set<string>>(() => new Set());
   const [buscaPlaquetas, setBuscaPlaquetas] = useState("");
   const [deslocamentoPlaquetas, setDeslocamentoPlaquetas] = useState(0);
   const [dialogCarga, setDialogCarga] = useState(false);
@@ -108,6 +109,26 @@ export default function EstoquePage() {
       && correspondeMedida(item.comprimento, filtrosSerrado.comprimento)
     ));
   }, [filtrosSerrado, serrado.data]);
+  const gruposSerradoVisiveis = useMemo(() => {
+    const grupos = new Map<string, { chave: string; madeiraNome: string; espessura: number; largura: number; quantidadeDisponivel: number; volumeDisponivel: number; itens: any[] }>();
+    serradoVisivel.forEach((item: any) => {
+      const espessura = num(item.espessura);
+      const largura = num(item.largura);
+      const chave = [String(item.madeiraNome ?? "").trim().toLocaleUpperCase("pt-BR"), espessura.toFixed(2), largura.toFixed(2)].join("|");
+      const grupo: { chave: string; madeiraNome: string; espessura: number; largura: number; quantidadeDisponivel: number; volumeDisponivel: number; itens: any[] } = grupos.get(chave) ?? { chave, madeiraNome: item.madeiraNome, espessura, largura, quantidadeDisponivel: 0, volumeDisponivel: 0, itens: [] as any[] };
+      grupo.quantidadeDisponivel += num(item.quantidadeDisponivel);
+      grupo.volumeDisponivel += num(item.volumeDisponivel);
+      grupo.itens.push(item);
+      grupos.set(chave, grupo);
+    });
+    return Array.from(grupos.values())
+      .map((grupo) => ({ ...grupo, volumeDisponivel: Number(grupo.volumeDisponivel.toFixed(6)), itens: grupo.itens.sort((a, b) => num(a.comprimento) - num(b.comprimento)) }))
+      .sort((a, b) => a.madeiraNome.localeCompare(b.madeiraNome, "pt-BR") || a.espessura - b.espessura || a.largura - b.largura);
+  }, [serradoVisivel]);
+  const totaisSerradoFiltrado = useMemo(() => serradoVisivel.reduce((totais, item: any) => ({
+    quantidade: totais.quantidade + num(item.quantidadeDisponivel),
+    volume: totais.volume + num(item.volumeDisponivel),
+  }), { quantidade: 0, volume: 0 }), [serradoVisivel]);
   const criarCarga = trpc.producao.cargas.create.useMutation();
   const atualizarCarga = trpc.producao.cargas.update.useMutation();
   const excluirCarga = trpc.producao.cargas.excluir.useMutation();
@@ -160,6 +181,12 @@ export default function EstoquePage() {
   });
   const removerPlaqueta = (indice: number) => setCarga((anterior) => ({ ...anterior, plaquetas: anterior.plaquetas.filter((_, posicao) => posicao !== indice) }));
   const carregarPdf = (id: number) => window.open(`/api/pdf/romaneio-carga/${id}`, "_blank", "noopener,noreferrer");
+  const alternarGrupoSerrado = (chave: string) => setGruposSerradoExpandidos((anteriores) => {
+    const proximos = new Set(anteriores);
+    if (proximos.has(chave)) proximos.delete(chave);
+    else proximos.add(chave);
+    return proximos;
+  });
   const confirmarExclusao = () => {
     if (!cargaParaExcluir) return;
     const cargaExcluida = cargaParaExcluir;
@@ -242,7 +269,7 @@ export default function EstoquePage() {
       <section className="overflow-hidden rounded-xl border bg-card shadow-sm"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-end sm:justify-between"><div><h2 className="font-semibold">Plaquetas no estoque</h2><p className="mt-0.5 text-xs text-muted-foreground">Exibindo 10 entradas por vez. Pesquise por plaqueta ou essência para localizar uma tora.</p></div><div className="w-full sm:max-w-xs"><Campo label="Pesquisar plaqueta ou essência"><Input aria-label="Pesquisar plaqueta ou essência" value={buscaPlaquetas} onChange={(evento) => { setBuscaPlaquetas(evento.target.value); setDeslocamentoPlaquetas(0); }} placeholder="Código ou essência" /></Campo></div></div>{plaquetas.isLoading ? <Carregando /> : plaquetasVisiveis.length ? <><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Código</TableHead><TableHead>Essência</TableHead><TableHead className="text-right">Diâmetro</TableHead><TableHead className="text-right">Comprimento</TableHead><TableHead className="text-right">Volume</TableHead><TableHead className="text-right">R$/m³</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Estado</TableHead></TableRow></TableHeader><TableBody>{plaquetasVisiveis.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.codigo}</TableCell><TableCell>{item.madeiraNome}</TableCell><TableCell className="text-right">{item.diametro ? `${formatarNumero(item.diametro, 2)} cm` : "—"}</TableCell><TableCell className="text-right">{item.comprimento ? `${formatarNumero(item.comprimento, 2)} m` : "—"}</TableCell><TableCell className="text-right">{formatarNumero(item.volumeDisponivel)} m³</TableCell><TableCell className="text-right">{formatarMoeda(item.valorMetroCubico)}</TableCell><TableCell className="text-right font-medium">{formatarMoeda(item.valorTotal)}</TableCell><TableCell><EstadoTora estado={item.estado} /></TableCell></TableRow>)}</TableBody></Table></div><div className="flex flex-col gap-3 border-t bg-muted/10 px-5 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between"><span>Exibindo {deslocamentoPlaquetas + 1}–{deslocamentoPlaquetas + plaquetasVisiveis.length} de {plaquetas.data?.total ?? 0} plaqueta(s).</span><div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={deslocamentoPlaquetas === 0} onClick={() => setDeslocamentoPlaquetas((anterior) => Math.max(0, anterior - 10))}>Anteriores</Button><Button type="button" size="sm" variant="outline" disabled={plaquetas.data?.proximoDeslocamento === null} onClick={() => setDeslocamentoPlaquetas(plaquetas.data?.proximoDeslocamento ?? deslocamentoPlaquetas)}>Próximas 10</Button></div></div></> : <Vazio icone={<TreePine />} texto={buscaPlaquetas ? "Nenhuma plaqueta encontrada para a pesquisa." : "Nenhuma plaqueta recebida no estoque."} />}</section>
     </div>}
     {categoria === "serrado" && <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-      <div className="border-b bg-muted/20 px-5 py-4"><h2 className="font-semibold">Estoque serrado</h2><p className="mt-0.5 text-xs text-muted-foreground">Peças originadas em romaneios de produção e disponíveis para entrega física.</p></div>
+      <div className="border-b bg-muted/20 px-5 py-4"><h2 className="font-semibold">Estoque serrado</h2><p className="mt-0.5 text-xs text-muted-foreground">Peças originadas em romaneios de produção, agrupadas por essência e medida. Expanda cada grupo para consultar os comprimentos.</p></div>
       {serrado.isLoading ? <Carregando /> : !serrado.data?.length ? <Vazio icone={<Box />} texto="As peças confirmadas na Produção aparecerão aqui." /> : <>
         <div className="grid gap-3 border-b bg-muted/10 px-5 py-4 sm:grid-cols-2 lg:grid-cols-[1.3fr_1fr_1fr_1fr_auto] lg:items-end">
           <Campo label="Essência"><Input aria-label="Filtrar essência serrada" value={filtrosSerrado.essencia} onChange={(evento) => setFiltrosSerrado((anterior) => ({ ...anterior, essencia: evento.target.value }))} placeholder="Ex.: Cedrinho" /></Campo>
@@ -251,7 +278,11 @@ export default function EstoquePage() {
           <Campo label="Comprimento (m)"><Input aria-label="Filtrar comprimento serrado" inputMode="decimal" value={filtrosSerrado.comprimento} onChange={(evento) => setFiltrosSerrado((anterior) => ({ ...anterior, comprimento: evento.target.value }))} placeholder="Ex.: 2,50" /></Campo>
           <Button type="button" variant="ghost" size="sm" disabled={!Object.values(filtrosSerrado).some(Boolean)} onClick={() => setFiltrosSerrado({ essencia: "", espessura: "", largura: "", comprimento: "" })}>Limpar filtros</Button>
         </div>
-        {serradoVisivel.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Essência</TableHead><TableHead className="text-right">Espessura</TableHead><TableHead className="text-right">Largura</TableHead><TableHead className="text-right">Comprimento</TableHead><TableHead className="text-right">Peças</TableHead><TableHead className="text-right">Volume</TableHead></TableRow></TableHeader><TableBody>{serradoVisivel.map((item: any, indice: number) => <TableRow key={`${item.madeiraNome}-${item.espessura}-${item.largura}-${item.comprimento}-${indice}`}><TableCell className="font-medium">{item.madeiraNome}</TableCell><TableCell className="text-right">{formatarNumero(item.espessura, 2)} cm</TableCell><TableCell className="text-right">{formatarNumero(item.largura, 2)} cm</TableCell><TableCell className="text-right">{formatarNumero(item.comprimento, 2)} m</TableCell><TableCell className="text-right">{item.quantidadeDisponivel}</TableCell><TableCell className="text-right">{formatarNumero(item.volumeDisponivel)} m³</TableCell></TableRow>)}</TableBody></Table></div> : <Vazio icone={<Box />} texto="Nenhuma peça encontrada para os filtros informados." />}
+        {serradoVisivel.length ? <><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Essência e medida</TableHead><TableHead className="text-right">Comprimentos</TableHead><TableHead className="text-right">Peças</TableHead><TableHead className="text-right">Volume</TableHead></TableRow></TableHeader><TableBody>{gruposSerradoVisiveis.map((grupo) => {
+          const expandido = gruposSerradoExpandidos.has(grupo.chave);
+          const medida = `${formatarNumero(grupo.espessura, 2)} × ${formatarNumero(grupo.largura, 2)} cm`;
+          return <GrupoEstoqueSerrado key={grupo.chave} grupo={grupo} expandido={expandido} medida={medida} onAlternar={() => alternarGrupoSerrado(grupo.chave)} />;
+        })}</TableBody></Table></div><div data-testid="total-filtrado-serrado" className="flex flex-col gap-1 border-t bg-primary/[0.035] px-5 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"><span className="font-medium text-foreground">Total filtrado</span><span className="tabular-nums text-muted-foreground"><strong className="text-foreground">{formatarNumero(totaisSerradoFiltrado.quantidade, 0)} {Math.abs(totaisSerradoFiltrado.quantidade) === 1 ? "peça" : "peças"}</strong> · <strong className="text-foreground">{formatarNumero(totaisSerradoFiltrado.volume)} m³</strong></span></div></> : <Vazio icone={<Box />} texto="Nenhuma peça encontrada para os filtros informados." />}
       </>}
     </section>}
     <Dialog open={dialogCarga} onOpenChange={(aberto) => { if (!aberto) fecharDialogo(); else setDialogCarga(true); }}>
@@ -331,6 +362,22 @@ function IndicadorCarga({ rotulo, valor, destaque = false }: { rotulo: string; v
 function Resumo({ icone, titulo, valor, detalhe, cor }: { icone: React.ReactNode; titulo: string; valor: React.ReactNode; detalhe: string; cor: "sky" | "emerald" | "amber" | "violet" }) {
   const cores = { sky: "bg-sky-50 text-sky-700", emerald: "bg-emerald-50 text-emerald-700", amber: "bg-amber-50 text-amber-700", violet: "bg-violet-50 text-violet-700" };
   return <div className="rounded-xl border bg-card p-4 shadow-sm"><div className="flex items-start justify-between"><div><p className="text-xs font-medium text-muted-foreground">{titulo}</p><p className="mt-2 text-2xl font-bold tracking-tight">{valor}</p><p className="mt-1 text-xs text-muted-foreground">{detalhe}</p></div><div className={`rounded-lg p-2.5 ${cores[cor]}`}>{icone}</div></div></div>;
+}
+
+function GrupoEstoqueSerrado({ grupo, expandido, medida, onAlternar }: { grupo: { madeiraNome: string; quantidadeDisponivel: number; volumeDisponivel: number; itens: any[] }; expandido: boolean; medida: string; onAlternar: () => void }) {
+  const rotulo = `${grupo.madeiraNome} ${medida}`;
+  const negativo = grupo.quantidadeDisponivel < 0;
+  return <>
+    <TableRow className={negativo ? "bg-destructive/[0.05] hover:bg-destructive/[0.08]" : "bg-muted/[0.18] hover:bg-muted/[0.32]"}>
+      <TableCell colSpan={2} className="p-0"><button type="button" className="flex w-full items-center gap-3 px-5 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring" aria-label={`${expandido ? "Ocultar" : "Exibir"} comprimentos de ${rotulo}`} aria-expanded={expandido} onClick={onAlternar}><ChevronDown className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 ${expandido ? "rotate-0" : "-rotate-90"}`} /><span className="min-w-0"><span className="block truncate font-semibold">{grupo.madeiraNome}</span><span className="block text-xs text-muted-foreground">Medida {medida}</span></span></button></TableCell>
+      <TableCell className={`text-right font-semibold tabular-nums ${negativo ? "text-destructive" : ""}`}>{formatarNumero(grupo.quantidadeDisponivel, 0)}</TableCell>
+      <TableCell className={`text-right font-semibold tabular-nums ${negativo ? "text-destructive" : ""}`}>{formatarNumero(grupo.volumeDisponivel)} m³</TableCell>
+    </TableRow>
+    {expandido && grupo.itens.map((item: any, indice: number) => {
+      const saldoNegativo = num(item.quantidadeDisponivel) < 0;
+      return <TableRow key={`${grupo.madeiraNome}-${item.comprimento}-${indice}`} className={saldoNegativo ? "bg-destructive/[0.035]" : ""}><TableCell className="pl-12 text-sm text-muted-foreground">↳ Comprimento</TableCell><TableCell className="text-right text-sm font-medium tabular-nums">{formatarNumero(item.comprimento, 2)} m</TableCell><TableCell className={`text-right tabular-nums ${saldoNegativo ? "font-semibold text-destructive" : ""}`}>{formatarNumero(item.quantidadeDisponivel, 0)}</TableCell><TableCell className={`text-right tabular-nums ${saldoNegativo ? "font-semibold text-destructive" : ""}`}>{formatarNumero(item.volumeDisponivel)} m³</TableCell></TableRow>;
+    })}
+  </>;
 }
 
 function Carregando() { return <div className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Carregando estoque...</div>; }

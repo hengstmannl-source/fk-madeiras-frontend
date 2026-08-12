@@ -123,6 +123,7 @@ export function agruparEstoquePecas(lotes: Array<{
   largura: string | number;
   comprimento: string | number;
   quantidadeDisponivel: number;
+  quantidadeProduzida?: number;
   volume: string | number;
 }>) {
   const grupos = new Map<string, { madeiraNome: string; espessura: number; largura: number; comprimento: number; quantidadeDisponivel: number; volumeDisponivel: number }>();
@@ -133,7 +134,9 @@ export function agruparEstoquePecas(lotes: Array<{
     const chave = [lote.madeiraNome.trim().toLocaleUpperCase("pt-BR"), espessura, largura, comprimento].join("|");
     const existente = grupos.get(chave) ?? { madeiraNome: lote.madeiraNome, espessura, largura, comprimento, quantidadeDisponivel: 0, volumeDisponivel: 0 };
     existente.quantidadeDisponivel += lote.quantidadeDisponivel;
-    const volumeUnitario = numero(lote.volume) / Math.max(lote.quantidadeDisponivel, 1);
+    const quantidadeProduzida = Math.abs(Number(lote.quantidadeProduzida ?? 0));
+    const quantidadeDeReferencia = quantidadeProduzida > 0 ? quantidadeProduzida : Math.max(Math.abs(lote.quantidadeDisponivel), 1);
+    const volumeUnitario = numero(lote.volume) / quantidadeDeReferencia;
     existente.volumeDisponivel += volumeUnitario * lote.quantidadeDisponivel;
     grupos.set(chave, existente);
   });
@@ -159,6 +162,15 @@ export type LoteParaEntrega = {
   createdAt?: Date;
 };
 
+export type DeficitParaEntrega = {
+  itemVendaId: number;
+  madeiraNome: string;
+  espessura: string | number;
+  largura: string | number;
+  comprimento: string | number;
+  quantidade: number;
+};
+
 function chaveDimensao(item: Pick<ItemVendaParaEntrega, "madeiraNome" | "espessura" | "largura" | "comprimento">): string {
   return [
     item.madeiraNome.trim().toLocaleUpperCase("pt-BR"),
@@ -168,7 +180,7 @@ function chaveDimensao(item: Pick<ItemVendaParaEntrega, "madeiraNome" | "espessu
   ].join("|");
 }
 
-export function alocarPecasParaEntrega(itens: ItemVendaParaEntrega[], lotes: LoteParaEntrega[]) {
+export function alocarPecasPermitindoNegativo(itens: ItemVendaParaEntrega[], lotes: LoteParaEntrega[]) {
   const lotesPorDimensao = new Map<string, LoteParaEntrega[]>();
   [...lotes]
     .filter((lote) => lote.quantidadeDisponivel > 0)
@@ -182,6 +194,7 @@ export function alocarPecasParaEntrega(itens: ItemVendaParaEntrega[], lotes: Lot
 
   const consumoLocal = new Map<number, number>();
   const alocacoes: Array<{ itemVendaId: number; loteId: number; quantidade: number }> = [];
+  const deficits: DeficitParaEntrega[] = [];
   for (const item of itens) {
     if (!Number.isInteger(item.quantidade) || item.quantidade <= 0) throw new Error("A quantidade do item de venda precisa ser um número inteiro positivo");
     let restante = item.quantidade;
@@ -196,10 +209,17 @@ export function alocarPecasParaEntrega(itens: ItemVendaParaEntrega[], lotes: Lot
       restante -= quantidade;
       if (!restante) break;
     }
-    if (restante) {
-      const descricao = `${item.madeiraNome} ${numero(item.espessura)}×${numero(item.largura)}×${numero(item.comprimento)} m`;
-      throw new Error(`Estoque insuficiente para entregar ${item.quantidade} peça(s) de ${descricao}`);
-    }
+    if (restante) deficits.push({ itemVendaId: item.id, madeiraNome: item.madeiraNome, espessura: item.espessura, largura: item.largura, comprimento: item.comprimento, quantidade: restante });
   }
-  return alocacoes;
+  return { alocacoes, deficits };
+}
+
+export function alocarPecasParaEntrega(itens: ItemVendaParaEntrega[], lotes: LoteParaEntrega[]) {
+  const resultado = alocarPecasPermitindoNegativo(itens, lotes);
+  if (resultado.deficits.length) {
+    const deficit = resultado.deficits[0];
+    const descricao = `${deficit.madeiraNome} ${numero(deficit.espessura)}×${numero(deficit.largura)}×${numero(deficit.comprimento)} m`;
+    throw new Error(`Estoque insuficiente para entregar ${deficit.quantidade} peça(s) de ${descricao}`);
+  }
+  return resultado.alocacoes;
 }

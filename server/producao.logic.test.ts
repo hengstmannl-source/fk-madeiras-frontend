@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alocarPecasParaEntrega, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
+import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
 
 describe("regras de produção", () => {
   it("calcula metros lineares e volume a partir de centímetros, metros e peças", () => {
@@ -67,6 +67,12 @@ describe("regras de produção", () => {
     ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidadeDisponivel: 15, volumeDisponivel: 0.16875 }]);
   });
 
+  it("mantém o volume proporcional quando o saldo de um lote fica negativo", () => {
+    expect(agruparEstoquePecas([
+      { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeProduzida: 10, quantidadeDisponivel: -4, volume: "0.112500" },
+    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidadeDisponivel: -4, volumeDisponivel: -0.045 }]);
+  });
+
   it("aloca peças FIFO entre lotes equivalentes e bloqueia a entrega sem saldo", () => {
     const lotes = [
       { id: 2, madeiraNome: "Cedrinho", espessura: "2.50", largura: "15", comprimento: "3", quantidadeDisponivel: 3, createdAt: new Date(2026, 7, 2) },
@@ -77,5 +83,16 @@ describe("regras de produção", () => {
       { itemVendaId: 9, loteId: 2, quantidade: 2 },
     ]);
     expect(() => alocarPecasParaEntrega([{ id: 9, madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 6 }], lotes)).toThrow(/Estoque insuficiente/);
+  });
+
+  it("mantém a entrega e informa o déficit quando a quantidade vendida excede o saldo", () => {
+    const resultado = alocarPecasPermitindoNegativo([
+      { id: 9, madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 5 },
+    ], [
+      { id: 1, madeiraNome: "Cedrinho", espessura: "2.50", largura: "15", comprimento: "3", quantidadeDisponivel: 2, createdAt: new Date(2026, 7, 1) },
+    ]);
+
+    expect(resultado.alocacoes).toEqual([{ itemVendaId: 9, loteId: 1, quantidade: 2 }]);
+    expect(resultado.deficits).toEqual([{ itemVendaId: 9, madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 3 }]);
   });
 });

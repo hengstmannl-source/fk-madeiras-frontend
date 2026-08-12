@@ -15,7 +15,7 @@ import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
-import { alocarPecasParaEntrega, agruparEstoquePecas, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
+import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -1733,7 +1733,7 @@ export async function getResumoEstoqueSerrado() {
   const db = await getDb();
   if (!db) return [];
   const lotes = await db.select().from(lotesPecasSerradas);
-  return agruparEstoquePecas(lotes.filter((lote) => lote.estado === "disponivel" && lote.quantidadeDisponivel > 0));
+  return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado" && lote.quantidadeDisponivel !== 0));
 }
 
 export async function entregarVendaFisicamente(vendaId: number, userId: number, dependencias?: { database?: any }) {
@@ -1750,8 +1750,9 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       tx.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId)),
       tx.select().from(lotesPecasSerradas),
     ]);
-    const alocacoes = alocarPecasParaEntrega(itens, lotes);
+    const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itens, lotes);
     const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
+    const movimentacoes: Array<{ itemVendaId: number; loteId: number; quantidade: number }> = [];
     for (const alocacao of alocacoes) {
       const lote = lotesPorId.get(alocacao.loteId);
       if (!lote) throw new Error("Lote de peças não encontrado durante a entrega");
@@ -1766,6 +1767,39 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
         motivo: `Entrega física da venda ${venda.numero ?? venda.id}`,
         criadoPor: userId,
       });
+      movimentacoes.push(alocacao);
+    }
+    for (const deficit of deficits) {
+      const dimensoes = calcularItemRomaneio({
+        madeiraNome: deficit.madeiraNome,
+        espessura: deficit.espessura,
+        largura: deficit.largura,
+        comprimento: deficit.comprimento,
+        quantidade: deficit.quantidade,
+      });
+      const insercao = await tx.insert(lotesPecasSerradas).values({
+        romaneioId: null,
+        itemRomaneioId: null,
+        madeiraNome: dimensoes.madeiraNome,
+        espessura: dimensoes.espessura.toFixed(2),
+        largura: dimensoes.largura.toFixed(2),
+        comprimento: dimensoes.comprimento.toFixed(2),
+        quantidadeProduzida: 0,
+        quantidadeDisponivel: -dimensoes.quantidade,
+        metrosLineares: dimensoes.metrosLineares.toFixed(4),
+        volume: dimensoes.volume.toFixed(6),
+        estado: "negativo",
+      });
+      const loteId = getInsertedId(insercao as MysqlInsertResult);
+      await tx.insert(movimentacoesEstoqueSerrado).values({
+        loteId,
+        itemVendaId: deficit.itemVendaId,
+        tipo: "saida_entrega",
+        quantidade: deficit.quantidade,
+        motivo: `Entrega física sem saldo da venda ${venda.numero ?? venda.id}`,
+        criadoPor: userId,
+      });
+      movimentacoes.push({ itemVendaId: deficit.itemVendaId, loteId, quantidade: deficit.quantidade });
     }
     const entregueEm = new Date();
     await tx.update(orcamentos).set({ entregue: true, entregueEm, entreguePor: userId }).where(eq(orcamentos.id, vendaId));
@@ -1773,9 +1807,9 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       orcamentoId: vendaId,
       usuarioId: userId,
       tipo: "alteracao" as any,
-      detalhes: JSON.stringify({ acao: "entrega_fisica_confirmada", entregueEm: entregueEm.toISOString(), alocacoes }),
+      detalhes: JSON.stringify({ acao: "entrega_fisica_confirmada", entregueEm: entregueEm.toISOString(), alocacoes: movimentacoes }),
     });
-    return { success: true, entregueEm, pecasEntregues: alocacoes.reduce((total, alocacao) => total + alocacao.quantidade, 0) };
+    return { success: true, entregueEm, pecasEntregues: movimentacoes.reduce((total, alocacao) => total + alocacao.quantidade, 0), pecasSemEstoque: deficits.reduce((total, deficit) => total + deficit.quantidade, 0) };
   });
 }
 
@@ -1796,7 +1830,7 @@ export async function estornarEntregaVenda(vendaId: number, userId: number, moti
       const lote = lotesPorId.get(saida.loteId);
       if (!lote) throw new Error("Lote de peças não encontrado durante o estorno");
       const saldo = Number(lote.quantidadeDisponivel) + saida.quantidade;
-      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
+      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: saldo === 0 ? "esgotado" : saldo < 0 ? "negativo" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
       await tx.insert(movimentacoesEstoqueSerrado).values({ loteId: lote.id, itemVendaId: saida.itemVendaId, tipo: "estorno_entrega", quantidade: saida.quantidade, motivo: motivo.trim(), criadoPor: userId });
     }
     await tx.update(orcamentos).set({ entregue: false, entregueEm: null, entreguePor: null }).where(eq(orcamentos.id, vendaId));

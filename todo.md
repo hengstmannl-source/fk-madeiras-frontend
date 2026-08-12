@@ -209,3 +209,8 @@
 - [x] Corrigir os totais e rótulos iniciais exibidos na listagem de romaneios diários de Produção
 - [x] Adicionar filtros de estoque serrado por essência, espessura, largura e comprimento/bitola
 - [x] Cobrir e validar visualmente a listagem de Produção e os filtros de estoque serrado
+- [x] Exibir o total de peças e o volume após a aplicação de filtros no estoque serrado
+- [x] Agrupar o estoque serrado por essência e medida, com expansão por comprimento
+- [x] Integrar a confirmação de venda à baixa do estoque serrado por peça e comprimento
+- [x] Exibir saldos negativos controlados para itens vendidos sem disponibilidade em estoque
+- [x] Cobrir a agrupação, a baixa por venda e os saldos negativos com testes e validação visual
