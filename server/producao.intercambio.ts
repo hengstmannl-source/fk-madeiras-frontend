@@ -2,6 +2,7 @@ import { normalizarCodigoPlaqueta } from "./producao.logic";
 
 export const CABECALHOS_CSV_TORAS_PRODUCAO = ["plaqueta", "essencia", "diametro_cm", "comprimento_m", "volume_m3"] as const;
 export const CABECALHOS_CSV_PECAS_PRODUCAO = ["essencia", "espessura_cm", "largura_cm", "comprimento_m", "quantidade"] as const;
+export const COLUNAS_MODELO_MATRIZ_PECAS = ["2,3x5", "2,3x10", "2,3x15", "2,3x20", "2,3x25", "2,3x30", "5x11", "5x5"] as const;
 
 export type LinhaImportacaoToraProducao = {
   codigo: string;
@@ -73,7 +74,7 @@ export function criarModeloCsvTorasProducao(): string {
 }
 
 export function criarModeloCsvPecasProducao(): string {
-  return `\uFEFF${CABECALHOS_CSV_PECAS_PRODUCAO.join(";")}\nCedrinho;3;5;2;11`;
+  return `\uFEFFessencia;comprimento_m;${COLUNAS_MODELO_MATRIZ_PECAS.join(";")}\nCedrinho;2,0;35;36;17;3;7;2;0;0\nCedrinho;2,5;18;29;5;8;5;0;2;0\nCedrinho;3,0;17;29;13;14;5;23;3;0`;
 }
 
 export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): { linhas: LinhaImportacaoToraProducao[]; erros: string[] } {
@@ -109,10 +110,7 @@ export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): {
   return erros.length ? { linhas: [], erros } : { linhas, erros: [] };
 }
 
-export function validarCsvPecasProducao(conteudo: string, maximoLinhas = 1000): { itens: LinhaImportacaoPecaProducao[]; erros: string[] } {
-  if (conteudo.length > 1_000_000) return { itens: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
-  let tabela: string[][];
-  try { tabela = lerLinhasCsv(conteudo); } catch (erro) { return { itens: [], erros: [erro instanceof Error ? erro.message : "Não foi possível ler o CSV"] }; }
+function validarFormatoLongoPecas(tabela: string[][], maximoLinhas: number): { itens: LinhaImportacaoPecaProducao[]; erros: string[] } {
   const cabecalho = (tabela.shift() ?? []).map((campo) => campo.replace(/^\uFEFF/, "").trim().toLowerCase());
   const indices = CABECALHOS_CSV_PECAS_PRODUCAO.map((campo) => cabecalho.indexOf(campo));
   if (indices.some((indice) => indice < 0)) return { itens: [], erros: [`Use o modelo CSV com os cabeçalhos: ${CABECALHOS_CSV_PECAS_PRODUCAO.join(", ")}`] };
@@ -137,6 +135,56 @@ export function validarCsvPecasProducao(conteudo: string, maximoLinhas = 1000): 
     } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: dados inválidos`); }
   });
   return erros.length ? { itens: [], erros } : { itens, erros: [] };
+}
+
+function lerBitolaMatriz(coluna: string): { espessura: string; largura: string } | null {
+  const partes = coluna.trim().toLowerCase().replace(/\s+/g, "").split(/[x×]/);
+  if (partes.length !== 2) return null;
+  const espessura = decimalOpcional(partes[0], "a espessura", 1);
+  const largura = decimalOpcional(partes[1], "a largura", 1);
+  return espessura && largura ? { espessura, largura } : null;
+}
+
+function validarMatrizPecas(tabela: string[][], maximoLinhas: number): { itens: LinhaImportacaoPecaProducao[]; erros: string[] } {
+  const cabecalho = (tabela.shift() ?? []).map((campo) => campo.replace(/^\uFEFF/, "").trim());
+  const indiceEssencia = cabecalho.findIndex((campo) => campo.toLowerCase() === "essencia");
+  const indiceComprimento = cabecalho.findIndex((campo) => campo.toLowerCase() === "comprimento_m");
+  if (indiceEssencia < 0 || indiceComprimento < 0) return { itens: [], erros: ["Use o modelo matricial com as colunas essencia, comprimento_m e as bitolas no formato espessuraxlargura (ex.: 2,3x5)"] };
+  const bitolas = cabecalho.map((coluna, indice) => ({ indice, coluna, medida: indice === indiceEssencia || indice === indiceComprimento ? null : lerBitolaMatriz(coluna) }));
+  const invalidas = bitolas.filter((bitola) => bitola.indice !== indiceEssencia && bitola.indice !== indiceComprimento && !bitola.medida);
+  if (invalidas.length) return { itens: [], erros: [`Cabeçalho inválido: use bitolas no formato espessuraxlargura. Problema em: ${invalidas.map((bitola) => bitola.coluna || "coluna vazia").join(", ")}`] };
+  const dados = tabela.filter((linha) => linha.some((campo) => campo.trim()));
+  if (!dados.length) return { itens: [], erros: ["O arquivo CSV não possui peças para importar"] };
+  const itens: LinhaImportacaoPecaProducao[] = [];
+  const erros: string[] = [];
+  dados.forEach((linha, indice) => {
+    const numeroLinha = indice + 2;
+    const madeiraNome = (linha[indiceEssencia] ?? "").trim();
+    if (madeiraNome.length < 2) { erros.push(`Linha ${numeroLinha}: informe a essência`); return; }
+    let comprimento: string | undefined;
+    try { comprimento = decimalOpcional(linha[indiceComprimento] ?? "", "o comprimento", numeroLinha); } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: comprimento inválido`); return; }
+    if (!comprimento) { erros.push(`Linha ${numeroLinha}: informe o comprimento`); return; }
+    bitolas.filter((bitola) => bitola.medida).forEach((bitola) => {
+      const textoQuantidade = (linha[bitola.indice] ?? "").trim();
+      if (!textoQuantidade) return;
+      const quantidade = Number(textoQuantidade.replace(",", "."));
+      if (!Number.isInteger(quantidade) || quantidade < 0) { erros.push(`Linha ${numeroLinha}, bitola ${bitola.coluna}: informe uma quantidade inteira igual ou maior que zero`); return; }
+      if (quantidade > 0) itens.push({ madeiraNome, espessura: bitola.medida!.espessura, largura: bitola.medida!.largura, comprimento, quantidade });
+    });
+  });
+  if (itens.length > maximoLinhas) erros.push(`O limite por importação é de ${maximoLinhas} registros de bitolas`);
+  if (!itens.length && !erros.length) erros.push("A matriz não possui quantidades de peças maiores que zero");
+  return erros.length ? { itens: [], erros } : { itens, erros: [] };
+}
+
+export function validarCsvPecasProducao(conteudo: string, maximoLinhas = 1000): { itens: LinhaImportacaoPecaProducao[]; erros: string[] } {
+  if (conteudo.length > 1_000_000) return { itens: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
+  let tabela: string[][];
+  try { tabela = lerLinhasCsv(conteudo); } catch (erro) { return { itens: [], erros: [erro instanceof Error ? erro.message : "Não foi possível ler o CSV"] }; }
+  const cabecalho = (tabela[0] ?? []).map((campo) => campo.replace(/^\uFEFF/, "").trim().toLowerCase());
+  return CABECALHOS_CSV_PECAS_PRODUCAO.every((campo) => cabecalho.includes(campo))
+    ? validarFormatoLongoPecas(tabela, maximoLinhas)
+    : validarMatrizPecas(tabela, maximoLinhas);
 }
 
 export function prepararImportacaoTorasProducao(input: { conteudo: string; plaquetas: PlaquetaDisponivel[] }) {

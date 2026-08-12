@@ -133,6 +133,11 @@ export const producaoRouter = router({
       dataProducao: dataLocal(input.dataProducao),
       criadoPor: ctx.user.id,
     })),
+    update: protectedProcedure.input(RomaneioSchema.omit({ toras: true }).extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.atualizarRomaneioProducao(input.id, {
+      ...input,
+      dataProducao: dataLocal(input.dataProducao),
+      atualizadoPor: ctx.user.id,
+    })),
   }),
   estoque: router({
     resumo: protectedProcedure.query(() => db.getResumoEstoqueSerrado()),

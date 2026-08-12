@@ -31,10 +31,23 @@ describe("intercâmbio de plaquetas para produção", () => {
   });
 
   it("fornece modelo e importa peças serradas com medidas brasileiras", () => {
-    expect(criarModeloCsvPecasProducao()).toContain("essencia;espessura_cm;largura_cm;comprimento_m;quantidade");
+    expect(criarModeloCsvPecasProducao()).toContain("essencia;comprimento_m;2,3x5;2,3x10");
     expect(validarCsvPecasProducao("essencia;espessura_cm;largura_cm;comprimento_m;quantidade\nCedrinho;3;5;2,5;11")).toEqual({
       itens: [expect.objectContaining({ madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2.5", quantidade: 11 })],
       erros: [],
+    });
+  });
+
+  it("converte a matriz da planilha operacional em itens por bitola e comprimento", () => {
+    const resultado = validarCsvPecasProducao("essencia;comprimento_m;2,3x5;2,3x10;5x11\nCedrinho;2,0;35;36;0\nCedrinho;2,5;18;0;2");
+
+    expect(resultado).toEqual({
+      erros: [],
+      itens: expect.arrayContaining([
+        expect.objectContaining({ madeiraNome: "Cedrinho", espessura: "2.3", largura: "5", comprimento: "2", quantidade: 35 }),
+        expect.objectContaining({ madeiraNome: "Cedrinho", espessura: "2.3", largura: "10", comprimento: "2", quantidade: 36 }),
+        expect.objectContaining({ madeiraNome: "Cedrinho", espessura: "5", largura: "11", comprimento: "2.5", quantidade: 2 }),
+      ]),
     });
   });
 

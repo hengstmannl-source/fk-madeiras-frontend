@@ -1610,6 +1610,100 @@ export async function confirmarRomaneioProducao(data: {
   });
 }
 
+export async function atualizarRomaneioProducao(id: number, data: {
+  dataProducao: Date;
+  fita?: string | null;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  itens: ItemProducaoEntrada[];
+  atualizadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const romaneio = (await tx.select().from(romaneiosProducao).where(eq(romaneiosProducao.id, id)).limit(1))[0];
+    if (!romaneio) throw new Error("Romaneio de produção não encontrado");
+
+    const lotes = await tx.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.romaneioId, id));
+    for (const lote of lotes) {
+      const movimentosPosteriores = await tx.select({ id: movimentacoesEstoqueSerrado.id }).from(movimentacoesEstoqueSerrado)
+        .where(and(eq(movimentacoesEstoqueSerrado.loteId, lote.id), ne(movimentacoesEstoqueSerrado.tipo, "entrada_producao"))).limit(1);
+      if (movimentosPosteriores[0] || lote.quantidadeDisponivel !== lote.quantidadeProduzida) {
+        throw new Error("Este romaneio possui peças já movimentadas no estoque e não pode ser editado. Regularize as saídas antes de alterar a produção.");
+      }
+    }
+
+    const torasRegistradas = await tx.select().from(itensRomaneioToras).where(eq(itensRomaneioToras.romaneioId, id));
+    if (!torasRegistradas.length) throw new Error("O romaneio não possui toras rastreáveis para recalcular o aproveitamento");
+    const toras = [] as Array<{ plaqueta: typeof plaquetas.$inferSelect; tora: { madeiraNome: string; diametro: string | null; comprimento: string | null; volume: string } }>;
+    for (const toraRegistrada of torasRegistradas) {
+      const plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, toraRegistrada.plaquetaId)).limit(1))[0];
+      if (!plaqueta) throw new Error("Uma plaqueta vinculada a este romaneio não foi encontrada");
+      toras.push({
+        plaqueta,
+        tora: {
+          madeiraNome: toraRegistrada.madeiraNome,
+          diametro: toraRegistrada.diametro,
+          comprimento: toraRegistrada.comprimento,
+          volume: toraRegistrada.volume,
+        },
+      });
+    }
+    const calculo = validarConfirmacaoRomaneio({ toras, itens: data.itens });
+
+    for (const lote of lotes) {
+      await tx.delete(movimentacoesEstoqueSerrado).where(eq(movimentacoesEstoqueSerrado.loteId, lote.id));
+    }
+    await tx.delete(lotesPecasSerradas).where(eq(lotesPecasSerradas.romaneioId, id));
+    await tx.delete(itensRomaneioProducao).where(eq(itensRomaneioProducao.romaneioId, id));
+
+    await tx.update(romaneiosProducao).set({
+      dataProducao: data.dataProducao,
+      fita: data.fita?.trim() || null,
+      responsavel: data.responsavel?.trim() || null,
+      observacoes: data.observacoes?.trim() || null,
+      volumeTora: calculo.volumeTora.toFixed(6),
+      aproveitamento: calculo.aproveitamento.toFixed(2),
+    }).where(eq(romaneiosProducao.id, id));
+
+    for (const item of calculo.itens) {
+      const dimensoes = {
+        madeiraNome: item.madeiraNome,
+        espessura: item.espessura.toFixed(2),
+        largura: item.largura.toFixed(2),
+        comprimento: item.comprimento.toFixed(2),
+      };
+      const insercaoItem = await tx.insert(itensRomaneioProducao).values({
+        romaneioId: id,
+        ...dimensoes,
+        quantidade: item.quantidade,
+        metrosLineares: item.metrosLineares.toFixed(4),
+        volume: item.volume.toFixed(6),
+      });
+      const itemRomaneioId = getInsertedId(insercaoItem as MysqlInsertResult);
+      const insercaoLote = await tx.insert(lotesPecasSerradas).values({
+        romaneioId: id,
+        itemRomaneioId,
+        ...dimensoes,
+        quantidadeProduzida: item.quantidade,
+        quantidadeDisponivel: item.quantidade,
+        metrosLineares: item.metrosLineares.toFixed(4),
+        volume: item.volume.toFixed(6),
+        estado: "disponivel",
+      });
+      const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
+      await tx.insert(movimentacoesEstoqueSerrado).values({
+        loteId,
+        tipo: "entrada_producao",
+        quantidade: item.quantidade,
+        motivo: `Entrada revisada do romaneio ${romaneio.numero}`,
+        criadoPor: data.atualizadoPor,
+      });
+    }
+    return { id, numero: romaneio.numero, ...calculo };
+  });
+}
+
 export async function getResumoEstoqueSerrado() {
   const db = await getDb();
   if (!db) return [];

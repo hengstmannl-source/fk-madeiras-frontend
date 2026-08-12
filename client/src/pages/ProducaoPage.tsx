@@ -47,12 +47,14 @@ export default function ProducaoPage() {
   const [arquivoImportacaoPecas, setArquivoImportacaoPecas] = useState<File | null>(null);
   const [errosImportacaoPecas, setErrosImportacaoPecas] = useState<string[]>([]);
   const [romaneio, setRomaneio] = useState<RomaneioForm>(novoRomaneio);
+  const [romaneioEmEdicaoId, setRomaneioEmEdicaoId] = useState<number | null>(null);
   const [itemEmEdicao, setItemEmEdicao] = useState<ItemForm>(novoItem);
   const utils = trpc.useUtils();
   const plaquetas = trpc.producao.plaquetas.list.useQuery({ busca: codigoPlaqueta.trim() ? normalizarCodigo(codigoPlaqueta) : undefined, limite: 10 });
   const romaneios = trpc.producao.romaneios.list.useQuery();
   const estoque = trpc.producao.estoque.resumo.useQuery();
   const confirmarRomaneio = trpc.producao.romaneios.confirmar.useMutation();
+  const atualizarRomaneio = trpc.producao.romaneios.update.useMutation();
   const modeloTorasCsv = trpc.producao.romaneios.modeloTorasCsv.useQuery(undefined, { enabled: false });
   const importarTorasCsv = trpc.producao.romaneios.importarTorasCsv.useMutation();
   const modeloPecasCsv = trpc.producao.romaneios.modeloPecasCsv.useQuery(undefined, { enabled: false });
@@ -75,7 +77,22 @@ export default function ProducaoPage() {
     utils.producao.romaneios.list.invalidate();
     utils.producao.estoque.resumo.invalidate();
   };
-  const abrirRomaneio = () => { setEtapa("toras"); setCodigoPlaqueta(""); setItemEmEdicao(novoItem()); setRomaneio(novoRomaneio()); setDialogRomaneio(true); };
+  const abrirRomaneio = () => { setRomaneioEmEdicaoId(null); setEtapa("toras"); setCodigoPlaqueta(""); setItemEmEdicao(novoItem()); setRomaneio(novoRomaneio()); setDialogRomaneio(true); };
+  const abrirEdicaoRomaneio = async (id: number) => {
+    try {
+      const detalhe: any = await utils.producao.romaneios.detalhe.fetch({ id });
+      const dataProducao = new Date(detalhe.romaneio.dataProducao).toISOString().slice(0, 10);
+      const toras: ToraForm[] = (detalhe.toras ?? []).map((tora: any) => ({
+        plaquetaId: String(tora.plaquetaId), codigo: tora.codigo ?? tora.plaquetaCodigo ?? `Plaqueta ${tora.plaquetaId}`,
+        madeiraNome: String(tora.madeiraNome ?? ""), diametro: String(tora.diametro ?? ""), comprimento: String(tora.comprimento ?? ""),
+        volume: String(tora.volume ?? ""), origem: "estoque" as const,
+      }));
+      const itens: ItemForm[] = (detalhe.itens ?? []).map((item: any) => ({ madeiraNome: String(item.madeiraNome ?? ""), espessura: String(item.espessura ?? ""), largura: String(item.largura ?? ""), comprimento: String(item.comprimento ?? ""), quantidade: String(item.quantidade ?? "") }));
+      setRomaneio({ toras, dataProducao, fita: detalhe.romaneio.fita ?? "", responsavel: detalhe.romaneio.responsavel ?? "", observacoes: detalhe.romaneio.observacoes ?? "", itens });
+      setItemEmEdicao(itens.at(-1) ? { ...itens.at(-1)! } : novoItem(toras[0]?.madeiraNome ?? ""));
+      setRomaneioEmEdicaoId(id); setCodigoPlaqueta(""); setEtapa("pecas"); setDialogRomaneio(true);
+    } catch (erro: any) { toast.error(erro.message ?? "Não foi possível abrir o romaneio para edição"); }
+  };
   const abrirImportacao = () => { setArquivoImportacao(null); setErrosImportacao([]); setDialogImportacao(true); };
   const abrirImportacaoPecas = () => { setArquivoImportacaoPecas(null); setErrosImportacaoPecas([]); setDialogImportacaoPecas(true); };
   const baixarModeloImportacao = async () => {
@@ -135,6 +152,7 @@ export default function ProducaoPage() {
     } catch { toast.error("Não foi possível ler o arquivo selecionado"); }
   };
   const adicionarTora = () => {
+    if (romaneioEmEdicaoId) { toast.error("As toras de um romaneio confirmado permanecem bloqueadas para preservar a rastreabilidade"); return; }
     const codigoNormalizado = normalizarCodigo(codigoPlaqueta);
     if (!codigoNormalizado) { toast.error("Digite o código da plaqueta"); return; }
     if (romaneio.toras.some((tora) => normalizarCodigo(tora.codigo) === codigoNormalizado)) {
@@ -161,9 +179,9 @@ export default function ProducaoPage() {
     setRomaneio((atual) => ({ ...atual, toras: [...atual.toras, tora], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: tora.madeiraNome }) }));
     setCodigoPlaqueta("");
   };
-  const atualizarTora = (indice: number, campo: keyof ToraForm, valor: string) => setRomaneio((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, [campo]: valor } : tora) }));
-  const removerTora = (indice: number) => setRomaneio((atual) => ({ ...atual, toras: atual.toras.filter((_, posicao) => posicao !== indice) }));
-  const usarVolumeCalculado = (indice: number) => setRomaneio((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, volume: calcularVolumeTora(tora.diametro, tora.comprimento).toFixed(6) } : tora) }));
+  const atualizarTora = (indice: number, campo: keyof ToraForm, valor: string) => { if (romaneioEmEdicaoId) return; setRomaneio((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, [campo]: valor } : tora) })); };
+  const removerTora = (indice: number) => { if (romaneioEmEdicaoId) return; setRomaneio((atual) => ({ ...atual, toras: atual.toras.filter((_, posicao) => posicao !== indice) })); };
+  const usarVolumeCalculado = (indice: number) => { if (romaneioEmEdicaoId) return; setRomaneio((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, volume: calcularVolumeTora(tora.diametro, tora.comprimento).toFixed(6) } : tora) })); };
   const prepararEtapaPecas = () => {
     setItemEmEdicao((atual) => atual.madeiraNome.trim() ? atual : novoItem(romaneio.toras[0]?.madeiraNome ?? ""));
     setEtapa("pecas");
@@ -185,14 +203,30 @@ export default function ProducaoPage() {
   const removerBitola = (indice: number) => setRomaneio((atual) => ({ ...atual, itens: atual.itens.filter((_, posicao) => posicao !== indice) }));
   const salvarRomaneio = () => {
     if (!romaneio.itens.length) { toast.error("Adicione ao menos uma bitola produzida antes de confirmar"); return; }
+    const dadosProducao = {
+      dataProducao: romaneio.dataProducao,
+      fita: romaneio.fita,
+      responsavel: romaneio.responsavel,
+      observacoes: romaneio.observacoes,
+      itens: romaneio.itens.map((item) => ({ ...item, quantidade: Number(item.quantidade) })),
+    };
+    const aoSalvar = (resultado: any, mensagem: string) => {
+      toast.success(`${resultado.numero} ${mensagem} · aproveitamento de ${formatarNumero(resultado.aproveitamento, 2)}%`);
+      setDialogRomaneio(false); setRomaneioEmEdicaoId(null); invalidar();
+    };
+    if (romaneioEmEdicaoId) {
+      atualizarRomaneio.mutate({ id: romaneioEmEdicaoId, ...dadosProducao }, {
+        onSuccess: (resultado) => aoSalvar(resultado, "atualizado"), onError: (erro) => toast.error(erro.message),
+      });
+      return;
+    }
     confirmarRomaneio.mutate({
-    ...romaneio,
+    ...dadosProducao,
     toras: romaneio.toras.map((tora) => tora.origem === "entrada_imediata"
       ? { novaPlaqueta: { codigo: tora.codigo }, tora: { madeiraNome: tora.madeiraNome, diametro: tora.diametro || null, comprimento: tora.comprimento || null, volume: tora.volume } }
       : { plaquetaId: Number(tora.plaquetaId), tora: { madeiraNome: tora.madeiraNome, diametro: tora.diametro || null, comprimento: tora.comprimento || null, volume: tora.volume } }),
-    itens: romaneio.itens.map((item) => ({ ...item, quantidade: Number(item.quantidade) })),
     }, {
-    onSuccess: (resultado) => { toast.success(`${resultado.numero} confirmado · aproveitamento de ${formatarNumero(resultado.aproveitamento, 2)}%`); setDialogRomaneio(false); invalidar(); },
+    onSuccess: (resultado) => aoSalvar(resultado, "confirmado"),
     onError: (erro) => toast.error(erro.message),
     });
   };
@@ -200,7 +234,7 @@ export default function ProducaoPage() {
   return <div className="mx-auto w-full min-w-0 max-w-7xl space-y-6">
     <header className="flex flex-col items-stretch justify-between gap-4 md:flex-row md:items-end"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Chão de fábrica</p><h1 className="mt-1 text-2xl font-bold tracking-tight">Produção diária</h1><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Registre todas as plaquetas serradas no dia, ajuste as medidas efetivas e informe as peças produzidas para acompanhar o aproveitamento real.</p></div><Button className="w-full shrink-0 md:w-auto" onClick={abrirRomaneio}><Scissors className="mr-2 h-4 w-4" />Nova produção diária</Button></header>
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><Resumo icon={<TreePine />} titulo="Toras disponíveis" valor={torasDisponiveis.length} detalhe="Prontas para serragem" cor="emerald" /><Resumo icon={<Factory />} titulo="Romaneios" valor={(romaneios.data ?? []).length} detalhe="Produção confirmada" cor="sky" /><Resumo icon={<Layers3 />} titulo="Peças em estoque" valor={(estoque.data ?? []).reduce((total: number, item: any) => total + item.quantidadeDisponivel, 0)} detalhe="Disponíveis para entrega" cor="amber" /><Resumo icon={<BarChart3 />} titulo="Volume serrado" valor={`${formatarNumero((estoque.data ?? []).reduce((total: number, item: any) => total + item.volumeDisponivel, 0))} m³`} detalhe="Saldo por dimensões" cor="violet" /></div>
-    <section className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm"><Cabecalho titulo="Romaneios diários" texto="Cada romaneio consolida as toras serradas, as peças produzidas e o aproveitamento do dia." />{romaneios.isLoading ? <Carregando /> : romaneios.data?.length ? <TabelaRomaneios romaneios={romaneios.data} /> : <Vazio icone={<Scissors />} texto="Nenhuma produção diária confirmada. Primeiro, registre as toras em Estoque." />}</section>
+    <section className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-sm"><Cabecalho titulo="Romaneios diários" texto="Cada romaneio consolida as toras serradas, as peças produzidas e o aproveitamento do dia." />{romaneios.isLoading ? <Carregando /> : romaneios.data?.length ? <TabelaRomaneios romaneios={romaneios.data} onEditar={abrirEdicaoRomaneio} /> : <Vazio icone={<Scissors />} texto="Nenhuma produção diária confirmada. Primeiro, registre as toras em Estoque." />}</section>
 
     <Dialog open={dialogRomaneio} onOpenChange={setDialogRomaneio}><DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] min-w-0 max-w-6xl overflow-x-hidden overflow-y-auto p-4 sm:p-6"><DialogHeader className="min-w-0"><DialogTitle className="break-words">Romaneio de produção diária</DialogTitle><DialogDescription>Informe as toras serradas e as peças produzidas para calcular o aproveitamento diário.</DialogDescription></DialogHeader><div className="min-w-0 space-y-5"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950">Adicione as plaquetas serradas no dia. Os dados do estoque são sugeridos, mas podem ser corrigidos neste romaneio para representar o volume efetivamente aproveitado.</div><Tabs value={etapa} onValueChange={(valor) => setEtapa(valor as typeof etapa)}><TabsList className="grid w-full grid-cols-2"><TabsTrigger value="toras">1. Toras serradas</TabsTrigger><TabsTrigger value="pecas" disabled={!romaneio.toras.length}>2. Peças produzidas</TabsTrigger></TabsList></Tabs>
       {etapa === "toras" ? <div className="space-y-4"><div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-4"><Campo label="Data da produção *"><Input type="date" value={romaneio.dataProducao} onChange={(e) => setRomaneio({ ...romaneio, dataProducao: e.target.value })} /></Campo><Campo label="Fita / linha"><Input value={romaneio.fita} onChange={(e) => setRomaneio({ ...romaneio, fita: e.target.value })} placeholder="Ex.: Fita 1" /></Campo><Campo label="Responsável"><Input value={romaneio.responsavel} onChange={(e) => setRomaneio({ ...romaneio, responsavel: e.target.value })} placeholder="Nome do responsável" /></Campo><Campo label="Toras no romaneio"><div className="flex h-9 items-center rounded-md border bg-muted/20 px-3 text-sm font-semibold">{romaneio.toras.length} plaqueta(s)</div></Campo></div>
@@ -219,4 +253,9 @@ function Indicador({ texto, valor, destaque }: { texto: string; valor: ReactNode
 function Acoes({ cancelar, confirmar, carregando, texto }: { cancelar: () => void; confirmar: () => void; carregando: boolean; texto: string }) { return <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row"><Button className="w-full sm:w-auto" variant="outline" onClick={cancelar} disabled={carregando}>Cancelar</Button><Button className="w-full sm:w-auto" onClick={confirmar} disabled={carregando}>{carregando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{texto}</Button></div>; }
 function Carregando() { return <div className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Carregando...</div>; }
 function Vazio({ icone, texto }: { icone: ReactNode; texto: string }) { return <div className="flex min-w-0 flex-col items-center gap-3 px-4 py-10 text-center text-muted-foreground"><div className="shrink-0 rounded-full bg-muted p-3">{icone}</div><p className="max-w-sm break-words text-sm">{texto}</p></div>; }
-function TabelaRomaneios({ romaneios }: { romaneios: any[] }) { return <div className="w-full max-w-full overflow-x-auto"><Table className="min-w-[680px]"><TableHeader><TableRow><TableHead>Romaneio</TableHead><TableHead>Data / toras</TableHead><TableHead>Produção</TableHead><TableHead>Aproveitamento</TableHead><TableHead className="text-right">Documento</TableHead></TableRow></TableHeader><TableBody>{romaneios.map((item) => <TableRow key={item.id}><TableCell><p className="font-medium">{item.numero}</p><p className="text-xs text-muted-foreground">{item.fita ?? "Sem fita"}</p></TableCell><TableCell><p>{formatarData(item.dataProducao)} · {item.totalToras ?? 1} tora(s)</p><p className="text-xs text-muted-foreground">{formatarNumero(item.volumeTora ?? item.volumePlaqueta)} m³ de toras</p></TableCell><TableCell><p>{item.totalPecas} peças</p><p className="text-xs text-muted-foreground">{formatarNumero(item.volumeProduzido)} m³</p></TableCell><TableCell><Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">{formatarNumero(item.aproveitamento ?? 0, 2)}%</Badge></TableCell><TableCell className="text-right"><Button size="sm" variant="outline" onClick={() => window.open(`/api/pdf/romaneio/${item.id}`, "_blank", "noopener,noreferrer")}><FileText className="mr-1.5 h-3.5 w-3.5" />PDF</Button></TableCell></TableRow>)}</TableBody></Table></div>; }
+function TabelaRomaneios({ romaneios, onEditar }: { romaneios: any[]; onEditar: (id: number) => void }) {
+  return <>
+    <div className="space-y-3 p-3 sm:hidden">{romaneios.map((item) => <article key={item.id} className="rounded-lg border bg-card p-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{item.numero}</p><p className="text-xs text-muted-foreground">{formatarData(item.dataProducao)} · {item.totalToras ?? 1} tora(s)</p></div><Badge variant="outline" className="shrink-0 border-emerald-200 bg-emerald-50 text-emerald-700">{formatarNumero(item.aproveitamento ?? 0, 2)}%</Badge></div><div className="mt-3 grid grid-cols-2 gap-2 text-xs"><div><p className="text-muted-foreground">Toras</p><p className="font-medium">{formatarNumero(item.volumeTora ?? item.volumePlaqueta)} m³</p></div><div><p className="text-muted-foreground">Produção</p><p className="font-medium">{item.totalPecas} peças · {formatarNumero(item.volumeProduzido)} m³</p></div></div><div className="mt-3 grid grid-cols-2 gap-2"><Button size="sm" variant="outline" onClick={() => onEditar(item.id)}>Editar</Button><Button size="sm" variant="outline" onClick={() => window.open(`/api/pdf/romaneio/${item.id}`, "_blank", "noopener,noreferrer")}><FileText className="mr-1.5 h-3.5 w-3.5" />PDF</Button></div></article>)}</div>
+    <div className="hidden w-full max-w-full overflow-x-auto sm:block"><Table className="min-w-[760px]"><TableHeader><TableRow><TableHead>Romaneio</TableHead><TableHead>Data / toras</TableHead><TableHead>Produção</TableHead><TableHead>Aproveitamento</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{romaneios.map((item) => <TableRow key={item.id}><TableCell><p className="font-medium">{item.numero}</p><p className="text-xs text-muted-foreground">{item.fita ?? "Sem fita"}</p></TableCell><TableCell><p>{formatarData(item.dataProducao)} · {item.totalToras ?? 1} tora(s)</p><p className="text-xs text-muted-foreground">{formatarNumero(item.volumeTora ?? item.volumePlaqueta)} m³ de toras</p></TableCell><TableCell><p>{item.totalPecas} peças</p><p className="text-xs text-muted-foreground">{formatarNumero(item.volumeProduzido)} m³</p></TableCell><TableCell><Badge variant="outline" className="border-emerald-200 bg-emerald-50 text-emerald-700">{formatarNumero(item.aproveitamento ?? 0, 2)}%</Badge></TableCell><TableCell><div className="flex justify-end gap-2"><Button size="sm" variant="outline" onClick={() => onEditar(item.id)}>Editar</Button><Button size="sm" variant="outline" onClick={() => window.open(`/api/pdf/romaneio/${item.id}`, "_blank", "noopener,noreferrer")}><FileText className="mr-1.5 h-3.5 w-3.5" />PDF</Button></div></TableCell></TableRow>)}</TableBody></Table></div>
+  </>;
+}

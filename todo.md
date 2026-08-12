@@ -199,3 +199,8 @@
 - [x] Validar integralmente a planilha de peças antes de adicioná-las ao romaneio diário
 - [x] Adicionar modelo baixável, importação e feedback de erros à etapa de peças produzidas
 - [x] Cobrir e validar visualmente a importação de peças serradas por planilha
+- [x] Permitir editar romaneios de Produção Diária confirmados sem perder rastreabilidade de toras e peças
+- [x] Modelar lançamento de peças em matriz: colunas por espessura × largura e linhas por comprimento
+- [x] Adaptar a planilha de importação de peças ao formato matricial operacional do romaneio
+- [x] Oferecer prévia, validação e conversão da matriz em itens de peças antes de salvar
+- [x] Cobrir a edição e o lançamento matricial de peças com testes e validação visual
