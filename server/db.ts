@@ -1649,7 +1649,7 @@ export async function atualizarRomaneioProducao(id: number, data: {
         },
       });
     }
-    const calculo = validarConfirmacaoRomaneio({ toras, itens: data.itens });
+    const calculo = validarConfirmacaoRomaneio({ toras, itens: data.itens, permitirPlaquetasConsumidas: true });
 
     for (const lote of lotes) {
       await tx.delete(movimentacoesEstoqueSerrado).where(eq(movimentacoesEstoqueSerrado.loteId, lote.id));

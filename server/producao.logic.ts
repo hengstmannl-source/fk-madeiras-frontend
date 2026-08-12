@@ -78,6 +78,7 @@ export function validarConfirmacaoRomaneio(input: {
   tora?: ToraParaRomaneio;
   toras?: Array<{ plaqueta: PlaquetaParaConfirmacao | null | undefined; tora: ToraParaRomaneio }>;
   itens: ItemProducaoEntrada[];
+  permitirPlaquetasConsumidas?: boolean;
 }) {
   const entradasToras = input.toras ?? (input.plaqueta && input.tora ? [{ plaqueta: input.plaqueta, tora: input.tora }] : []);
   if (!entradasToras.length) throw new Error("Selecione ao menos uma plaqueta para o romaneio");
@@ -85,14 +86,14 @@ export function validarConfirmacaoRomaneio(input: {
   const codigos = new Set<string>();
   const toras = entradasToras.map(({ plaqueta, tora }) => {
     if (!plaqueta) throw new Error("Selecione uma plaqueta para o romaneio");
-    if (plaqueta.estado !== "disponivel") throw new Error(`A plaqueta ${plaqueta.codigo} não está disponível para produção`);
+    if (!input.permitirPlaquetasConsumidas && plaqueta.estado !== "disponivel") throw new Error(`A plaqueta ${plaqueta.codigo} não está disponível para produção`);
     const codigo = normalizarCodigoPlaqueta(plaqueta.codigo);
     if (codigos.has(codigo)) throw new Error(`A plaqueta ${plaqueta.codigo} foi selecionada mais de uma vez`);
     codigos.add(codigo);
     const volume = numero(tora.volume);
     const volumeDisponivel = numero(plaqueta.volumeDisponivel);
     if (!tora.madeiraNome?.trim() || volume <= 0) throw new Error("Informe a essência e o volume válido de cada tora para o romaneio");
-    if (volume > volumeDisponivel + 0.000001) {
+    if (!input.permitirPlaquetasConsumidas && volume > volumeDisponivel + 0.000001) {
       throw new Error(`O volume informado para a plaqueta ${plaqueta.codigo} excede o volume disponível em estoque`);
     }
     return { plaqueta, tora, volume: Number(volume.toFixed(6)) };

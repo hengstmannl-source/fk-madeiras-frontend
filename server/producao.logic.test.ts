@@ -31,6 +31,16 @@ describe("regras de produção", () => {
     })).toThrow(/não está disponível/i);
   });
 
+  it("recalcula um romaneio em edição com suas próprias plaquetas consumidas", () => {
+    const resultado = validarConfirmacaoRomaneio({
+      plaqueta: { codigo: "PLQ-EDITADA", estado: "consumida", volumeDisponivel: "0" },
+      tora: { madeiraNome: "Piqui", volume: "1" },
+      itens: [{ madeiraNome: "Piqui", espessura: 3, largura: 20, comprimento: 2, quantidade: 1 }],
+      permitirPlaquetasConsumidas: true,
+    });
+    expect(resultado).toMatchObject({ totalToras: 1, volumeTora: 1, volumeProduzido: 0.012, aproveitamento: 1.2 });
+  });
+
   it("calcula o volume cilíndrico da tora pelo diâmetro em centímetros e comprimento em metros", () => {
     expect(calcularVolumeToraCilindrica("50", "4")).toBeCloseTo(Math.PI * 0.25 ** 2 * 4, 8);
     expect(() => calcularVolumeToraCilindrica("0", "4")).toThrow(/diâmetro/i);

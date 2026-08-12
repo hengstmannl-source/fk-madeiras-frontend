@@ -204,3 +204,5 @@
 - [x] Adaptar a planilha de importação de peças ao formato matricial operacional do romaneio
 - [x] Oferecer prévia, validação e conversão da matriz em itens de peças antes de salvar
 - [x] Cobrir a edição e o lançamento matricial de peças com testes e validação visual
+- [x] Corrigir o salvamento da edição para aceitar as plaquetas já vinculadas e consumidas pelo próprio romaneio
+- [x] Cobrir a edição de um romaneio confirmado sem revalidar indevidamente a disponibilidade das suas plaquetas
