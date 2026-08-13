@@ -86,6 +86,13 @@ export const RecorrenciaSchema = z.object({
 export const financeiroRouter = router({
   fornecedores: router({
     list: protectedProcedure.query(() => db.listFornecedores()),
+    modeloCsv: protectedProcedure.query(() => db.getModeloImportacaoFornecedoresCsv()),
+    prepararImportacaoCsv: protectedProcedure.input(z.object({
+      conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
+    })).mutation(({ input }) => db.prepararImportacaoFornecedoresCsv(input.conteudo)),
+    importarCsv: protectedProcedure.input(z.object({
+      conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
+    })).mutation(({ ctx, input }) => db.importarFornecedoresCsv(input.conteudo, ctx.user.id)),
     create: protectedProcedure.input(FornecedorSchema).mutation(({ ctx, input }) => (
       db.createFornecedor({ ...input, criadoPor: ctx.user.id, ativo: true })
     )),

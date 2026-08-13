@@ -14,6 +14,7 @@ import {
 import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
+import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
@@ -494,6 +495,49 @@ export async function createFornecedor(data: InsertFornecedor) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(fornecedores).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export function getModeloImportacaoFornecedoresCsv() {
+  return criarModeloCsvFornecedores();
+}
+
+export async function prepararImportacaoFornecedoresCsv(
+  conteudo: string,
+  dependencias?: { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
+) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const fornecedoresExistentes = dependencias?.fornecedoresExistentes ?? await db.select({
+    id: fornecedores.id,
+    nome: fornecedores.nome,
+    email: fornecedores.email,
+    documento: fornecedores.documento,
+  }).from(fornecedores);
+  return prepararImportacaoFornecedores({ conteudo, fornecedoresExistentes });
+}
+
+export async function importarFornecedoresCsv(
+  conteudo: string,
+  userId: number,
+  dependencias?: { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
+) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const preparo = await prepararImportacaoFornecedoresCsv(conteudo, { database: db, fornecedoresExistentes: dependencias?.fornecedoresExistentes });
+  if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
+  await db.transaction(async (tx: any) => {
+    await tx.insert(fornecedores).values(preparo.linhas.map((linha) => ({
+      nome: linha.nome,
+      contacto: linha.contacto,
+      email: linha.email,
+      documento: linha.documento,
+      endereco: linha.endereco,
+      observacoes: linha.observacoes,
+      ativo: true,
+      criadoPor: userId,
+    })));
+  });
+  return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
 export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>) {

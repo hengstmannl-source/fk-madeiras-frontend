@@ -255,3 +255,6 @@
 - [x] Adicionar atalhos laterais diretos para Contas pagas e Contas recebidas
 - [x] Cobrir os grupos expansíveis e os novos atalhos com testes e validação visual
 - [x] Fazer os atalhos de Contas pagas e Contas recebidas exibirem diretamente seus históricos
+- [x] Disponibilizar modelo de planilha para importar fornecedores
+- [x] Validar dados, identificar duplicidades e importar fornecedores com pré-visualização
+- [x] Cobrir a importação de fornecedores com testes e validação visual
