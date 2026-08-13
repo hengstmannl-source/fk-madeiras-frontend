@@ -1,5 +1,5 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { BarChart3, ChevronLeft, Download, Factory, FileSpreadsheet, FileText, Layers3, Loader2, Plus, Scissors, TreePine, Upload, X } from "lucide-react";
+import { AlertTriangle, BarChart3, ChevronLeft, Download, Factory, FileSpreadsheet, FileText, Layers3, Loader2, Plus, Scissors, TreePine, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 
 type ItemForm = { madeiraNome: string; espessura: string; largura: string; comprimento: string; quantidade: string };
-type ToraForm = { plaquetaId: string; codigo: string; madeiraNome: string; diametro: string; comprimento: string; volume: string; origem: "estoque" | "entrada_imediata" };
+type ToraForm = { plaquetaId: string; codigo: string; madeiraNome: string; diametro: string; comprimento: string; volume: string; origem: "estoque" | "entrada_imediata"; exigeConferenciaManual: boolean };
 type RomaneioForm = { toras: ToraForm[]; dataProducao: string; fita: string; responsavel: string; observacoes: string; itens: ItemForm[] };
 
 const hoje = () => new Date().toISOString().slice(0, 10);
@@ -85,7 +85,7 @@ export default function ProducaoPage() {
       const toras: ToraForm[] = (detalhe.toras ?? []).map((tora: any) => ({
         plaquetaId: String(tora.plaquetaId), codigo: tora.codigo ?? tora.plaquetaCodigo ?? `Plaqueta ${tora.plaquetaId}`,
         madeiraNome: String(tora.madeiraNome ?? ""), diametro: String(tora.diametro ?? ""), comprimento: String(tora.comprimento ?? ""),
-        volume: String(tora.volume ?? ""), origem: "estoque" as const,
+        volume: String(tora.volume ?? ""), origem: "estoque" as const, exigeConferenciaManual: Boolean(tora.medidasConferidasManual),
       }));
       const itens: ItemForm[] = (detalhe.itens ?? []).map((item: any) => ({ madeiraNome: String(item.madeiraNome ?? ""), espessura: String(item.espessura ?? ""), largura: String(item.largura ?? ""), comprimento: String(item.comprimento ?? ""), quantidade: String(item.quantidade ?? "") }));
       setRomaneio({ toras, dataProducao, fita: detalhe.romaneio.fita ?? "", responsavel: detalhe.romaneio.responsavel ?? "", observacoes: detalhe.romaneio.observacoes ?? "", itens });
@@ -112,7 +112,7 @@ export default function ProducaoPage() {
           const repetidas = resultado.toras.filter((tora) => codigosAtuais.has(normalizarCodigo(tora.codigo)));
           if (repetidas.length) { setErrosImportacao(repetidas.map((tora) => `A plaqueta ${tora.codigo} já foi adicionada ao romaneio atual`)); toast.error("A planilha contém plaquetas já adicionadas ao romaneio."); return; }
           setRomaneio((atual) => {
-            const novasToras = resultado.toras.map((tora) => ({ ...tora, plaquetaId: tora.plaquetaId ? String(tora.plaquetaId) : "", origem: tora.origem }));
+            const novasToras: ToraForm[] = resultado.toras.map((tora: any) => ({ ...tora, plaquetaId: tora.plaquetaId ? String(tora.plaquetaId) : "", origem: tora.origem, exigeConferenciaManual: Boolean(tora.exigeConferenciaManual) }));
             const primeiraEssencia = novasToras[0]?.madeiraNome ?? "";
             return { ...atual, toras: [...atual.toras, ...novasToras], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: primeiraEssencia }) };
           });
@@ -161,23 +161,26 @@ export default function ProducaoPage() {
     }
     const plaqueta: any = torasDisponiveis.find((item: any) => normalizarCodigo(item.codigo) === codigoNormalizado);
     if (!plaqueta) {
-      const toraAvulsa: ToraForm = { plaquetaId: "", codigo: codigoNormalizado, madeiraNome: "", diametro: "", comprimento: "", volume: "", origem: "entrada_imediata" };
+      const toraAvulsa: ToraForm = { plaquetaId: "", codigo: codigoNormalizado, madeiraNome: "", diametro: "", comprimento: "", volume: "", origem: "entrada_imediata", exigeConferenciaManual: false };
       setRomaneio((atual) => ({ ...atual, toras: [...atual.toras, toraAvulsa] }));
       setCodigoPlaqueta("");
       toast.message("Plaqueta não encontrada no estoque. Informe os dados para registrar a entrada e o consumo imediato.");
       return;
     }
+    const exigeConferenciaManual = plaqueta.situacaoIdentificacao === "duplicada";
     const tora: ToraForm = {
       plaquetaId: String(plaqueta.id),
-      codigo: plaqueta.codigo,
-      madeiraNome: plaqueta.madeiraNome ?? "",
-      diametro: String(plaqueta.diametro ?? ""),
-      comprimento: String(plaqueta.comprimento ?? ""),
-      volume: String(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial ?? ""),
+      codigo: plaqueta.codigoFisico ?? plaqueta.codigo,
+      madeiraNome: exigeConferenciaManual ? "" : plaqueta.madeiraNome ?? "",
+      diametro: exigeConferenciaManual ? "" : String(plaqueta.diametro ?? ""),
+      comprimento: exigeConferenciaManual ? "" : String(plaqueta.comprimento ?? ""),
+      volume: exigeConferenciaManual ? "" : String(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial ?? ""),
       origem: "estoque",
+      exigeConferenciaManual,
     };
     setRomaneio((atual) => ({ ...atual, toras: [...atual.toras, tora], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: tora.madeiraNome }) }));
     setCodigoPlaqueta("");
+    if (exigeConferenciaManual) toast.warning("Há mais de uma tora com esta plaqueta. Preencha manualmente as medidas da tora selecionada antes de continuar.");
   };
   const atualizarTora = (indice: number, campo: keyof ToraForm, valor: string) => { if (romaneioEmEdicaoId) return; setRomaneio((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, [campo]: valor } : tora) })); };
   const removerTora = (indice: number) => { if (romaneioEmEdicaoId) return; setRomaneio((atual) => ({ ...atual, toras: atual.toras.filter((_, posicao) => posicao !== indice) })); };
@@ -223,8 +226,8 @@ export default function ProducaoPage() {
     confirmarRomaneio.mutate({
     ...dadosProducao,
     toras: romaneio.toras.map((tora) => tora.origem === "entrada_imediata"
-      ? { novaPlaqueta: { codigo: tora.codigo }, tora: { madeiraNome: tora.madeiraNome, diametro: tora.diametro || null, comprimento: tora.comprimento || null, volume: tora.volume } }
-      : { plaquetaId: Number(tora.plaquetaId), tora: { madeiraNome: tora.madeiraNome, diametro: tora.diametro || null, comprimento: tora.comprimento || null, volume: tora.volume } }),
+      ? { novaPlaqueta: { codigo: tora.codigo }, medidasConferidasManual: tora.exigeConferenciaManual, tora: { madeiraNome: tora.madeiraNome, diametro: tora.diametro || null, comprimento: tora.comprimento || null, volume: tora.volume } }
+      : { plaquetaId: Number(tora.plaquetaId), medidasConferidasManual: tora.exigeConferenciaManual, tora: { madeiraNome: tora.madeiraNome, diametro: tora.diametro || null, comprimento: tora.comprimento || null, volume: tora.volume } }),
     }, {
     onSuccess: (resultado) => aoSalvar(resultado, "confirmado"),
     onError: (erro) => toast.error(erro.message),

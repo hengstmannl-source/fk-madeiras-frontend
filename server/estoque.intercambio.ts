@@ -60,7 +60,6 @@ export function validarCsvPlaquetasCarga(conteudo: string, maximoLinhas = 200): 
   if (!dados.length) return { linhas: [], erros: ["O arquivo CSV não possui toras para importar"] };
   if (dados.length > maximoLinhas) return { linhas: [], erros: [`O limite por importação é de ${maximoLinhas} toras`] };
 
-  const codigos = new Set<string>();
   const linhas: LinhaImportacaoPlaquetaCarga[] = [];
   const erros: string[] = [];
   dados.forEach((colunas, indice) => {
@@ -74,9 +73,7 @@ export function validarCsvPlaquetasCarga(conteudo: string, maximoLinhas = 200): 
     const valorMetroCubico = normalizarDecimal(valor(indicesObrigatorios[4]), 2);
     const observacoes = indiceObservacoes >= 0 ? valor(indiceObservacoes) : "";
     const problemas: string[] = [];
-    if (codigo.length < 2 || codigo.length > 80) problemas.push("código obrigatório de 2 a 80 caracteres");
-    if (codigos.has(codigo)) problemas.push(`código "${codigo}" duplicado no arquivo`);
-    else if (codigo) codigos.add(codigo);
+    if (codigo && (codigo.length < 2 || codigo.length > 80)) problemas.push("código deve ter de 2 a 80 caracteres quando informado");
     if (madeiraNome.length < 2 || madeiraNome.length > 200) problemas.push("essência obrigatória de 2 a 200 caracteres");
     if (!diametro) problemas.push("diâmetro deve ser positivo, em cm, com até 2 casas decimais");
     if (!comprimento) problemas.push("comprimento deve ser positivo, em m, com até 3 casas decimais");
@@ -90,11 +87,16 @@ export function validarCsvPlaquetasCarga(conteudo: string, maximoLinhas = 200): 
 
 export function prepararImportacaoPlaquetasCarga(input: { conteudo: string; codigosExistentes: Array<{ codigo: string }> }) {
   const validacao = validarCsvPlaquetasCarga(input.conteudo);
-  if (validacao.erros.length) return { linhas: [], erros: validacao.erros };
+  if (validacao.erros.length) return { linhas: [], erros: validacao.erros, avisos: [] as string[] };
   const existentes = new Set(input.codigosExistentes.map((item) => normalizarCodigoPlaqueta(item.codigo)));
-  const erros: string[] = [];
+  const contagemNoArquivo = new Map<string, number>();
   validacao.linhas.forEach((linha) => {
-    if (existentes.has(linha.codigo)) erros.push(`Linha ${linha.numeroLinha}: a plaqueta "${linha.codigo}" já está cadastrada no estoque`);
+    if (linha.codigo) contagemNoArquivo.set(linha.codigo, (contagemNoArquivo.get(linha.codigo) ?? 0) + 1);
   });
-  return { linhas: erros.length ? [] : validacao.linhas, erros };
+  const avisos: string[] = [];
+  validacao.linhas.forEach((linha) => {
+    if (!linha.codigo) avisos.push(`Linha ${linha.numeroLinha}: sem plaqueta física; o sistema criará uma identificação interna.`);
+    else if (existentes.has(linha.codigo) || (contagemNoArquivo.get(linha.codigo) ?? 0) > 1) avisos.push(`Linha ${linha.numeroLinha}: plaqueta física "${linha.codigo}" duplicada; a tora ficará destacada e exigirá conferência manual na produção.`);
+  });
+  return { linhas: validacao.linhas, erros: [] as string[], avisos };
 }

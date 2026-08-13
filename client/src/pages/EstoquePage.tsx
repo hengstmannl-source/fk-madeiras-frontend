@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Box, ChevronDown, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Trash2, TreePine, Upload, Warehouse } from "lucide-react";
+import { AlertTriangle, Box, ChevronDown, ClipboardList, Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, Trash2, TreePine, Upload, Warehouse } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
 import { useAuth } from "@/_core/hooks/useAuth";
@@ -67,6 +67,12 @@ function EstadoTora({ estado }: { estado: string }) {
   return <Badge variant="outline" className={estado === "disponivel" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "bg-muted text-muted-foreground"}>{rotulos[estado] ?? estado}</Badge>;
 }
 
+function IdentificacaoTora({ item }: { item: { codigo: string; codigoFisico?: string | null; situacaoIdentificacao?: string } }) {
+  if (item.situacaoIdentificacao === "duplicada") return <div className="min-w-[10rem] space-y-1"><p className="font-medium">{item.codigoFisico ?? item.codigo}</p><Badge className="border-amber-300 bg-amber-50 text-amber-900"><AlertTriangle className="mr-1 h-3 w-3" />Duplicada</Badge><p className="font-mono text-[10px] text-muted-foreground">Interna: {item.codigo}</p></div>;
+  if (item.situacaoIdentificacao === "sem_plaqueta") return <div className="min-w-[10rem] space-y-1"><Badge className="border-sky-300 bg-sky-50 text-sky-900">Sem plaqueta física</Badge><p className="font-mono text-[10px] text-muted-foreground">Interna: {item.codigo}</p></div>;
+  return <span className="font-medium">{item.codigoFisico ?? item.codigo}</span>;
+}
+
 function taxaFrete(item: any) {
   const taxaPersistida = num(item.fretePorMetroCubico);
   if (taxaPersistida || !num(item.frete)) return taxaPersistida;
@@ -89,6 +95,7 @@ export default function EstoquePage() {
   const [cabecalhoImportacao, setCabecalhoImportacao] = useState<CabecalhoCarga>(novoCabecalhoCarga);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
   const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
+  const [avisosImportacao, setAvisosImportacao] = useState<string[]>([]);
   const [novoFornecedorAberto, setNovoFornecedorAberto] = useState(false);
   const [nomeNovoFornecedor, setNomeNovoFornecedor] = useState("");
   const [contextoFornecedor, setContextoFornecedor] = useState<"carga" | "importacao" | null>(null);
@@ -177,7 +184,7 @@ export default function EstoquePage() {
       observacoes: detalhe.carga.observacoes ?? "",
       fretePorMetroCubico: String(taxaFrete(detalhe.carga)),
       plaquetas: detalhe.plaquetas.map((item: any) => ({
-        codigo: item.codigo,
+        codigo: item.codigoFisico ?? (item.situacaoIdentificacao === "sem_plaqueta" ? "" : item.codigo),
         madeiraNome: item.madeiraNome,
         diametro: String(item.diametro ?? ""),
         comprimento: String(item.comprimento ?? ""),
@@ -203,7 +210,7 @@ export default function EstoquePage() {
   const redefinirCarga = () => { carregouEdicao.current = null; setCarga(novaCarga()); setCargaEmEdicao(null); };
   const fecharDialogo = () => { setDialogCarga(false); redefinirCarga(); };
   const abrirNovoRomaneio = () => { redefinirCarga(); setDialogCarga(true); };
-  const abrirImportacao = () => { setCabecalhoImportacao(novoCabecalhoCarga()); setArquivoImportacao(null); setErrosImportacao([]); setDialogImportacao(true); };
+  const abrirImportacao = () => { setCabecalhoImportacao(novoCabecalhoCarga()); setArquivoImportacao(null); setErrosImportacao([]); setAvisosImportacao([]); setDialogImportacao(true); };
   const abrirEdicao = (id: number) => { carregouEdicao.current = null; setCarga(novaCarga()); setCargaEmEdicao(id); setDialogCarga(true); };
   const atualizarPlaqueta = (indice: number, campo: keyof PlaquetaCarga, valor: string) => setCarga((anterior) => ({ ...anterior, plaquetas: anterior.plaquetas.map((item, posicao) => posicao === indice ? { ...item, [campo]: valor } : item) }));
   const adicionarPlaqueta = () => setCarga((anterior) => {
@@ -254,11 +261,12 @@ export default function EstoquePage() {
         conteudo,
       }, {
         onSuccess: (resultado) => {
-          if (resultado.erros.length) { setErrosImportacao(resultado.erros); toast.error("A importação foi recusada. Revise as linhas indicadas."); return; }
+          if (resultado.erros.length) { setErrosImportacao(resultado.erros); setAvisosImportacao(resultado.avisos ?? []); toast.error("A importação foi recusada. Revise as linhas indicadas."); return; }
+          if (resultado.avisos?.length) toast.warning(`${resultado.avisos.length} tora(s) exigem atenção na identificação.`);
           toast.success(`${resultado.numero} criado com ${resultado.importados} tora(s)`);
           setDialogImportacao(false);
           setArquivoImportacao(null);
-          setErrosImportacao([]);
+          setErrosImportacao([]); setAvisosImportacao([]);
           utils.producao.cargas.list.invalidate();
           utils.producao.plaquetas.list.invalidate();
         },
@@ -343,16 +351,18 @@ export default function EstoquePage() {
             <div className="space-y-3">{carga.plaquetas.map((item, indice) => {
               const volume = volumeTora(item.diametro, item.comprimento);
               const valor = valorTora(item.diametro, item.comprimento, item.valorMetroCubico);
-              return <article key={indice} className="min-w-0 overflow-hidden rounded-xl border bg-muted/15 p-4">
+              const codigoRepetido = item.codigo.trim() && carga.plaquetas.filter((outra) => outra.codigo.trim().toLocaleUpperCase("pt-BR") === item.codigo.trim().toLocaleUpperCase("pt-BR")).length > 1;
+              return <article key={indice} className={`min-w-0 overflow-hidden rounded-xl border p-4 ${codigoRepetido ? "border-amber-300 bg-amber-50/50" : "bg-muted/15"}`}>
                 <div className="mb-4 flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between"><div className="min-w-0"><p className="text-sm font-semibold">Plaqueta {indice + 1}</p><p className="text-xs leading-4 text-muted-foreground">Informe a identificação, as medidas e o custo desta tora.</p></div><Button type="button" size="sm" variant="ghost" className="shrink-0 self-start text-muted-foreground" disabled={carga.plaquetas.length === 1} onClick={() => removerPlaqueta(indice)} aria-label={`Remover plaqueta ${indice + 1}`}>Remover</Button></div>
                 <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 lg:grid-cols-3">
-                  <Campo label="Código *"><Input value={item.codigo} onChange={(evento) => atualizarPlaqueta(indice, "codigo", evento.target.value)} placeholder="PLQ-001" /></Campo>
+                  <Campo label="Plaqueta física" ajuda="Opcional: sem ela, será criada uma identificação interna."><Input value={item.codigo} onChange={(evento) => atualizarPlaqueta(indice, "codigo", evento.target.value)} placeholder="PLQ-001" /></Campo>
                   <Campo label="Essência *"><Input value={item.madeiraNome} onChange={(evento) => atualizarPlaqueta(indice, "madeiraNome", evento.target.value)} placeholder="Ex.: Cedrinho" /></Campo>
                   <Campo label="Diâmetro (cm) *"><Input aria-label="Diâmetro (cm)" inputMode="decimal" value={item.diametro} onChange={(evento) => atualizarPlaqueta(indice, "diametro", evento.target.value)} placeholder="0,00" /></Campo>
                   <Campo label="Comprimento (m) *"><Input aria-label="Comprimento (m)" inputMode="decimal" value={item.comprimento} onChange={(evento) => atualizarPlaqueta(indice, "comprimento", evento.target.value)} placeholder="0,00" /></Campo>
                   <Campo label="Preço por m³ (R$) *"><Input aria-label="Preço por m³ (R$)" inputMode="decimal" value={item.valorMetroCubico} onChange={(evento) => atualizarPlaqueta(indice, "valorMetroCubico", evento.target.value)} placeholder="900,00" /></Campo>
                   <div className="grid min-w-0 grid-cols-2 gap-2 rounded-lg border bg-background p-3 min-[520px]:col-span-2 lg:col-span-1"><div className="min-w-0"><p className="text-[11px] leading-4 text-muted-foreground">Volume</p><p className="mt-1 break-words text-sm font-semibold tabular-nums">{formatarNumero(volume)} m³</p></div><div className="min-w-0 border-l pl-2"><p className="text-[11px] leading-4 text-muted-foreground">Valor da tora</p><p className="mt-1 break-words text-sm font-semibold tabular-nums text-emerald-700">{formatarMoeda(valor)}</p></div></div>
                 </div>
+                {codigoRepetido && <div className="mt-3 flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs leading-5 text-amber-950"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />Plaqueta física repetida neste romaneio. As toras serão registradas, destacadas no estoque e exigirão conferência manual das medidas antes do consumo na Produção Diária.</div>}
               </article>;
             })}</div>
             <Button type="button" variant="outline" onClick={adicionarPlaqueta}><Plus className="mr-2 h-4 w-4" />Adicionar plaqueta</Button>
@@ -362,11 +372,11 @@ export default function EstoquePage() {
         </div>
       </DialogContent>
     </Dialog>
-    <Dialog open={dialogImportacao} onOpenChange={(aberto) => { setDialogImportacao(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); } }}>
+    <Dialog open={dialogImportacao} onOpenChange={(aberto) => { setDialogImportacao(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); setAvisosImportacao([]); } }}>
       <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] overflow-y-auto p-4 sm:max-w-2xl sm:p-6">
-        <DialogHeader><DialogTitle>Importar toras por planilha</DialogTitle><DialogDescription>Crie um romaneio de carga usando uma planilha CSV compatível com Excel. Todos os dados são validados antes de qualquer entrada no estoque.</DialogDescription></DialogHeader>
+        <DialogHeader><DialogTitle>Importar toras por planilha</DialogTitle><DialogDescription>Crie um romaneio de carga usando uma planilha CSV compatível com Excel. Todos os dados são validados antes de qualquer entrada no estoque; códigos ausentes ou repetidos são aceitos e destacados para conferência.</DialogDescription></DialogHeader>
         <div className="space-y-5">
-          <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm leading-5 text-sky-950"><p className="font-medium">Formato esperado da planilha</p><p className="mt-1 text-xs">Código, essência, diâmetro em cm, comprimento em m, preço por m³ e observações opcionais. Baixe o modelo para manter os cabeçalhos corretos.</p></div>
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm leading-5 text-sky-950"><p className="font-medium">Formato esperado da planilha</p><p className="mt-1 text-xs">Código (opcional), essência, diâmetro em cm, comprimento em m, preço por m³ e observações opcionais. Códigos repetidos ficam destacados; ausência de código recebe identificação interna.</p></div>
           <Button variant="outline" size="sm" onClick={baixarModeloImportacao}><Download className="mr-2 h-4 w-4" />Baixar modelo CSV</Button>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Campo label="Data da carga *"><Input type="date" value={cabecalhoImportacao.dataCarga} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, dataCarga: evento.target.value }))} /></Campo>
@@ -376,9 +386,10 @@ export default function EstoquePage() {
             <Campo label="Origem"><Input value={cabecalhoImportacao.origem} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, origem: evento.target.value }))} placeholder="Fornecedor ou fazenda" /></Campo>
             <Campo label="Responsável"><Input value={cabecalhoImportacao.responsavel} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, responsavel: evento.target.value }))} placeholder="Quem recebeu" /></Campo>
           </div>
-          <Campo label="Planilha CSV *" ajuda="Máximo de 200 toras e 1 MB por importação."><Input aria-label="Planilha CSV" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); }} /></Campo>
+          <Campo label="Planilha CSV *" ajuda="Máximo de 200 toras e 1 MB por importação."><Input aria-label="Planilha CSV" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); setAvisosImportacao([]); }} /></Campo>
           {arquivoImportacao && <div className="flex items-center gap-2 rounded-lg border bg-muted/30 p-3 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="min-w-0 truncate">{arquivoImportacao.name}</span></div>}
           {errosImportacao.length > 0 && <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3"><p className="text-sm font-medium text-destructive">Corrija a planilha antes de importar</p><ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-destructive">{errosImportacao.map((erro, indice) => <li key={`${erro}-${indice}`}>{erro}</li>)}</ul></div>}
+          {avisosImportacao.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3"><p className="text-sm font-medium text-amber-950">Atenção às identificações</p><ul className="mt-2 max-h-40 list-disc space-y-1 overflow-y-auto pl-5 text-xs leading-5 text-amber-900">{avisosImportacao.map((aviso, indice) => <li key={`${aviso}-${indice}`}>{aviso}</li>)}</ul></div>}
           <Campo label="Observações da carga"><Textarea value={cabecalhoImportacao.observacoes} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, observacoes: evento.target.value }))} placeholder="Informações gerais da carga importada" /></Campo>
           <div className="flex flex-col-reverse justify-end gap-2 sm:flex-row"><Button variant="outline" onClick={() => setDialogImportacao(false)} disabled={importarPlaquetasCsv.isPending}>Cancelar</Button><Button onClick={importarArquivo} disabled={importarPlaquetasCsv.isPending}>{importarPlaquetasCsv.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Importar toras</Button></div>
         </div>

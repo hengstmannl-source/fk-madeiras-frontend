@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gte, lte, ne, inArray, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -1488,10 +1488,19 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
 export async function listPlaquetas(parametros: { busca?: string; limite?: number; deslocamento?: number } = {}) {
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, proximoDeslocamento: null };
-  const todas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
+  const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
+  const quantidadePorCodigoFisico = new Map<string, number>();
+  brutas.forEach((item) => {
+    const codigoFisico = item.codigoFisico?.trim();
+    if (codigoFisico) quantidadePorCodigoFisico.set(codigoFisico, (quantidadePorCodigoFisico.get(codigoFisico) ?? 0) + 1);
+  });
+  const todas = brutas.map((item) => ({
+    ...item,
+    situacaoIdentificacao: !item.codigoFisico ? "sem_plaqueta" : (quantidadePorCodigoFisico.get(item.codigoFisico) ?? 0) > 1 ? "duplicada" : "identificada",
+  }));
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
   const filtradas = termo ? todas.filter((item) => {
-    const codigo = item.codigo.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    const codigo = `${item.codigo} ${item.codigoFisico ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
     const essencia = item.madeiraNome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
     return codigo.includes(termo) || essencia.includes(termo);
   }) : todas;
@@ -1562,7 +1571,7 @@ export async function importarPlaquetasCargaCsv(
   if (!db) throw new Error("Database not available");
   const codigosExistentes = await db.select({ codigo: plaquetas.codigo }).from(plaquetas);
   const preparo = prepararImportacaoPlaquetasCarga({ conteudo: input.conteudo, codigosExistentes });
-  if (preparo.erros.length) return { importados: 0, erros: preparo.erros, numero: null as string | null };
+  if (preparo.erros.length) return { importados: 0, erros: preparo.erros, avisos: preparo.avisos, numero: null as string | null };
   const carga = await criarRomaneioCargaToras({
     dataCarga: input.dataCarga,
     dataVencimento: input.dataVencimento,
@@ -1574,27 +1583,45 @@ export async function importarPlaquetasCargaCsv(
     plaquetas: preparo.linhas.map(({ codigo, madeiraNome, diametro, comprimento, valorMetroCubico, observacoes }) => ({ codigo, madeiraNome, diametro, comprimento, valorMetroCubico, observacoes })),
     criadoPor,
   });
-  return { importados: preparo.linhas.length, erros: [] as string[], numero: carga.numero };
+  return { importados: preparo.linhas.length, erros: [] as string[], avisos: preparo.avisos, numero: carga.numero };
 }
 
-type PlaquetaCargaEntrada = { codigo: string; madeiraNome: string; diametro: string; comprimento: string; valorMetroCubico: string; observacoes?: string | null };
+type PlaquetaCargaEntrada = { codigo?: string | null; madeiraNome: string; diametro: string; comprimento: string; valorMetroCubico: string; observacoes?: string | null };
+
+type SituacaoIdentificacaoPlaqueta = "identificada" | "sem_plaqueta" | "duplicada";
+
+function gerarCodigoInternoPlaqueta() {
+  return `INT-${crypto.randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase()}`;
+}
+
+async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado?: string | null): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
+  const codigoFisico = normalizarCodigoPlaqueta(codigoInformado ?? "") || null;
+  if (!codigoFisico) {
+    return { codigo: `SEM-PLQ-${gerarCodigoInternoPlaqueta().slice(4)}`, codigoFisico: null, situacaoIdentificacao: "sem_plaqueta" };
+  }
+
+  const mesmoCodigoFisico = or(eq(plaquetas.codigo, codigoFisico), eq(plaquetas.codigoFisico, codigoFisico));
+  const existentes = await tx.select({ id: plaquetas.id }).from(plaquetas).where(mesmoCodigoFisico);
+  if (!existentes.length) return { codigo: codigoFisico, codigoFisico, situacaoIdentificacao: "identificada" };
+
+  await tx.update(plaquetas).set({ codigoFisico, situacaoIdentificacao: "duplicada" }).where(mesmoCodigoFisico);
+  return { codigo: gerarCodigoInternoPlaqueta(), codigoFisico, situacaoIdentificacao: "duplicada" };
+}
 
 function prepararPlaquetasCarga(entrada: PlaquetaCargaEntrada[]) {
   if (!entrada.length) throw new Error("Adicione ao menos uma plaqueta ao romaneio de carga");
   if (entrada.length > 200) throw new Error("O romaneio de carga suporta no máximo 200 plaquetas");
-  const codigos = entrada.map((plaqueta) => normalizarCodigoPlaqueta(plaqueta.codigo));
-  if (codigos.some((codigo) => !codigo)) throw new Error("Informe o código de todas as plaquetas");
-  if (new Set(codigos).size !== codigos.length) throw new Error("Há códigos de plaqueta repetidos no mesmo romaneio de carga");
   return entrada.map((plaqueta, indice) => {
-    const codigo = codigos[indice];
+    const codigoFisico = normalizarCodigoPlaqueta(plaqueta.codigo ?? "") || null;
+    const referencia = codigoFisico ?? `sem plaqueta na linha ${indice + 1}`;
     const madeiraNome = plaqueta.madeiraNome.trim();
-    if (!madeiraNome) throw new Error(`Informe a essência da plaqueta ${codigo}`);
+    if (!madeiraNome) throw new Error(`Informe a essência da tora ${referencia}`);
     const diametro = Number(String(plaqueta.diametro).replace(",", "."));
     const comprimento = Number(String(plaqueta.comprimento).replace(",", "."));
     const valorMetroCubico = Number(String(plaqueta.valorMetroCubico).replace(",", "."));
     const volume = calcularVolumeToraCilindrica(diametro, comprimento);
-    if (!Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) throw new Error(`Informe o valor por m³ da plaqueta ${codigo}`);
-    return { codigo, madeiraNome, diametro, comprimento, volume, valorMetroCubico, valorTotal: Number((volume * valorMetroCubico).toFixed(2)), observacoes: plaqueta.observacoes?.trim() || null };
+    if (!Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) throw new Error(`Informe o valor por m³ da tora ${referencia}`);
+    return { codigoFisico, madeiraNome, diametro, comprimento, volume, valorMetroCubico, valorTotal: Number((volume * valorMetroCubico).toFixed(2)), observacoes: plaqueta.observacoes?.trim() || null };
   });
 }
 
@@ -1624,10 +1651,6 @@ export async function criarRomaneioCargaToras(data: {
   const frete = Number((volumeTotal * fretePorMetroCubico).toFixed(2));
   const valorTotal = valorProdutos + frete;
   return db.transaction(async (tx: any) => {
-    for (const plaqueta of plaquetasPreparadas) {
-      const existente = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, plaqueta.codigo)).limit(1))[0];
-      if (existente) throw new Error(`A plaqueta ${plaqueta.codigo} já está cadastrada`);
-    }
     const temporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
     const insercao = await tx.insert(romaneiosCargaToras).values({
       numero: temporario,
@@ -1660,8 +1683,9 @@ export async function criarRomaneioCargaToras(data: {
       criadoPor: data.criadoPor,
     });
     for (const plaqueta of plaquetasPreparadas) {
+      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico);
       const insercaoPlaqueta = await tx.insert(plaquetas).values({
-        codigo: plaqueta.codigo,
+        ...identificacao,
         madeiraNome: plaqueta.madeiraNome,
         comprimento: plaqueta.comprimento.toFixed(2),
         diametro: plaqueta.diametro.toFixed(2),
@@ -1707,21 +1731,13 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
     if (!carga) throw new Error("Romaneio de carga não encontrado");
     const existentes = await tx.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id));
     if (existentes.some((plaqueta: any) => plaqueta.estado !== "disponivel")) throw new Error("Este romaneio possui toras utilizadas na produção e não pode ser alterado");
-    const existentesPorCodigo = new Map<string, any>(existentes.map((plaqueta: any) => [plaqueta.codigo, plaqueta]));
-
-    for (const plaqueta of plaquetasPreparadas) {
-      if (existentesPorCodigo.has(plaqueta.codigo)) continue;
-      const duplicada = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, plaqueta.codigo)).limit(1))[0];
-      if (duplicada) throw new Error(`A plaqueta ${plaqueta.codigo} já está cadastrada`);
-    }
     for (const plaqueta of existentes) await tx.delete(movimentacoesPlaquetas).where(eq(movimentacoesPlaquetas.plaquetaId, plaqueta.id));
-    const codigosAtualizados = new Set(plaquetasPreparadas.map((plaqueta) => plaqueta.codigo));
-    for (const plaqueta of existentes) {
-      if (!codigosAtualizados.has(plaqueta.codigo)) await tx.delete(plaquetas).where(eq(plaquetas.id, plaqueta.id));
-    }
+    for (const plaqueta of existentes) await tx.delete(plaquetas).where(eq(plaquetas.id, plaqueta.id));
 
     for (const plaqueta of plaquetasPreparadas) {
+      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico);
       const valores = {
+        ...identificacao,
         madeiraNome: plaqueta.madeiraNome,
         comprimento: plaqueta.comprimento.toFixed(2),
         diametro: plaqueta.diametro.toFixed(2),
@@ -1733,9 +1749,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
         origem: data.origem?.trim() || null,
         observacoes: plaqueta.observacoes,
       };
-      const existente = existentesPorCodigo.get(plaqueta.codigo);
-      const plaquetaId = existente ? existente.id : getInsertedId(await tx.insert(plaquetas).values({ ...valores, codigo: plaqueta.codigo, romaneioCargaId: id, estado: "disponivel", criadoPor: carga.criadoPor }) as MysqlInsertResult);
-      if (existente) await tx.update(plaquetas).set(valores).where(eq(plaquetas.id, plaquetaId));
+      const plaquetaId = getInsertedId(await tx.insert(plaquetas).values({ ...valores, romaneioCargaId: id, estado: "disponivel", criadoPor: carga.criadoPor }) as MysqlInsertResult);
       await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${carga.numero}`, criadoPor: carga.criadoPor });
     }
     await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, dataVencimento: data.dataVencimento, origem: data.origem?.trim() || null, fornecedorId: data.fornecedorId ?? null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), fretePorMetroCubico: fretePorMetroCubico.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
@@ -1844,7 +1858,7 @@ export async function excluirRomaneioCargaToras(id: number, canceladoPor: number
 }
 
 export async function createPlaqueta(data: {
-  codigo: string;
+  codigo?: string | null;
   madeiraNome: string;
   espessura?: string | null;
   largura?: string | null;
@@ -1858,31 +1872,31 @@ export async function createPlaqueta(data: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const codigo = normalizarCodigoPlaqueta(data.codigo);
   const volumeInicial = Number(String(data.volumeInicial).replace(",", "."));
-  if (!codigo || !data.madeiraNome.trim() || !Number.isFinite(volumeInicial) || volumeInicial <= 0) {
-    throw new Error("Informe código, madeira e volume inicial válidos para a plaqueta");
+  if (!data.madeiraNome.trim() || !Number.isFinite(volumeInicial) || volumeInicial <= 0) {
+    throw new Error("Informe madeira e volume inicial válidos para a plaqueta");
   }
-  const existente = await db.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, codigo)).limit(1);
-  if (existente[0]) throw new Error(`A plaqueta ${codigo} já está cadastrada`);
-  const result = await db.insert(plaquetas).values({
-    codigo,
-    madeiraNome: data.madeiraNome.trim(),
-    espessura: data.espessura ? Number(String(data.espessura).replace(",", ".")).toFixed(2) : null,
-    largura: data.largura ? Number(String(data.largura).replace(",", ".")).toFixed(2) : null,
-    comprimento: data.comprimento ? Number(String(data.comprimento).replace(",", ".")).toFixed(2) : null,
-    volumeInicial: volumeInicial.toFixed(6),
-    volumeDisponivel: volumeInicial.toFixed(6),
-    dataEntrada: data.dataEntrada,
-    origem: data.origem?.trim() || null,
-    localizacao: data.localizacao?.trim() || null,
-    observacoes: data.observacoes?.trim() || null,
-    estado: "disponivel",
-    criadoPor: data.criadoPor,
+  return db.transaction(async (tx: any) => {
+    const identificacao = await prepararIdentificacaoPlaqueta(tx, data.codigo);
+    const result = await tx.insert(plaquetas).values({
+      ...identificacao,
+      madeiraNome: data.madeiraNome.trim(),
+      espessura: data.espessura ? Number(String(data.espessura).replace(",", ".")).toFixed(2) : null,
+      largura: data.largura ? Number(String(data.largura).replace(",", ".")).toFixed(2) : null,
+      comprimento: data.comprimento ? Number(String(data.comprimento).replace(",", ".")).toFixed(2) : null,
+      volumeInicial: volumeInicial.toFixed(6),
+      volumeDisponivel: volumeInicial.toFixed(6),
+      dataEntrada: data.dataEntrada,
+      origem: data.origem?.trim() || null,
+      localizacao: data.localizacao?.trim() || null,
+      observacoes: data.observacoes?.trim() || null,
+      estado: "disponivel",
+      criadoPor: data.criadoPor,
+    });
+    const id = getInsertedId(result as MysqlInsertResult);
+    await tx.insert(movimentacoesPlaquetas).values({ plaquetaId: id, tipo: "entrada", volume: volumeInicial.toFixed(6), motivo: "Entrada manual de plaqueta", criadoPor: data.criadoPor });
+    return { id, codigo: identificacao.codigo, codigoFisico: identificacao.codigoFisico, situacaoIdentificacao: identificacao.situacaoIdentificacao };
   });
-  const id = getInsertedId(result as MysqlInsertResult);
-  await db.insert(movimentacoesPlaquetas).values({ plaquetaId: id, tipo: "entrada", volume: volumeInicial.toFixed(6), motivo: "Entrada manual de plaqueta", criadoPor: data.criadoPor });
-  return { id, codigo };
 }
 
 export async function listRomaneiosProducao() {
@@ -1982,7 +1996,7 @@ export async function getRomaneioProducaoComItens(romaneioId: number) {
 export async function confirmarRomaneioProducao(data: {
   plaquetaId?: number;
   tora?: { madeiraNome: string; diametro?: string | null; espessura?: string | null; largura?: string | null; comprimento?: string | null; volume: string };
-  toras?: Array<{ plaquetaId?: number; novaPlaqueta?: { codigo: string }; tora: { madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume: string } }>;
+  toras?: Array<{ plaquetaId?: number; novaPlaqueta?: { codigo?: string | null }; medidasConferidasManual?: boolean; tora: { madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume: string } }>;
   dataProducao: Date;
   fita?: string | null;
   responsavel?: string | null;
@@ -1999,15 +2013,13 @@ export async function confirmarRomaneioProducao(data: {
     for (const entrada of entradasToras) {
       let plaqueta;
       if (entrada.novaPlaqueta) {
-        const codigo = normalizarCodigoPlaqueta(entrada.novaPlaqueta.codigo);
-        const existente = (await tx.select({ id: plaquetas.id }).from(plaquetas).where(eq(plaquetas.codigo, codigo)).limit(1))[0];
-        if (existente) throw new Error(`A plaqueta ${codigo} já está cadastrada. Localize-a no estoque para adicioná-la.`);
         const volumeInicial = Number(String(entrada.tora.volume).replace(",", "."));
         if (!Number.isFinite(volumeInicial) || volumeInicial <= 0 || !entrada.tora.madeiraNome.trim()) {
-          throw new Error(`Informe essência e volume válidos para a nova plaqueta ${codigo}`);
+          throw new Error("Informe essência e volume válidos para a nova plaqueta");
         }
+        const identificacao = await prepararIdentificacaoPlaqueta(tx, entrada.novaPlaqueta.codigo);
         const insercaoPlaqueta = await tx.insert(plaquetas).values({
-          codigo,
+          ...identificacao,
           madeiraNome: entrada.tora.madeiraNome.trim(),
           diametro: entrada.tora.diametro ? Number(String(entrada.tora.diametro).replace(",", ".")).toFixed(2) : null,
           comprimento: entrada.tora.comprimento ? Number(String(entrada.tora.comprimento).replace(",", ".")).toFixed(2) : null,
@@ -2030,6 +2042,13 @@ export async function confirmarRomaneioProducao(data: {
         plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, plaquetaId)).limit(1))[0];
       } else {
         plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, entrada.plaquetaId!)).limit(1))[0];
+      }
+      if (!plaqueta) throw new Error("A plaqueta selecionada não foi encontrada");
+      if (plaqueta.situacaoIdentificacao === "duplicada") {
+        const medidasPreenchidas = Boolean(entrada.tora.madeiraNome.trim() && entrada.tora.diametro && entrada.tora.comprimento && entrada.tora.volume);
+        if (!entrada.medidasConferidasManual || !medidasPreenchidas) {
+          throw new Error(`A plaqueta física ${plaqueta.codigoFisico ?? plaqueta.codigo} possui duplicidade. Confirme e preencha manualmente a essência, o diâmetro, o comprimento e o volume antes de continuar.`);
+        }
       }
       plaquetasSelecionadas.push({ plaqueta, tora: entrada.tora });
     }

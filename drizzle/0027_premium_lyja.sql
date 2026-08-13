@@ -1,0 +1,2 @@
+ALTER TABLE `plaquetas` ADD `codigoFisico` varchar(80);--> statement-breakpoint
+ALTER TABLE `plaquetas` ADD `situacaoIdentificacao` enum('identificada','sem_plaqueta','duplicada') DEFAULT 'identificada' NOT NULL;

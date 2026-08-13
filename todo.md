@@ -278,3 +278,8 @@
 - [x] Permitir confirmar, desfazer e sinalizar divergências de conciliação sem duplicar baixas
 - [x] Criar a tela de Conciliação Bancária com filtros, totais, pré-visualização e navegação financeira
 - [x] Cobrir regras de importação e conciliação com testes, validar a interface e publicar o módulo
+- [x] Gerar identificação interna única para tora sem plaqueta física, registrando a ocorrência no romaneio
+- [x] Aceitar plaquetas físicas duplicadas e sinalizar o conflito no estoque, no romaneio e na importação
+- [x] Destacar visualmente toras sem plaqueta e plaquetas duplicadas nas listas operacionais
+- [x] Exigir confirmação e preenchimento manual das medidas antes de consumir uma plaqueta duplicada na Produção Diária
+- [x] Cobrir identificações internas, duplicidade e consumo manual com testes, validação visual e publicação

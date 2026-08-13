@@ -8,7 +8,10 @@ vi.mock("wouter", () => ({ useSearch: () => "" }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
   const queryVazia = { useQuery: () => ({ data: [], isLoading: false }) };
-  const plaquetas = [{ id: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "4.20", volumeInicial: "0.380000", volumeDisponivel: "0.380000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" }];
+  const plaquetas = [
+    { id: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "4.20", volumeInicial: "0.380000", volumeDisponivel: "0.380000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" },
+    { id: 9, codigo: "INT-009", codigoFisico: "TOR-DUP", situacaoIdentificacao: "duplicada", madeiraNome: "Piqui", diametro: "45.00", comprimento: "5.00", volumeInicial: "0.795000", volumeDisponivel: "0.795000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" },
+  ];
   const romaneios = [{ id: 14, numero: "ROM-000014", dataProducao: "2026-08-12T12:00:00.000Z", plaquetaCodigo: "TOR-0008", madeiraTora: "Cedrinho", volumeTora: "0.380000", totalPecas: 12, volumeProduzido: "0.210000", aproveitamento: "55.26", fita: "Fita 1" }];
   const detalheRomaneio = { romaneio: { dataProducao: "2026-08-12T12:00:00.000Z", fita: "Fita 1", responsavel: "João", observacoes: "Ajuste de produção" }, toras: [{ plaquetaId: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30", comprimento: "4.2", volume: "0.38" }], itens: [{ madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2", quantidade: 11 }] };
   const mutationInerte = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
@@ -87,6 +90,19 @@ describe("ProducaoPage", () => {
 
     expect(screen.getByText("AVU-001")).toBeInTheDocument();
     expect(screen.getAllByText(/Ajuste as medidas/i)).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
+  });
+
+  it("não preenche automaticamente as medidas quando a plaqueta física está duplicada", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "TOR-DUP");
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByText("TOR-DUP")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("Piqui")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
   });
 

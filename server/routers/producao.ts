@@ -12,7 +12,7 @@ function dataLocal(data: string): Date {
 }
 
 const PlaquetaSchema = z.object({
-  codigo: z.string().trim().min(2).max(80),
+  codigo: z.string().trim().max(80).nullable().optional(),
   madeiraNome: z.string().trim().min(2).max(200),
   espessura: DecimalPositivo.optional().nullable(),
   largura: DecimalPositivo.optional().nullable(),
@@ -25,7 +25,7 @@ const PlaquetaSchema = z.object({
 });
 
 const PlaquetaCargaSchema = z.object({
-  codigo: z.string().trim().min(2).max(80),
+  codigo: z.string().trim().max(80).nullable().optional(),
   madeiraNome: z.string().trim().min(2).max(200),
   diametro: DecimalPositivo,
   comprimento: DecimalPositivo,
@@ -88,8 +88,9 @@ const ToraRomaneioSchema = z.object({
 const ToraEntradaRomaneioSchema = z.object({
   plaquetaId: z.number().int().positive().optional(),
   novaPlaqueta: z.object({
-    codigo: z.string().trim().min(2).max(80),
+    codigo: z.string().trim().max(80).nullable().optional(),
   }).optional(),
+  medidasConferidasManual: z.boolean().optional(),
   tora: ToraRomaneioSchema,
 }).refine((entrada) => Boolean(entrada.plaquetaId) !== Boolean(entrada.novaPlaqueta), "Informe uma plaqueta disponível ou um novo código para entrada imediata");
 

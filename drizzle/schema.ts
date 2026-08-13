@@ -192,6 +192,8 @@ export type RomaneioCargaToras = typeof romaneiosCargaToras.$inferSelect;
 export const plaquetas = mysqlTable("plaquetas", {
   id: int("id").autoincrement().primaryKey(),
   codigo: varchar("codigo", { length: 80 }).notNull().unique(),
+  codigoFisico: varchar("codigoFisico", { length: 80 }),
+  situacaoIdentificacao: mysqlEnum("situacaoIdentificacao", ["identificada", "sem_plaqueta", "duplicada"]).notNull().default("identificada"),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }),
   largura: decimal("largura", { precision: 8, scale: 2 }),
