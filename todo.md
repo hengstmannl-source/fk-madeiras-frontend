@@ -283,3 +283,8 @@
 - [x] Destacar visualmente toras sem plaqueta e plaquetas duplicadas nas listas operacionais
 - [x] Exigir confirmação e preenchimento manual das medidas antes de consumir uma plaqueta duplicada na Produção Diária
 - [x] Cobrir identificações internas, duplicidade e consumo manual com testes, validação visual e publicação
+- [x] Criar relatório operacional de plaquetas duplicadas e pendentes de conferência
+- [x] Exibir totais, filtros e acesso direto ao relatório de exceções do estoque de toras
+- [x] Numerar duplicidades de forma discreta como plaqueta física, plaqueta física² e sucessivas ocorrências
+- [x] Aplicar a identificação discreta na interface e nos PDFs de romaneio de carga
+- [x] Cobrir o relatório e a numeração de duplicidade com testes, validação visual e publicação

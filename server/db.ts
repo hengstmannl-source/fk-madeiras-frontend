@@ -22,6 +22,7 @@ import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImpor
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel } from "./diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
 import { sugerirConciliacoes } from "./conciliacao.logic";
+import { numerarDuplicidadesPlaquetas } from "../shared/plaquetas";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -1489,15 +1490,7 @@ export async function listPlaquetas(parametros: { busca?: string; limite?: numbe
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
-  const quantidadePorCodigoFisico = new Map<string, number>();
-  brutas.forEach((item) => {
-    const codigoFisico = item.codigoFisico?.trim();
-    if (codigoFisico) quantidadePorCodigoFisico.set(codigoFisico, (quantidadePorCodigoFisico.get(codigoFisico) ?? 0) + 1);
-  });
-  const todas = brutas.map((item) => ({
-    ...item,
-    situacaoIdentificacao: !item.codigoFisico ? "sem_plaqueta" : (quantidadePorCodigoFisico.get(item.codigoFisico) ?? 0) > 1 ? "duplicada" : "identificada",
-  }));
+  const todas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
   const filtradas = termo ? todas.filter((item) => {
     const codigo = `${item.codigo} ${item.codigoFisico ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
@@ -1509,6 +1502,31 @@ export async function listPlaquetas(parametros: { busca?: string; limite?: numbe
   const itens = filtradas.slice(deslocamento, deslocamento + limite);
   const proximoDeslocamento = deslocamento + itens.length < filtradas.length ? deslocamento + itens.length : null;
   return { itens, total: filtradas.length, totalDisponiveis: todas.filter((item) => item.estado === "disponivel").length, proximoDeslocamento };
+}
+
+export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}) {
+  const db = await getDb();
+  if (!db) return { resumo: { duplicadas: 0, semPlaqueta: 0, pendentesConferencia: 0, disponiveis: 0 }, itens: [] };
+  const brutas = await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
+  const numeradas = numerarDuplicidadesPlaquetas(brutas);
+  const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+  const excecoes = numeradas.filter((item) => item.situacaoIdentificacao !== "identificada");
+  const itens = excecoes.filter((item) => {
+    if (parametros.situacao && parametros.situacao !== "todas" && item.situacaoIdentificacao !== parametros.situacao) return false;
+    if (parametros.somenteDisponiveis && item.estado !== "disponivel") return false;
+    if (!termo) return true;
+    const pesquisavel = `${item.codigo} ${item.codigoFisico ?? ""} ${item.madeiraNome}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    return pesquisavel.includes(termo);
+  });
+  return {
+    resumo: {
+      duplicadas: excecoes.filter((item) => item.situacaoIdentificacao === "duplicada").length,
+      semPlaqueta: excecoes.filter((item) => item.situacaoIdentificacao === "sem_plaqueta").length,
+      pendentesConferencia: excecoes.filter((item) => item.situacaoIdentificacao === "duplicada" && item.estado === "disponivel").length,
+      disponiveis: excecoes.filter((item) => item.estado === "disponivel").length,
+    },
+    itens,
+  };
 }
 
 export function getModeloImportacaoTorasProducaoCsv() {
@@ -1556,7 +1574,10 @@ export async function getRomaneioCargaComPlaquetas(id: number) {
   const carga = await db.select().from(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id)).limit(1);
   if (!carga[0]) return undefined;
   const itens = await db.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id)).orderBy(asc(plaquetas.id));
-  return { carga: carga[0], plaquetas: itens };
+  const todas = await db.select().from(plaquetas);
+  const numeradas = numerarDuplicidadesPlaquetas(todas);
+  const identificacaoPorId = new Map(numeradas.map((item) => [item.id, item]));
+  return { carga: carga[0], plaquetas: itens.map((item) => ({ ...item, ...identificacaoPorId.get(item.id) })) };
 }
 
 export function getModeloImportacaoPlaquetasCargaCsv() {

@@ -17,6 +17,7 @@ import FinanceiroPage from "./pages/FinanceiroPage";
 import ConciliacaoBancariaPage from "./pages/ConciliacaoBancariaPage";
 import ProducaoPage from "./pages/ProducaoPage";
 import EstoquePage from "./pages/EstoquePage";
+import RelatorioPlaquetasPage from "./pages/RelatorioPlaquetasPage";
 import InventarioPage from "./pages/InventarioPage";
 import DieselPage from "./pages/DieselPage";
 
@@ -36,6 +37,7 @@ function Router() {
         <Route path="/conciliacao-bancaria" component={ConciliacaoBancariaPage} />
         <Route path="/producao" component={ProducaoPage} />
         <Route path="/estoque" component={EstoquePage} />
+        <Route path="/estoque/plaquetas" component={RelatorioPlaquetasPage} />
         <Route path="/inventario" component={InventarioPage} />
         <Route path="/diesel" component={DieselPage} />
         <Route path="/empresa" component={EmpresaPage} />

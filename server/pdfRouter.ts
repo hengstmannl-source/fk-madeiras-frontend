@@ -2,6 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
 import { getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioCargaComPlaquetas, getRomaneioProducaoComItens, listClientes } from "./db";
 import { storageGetSignedUrl } from "./storage";
 import { sdk } from "./_core/sdk";
+import { etiquetaPlaqueta } from "../shared/plaquetas";
 
 // Format number as BRL currency (pt-BR: 1.234,56)
 function formatBRL(value: string): string {
@@ -427,7 +428,7 @@ export async function registerPdfRoutes(app: any) {
           desenharCabecalhoTabela();
         }
         let x = 48;
-        page.drawText(plaqueta.codigo, { x, y, size: 8, font }); x += colunas[0];
+        page.drawText(etiquetaPlaqueta(plaqueta), { x, y, size: 8, font }); x += colunas[0];
         page.drawText(plaqueta.madeiraNome, { x, y, size: 8, font, maxWidth: colunas[1] - 5 }); x += colunas[1];
         page.drawText(`${formatMeasurement(plaqueta.diametro ?? "0")} cm`, { x, y, size: 8, font }); x += colunas[2];
         page.drawText(`${formatMeasurement(plaqueta.comprimento ?? "0")} m`, { x, y, size: 8, font }); x += colunas[3];

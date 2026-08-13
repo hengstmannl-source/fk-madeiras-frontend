@@ -56,6 +56,12 @@ const ListaPlaquetasSchema = z.object({
   deslocamento: z.number().int().min(0).default(0),
 });
 
+const RelatorioExcecoesPlaquetasSchema = z.object({
+  busca: z.string().trim().max(200).optional(),
+  situacao: z.enum(["todas", "duplicada", "sem_plaqueta"]).default("todas"),
+  somenteDisponiveis: z.boolean().default(false),
+});
+
 const RelatorioInventarioSchema = z.object({
   dataInicial: DataSchema.optional(),
   dataFinal: DataSchema.optional(),
@@ -134,6 +140,7 @@ export const producaoRouter = router({
   }),
   plaquetas: router({
     list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ input }) => db.listPlaquetas(input)),
+    relatorioExcecoes: protectedProcedure.input(RelatorioExcecoesPlaquetasSchema.optional()).query(({ input }) => db.getRelatorioExcecoesPlaquetas(input)),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({
       ...input,
       dataEntrada: dataLocal(input.dataEntrada),
