@@ -632,6 +632,37 @@ export async function getTituloFinanceiroById(id: number) {
   return result[0];
 }
 
+export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  return db.transaction(async (tx: any) => {
+    const titulo = (await tx.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.id, input.id)).limit(1))[0];
+    if (!titulo) throw new Error("Agendamento financeiro não encontrado");
+    if (["quitado", "cancelado"].includes(titulo.estado)) {
+      throw new Error("Não é possível alterar o vencimento de um título quitado ou cancelado");
+    }
+
+    const estado = calcularEstadoTitulo({
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      valorBaixado: titulo.valorBaixado,
+      dataVencimento: input.dataVencimento,
+    });
+    await tx.update(titulosFinanceiros).set({
+      dataVencimento: input.dataVencimento,
+      estado,
+    }).where(eq(titulosFinanceiros.id, titulo.id));
+
+    if (titulo.origem === "romaneio_carga" && titulo.romaneioCargaId) {
+      await tx.update(romaneiosCargaToras).set({ dataVencimento: input.dataVencimento })
+        .where(eq(romaneiosCargaToras.id, titulo.romaneioCargaId));
+    }
+    return { id: titulo.id, dataVencimento: input.dataVencimento, estado, romaneioCargaId: titulo.romaneioCargaId };
+  });
+}
+
 export async function atualizarEstadoTituloFinanceiro(titulo: any) {
   const novoEstado = calcularEstadoTitulo({
     valorOriginal: titulo.valorOriginal,

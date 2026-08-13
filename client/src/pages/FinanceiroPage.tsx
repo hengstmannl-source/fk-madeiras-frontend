@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import {
   ArrowDownToLine, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
-  CircleAlert, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2, Plus, RefreshCw, RotateCcw, Tags, Upload, WalletCards,
+  CircleAlert, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Tags, Upload, WalletCards,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -110,6 +110,8 @@ export default function FinanceiroPage() {
   const [contextoCriacao, setContextoCriacao] = useState<{ entidade: EntidadeContextual; destino: DestinoContextual } | null>(null);
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false);
   const [tituloSelecionado, setTituloSelecionado] = useState<any>(null);
+  const [tituloParaEditar, setTituloParaEditar] = useState<any>(null);
+  const [vencimentoEditado, setVencimentoEditado] = useState(hoje());
   const [tituloBaixas, setTituloBaixas] = useState<any>(null);
   const [tituloParaCancelar, setTituloParaCancelar] = useState<any>(null);
   const [baixaParaEstornar, setBaixaParaEstornar] = useState<any>(null);
@@ -147,6 +149,7 @@ export default function FinanceiroPage() {
   const clientes = trpc.cliente.list.useQuery();
   const criarLancamento = trpc.financeiro.titulos.createManual.useMutation();
   const criarLancamentoParcelado = trpc.financeiro.titulos.createParcelado.useMutation();
+  const atualizarAgendamento = trpc.financeiro.titulos.updateAgendamento.useMutation();
   const registrarBaixa = trpc.financeiro.titulos.baixar.useMutation();
   const criarFornecedor = trpc.financeiro.fornecedores.create.useMutation();
   const criarCategoria = trpc.financeiro.categorias.create.useMutation();
@@ -267,6 +270,23 @@ export default function FinanceiroPage() {
     setTituloSelecionado(titulo);
     setBaixa({ contaFinanceiraId: String(contas.data[0].id), valor: saldoTitulo(titulo).toFixed(2), dataBaixa: hoje(), formaPagamento: "pix", observacoes: "" });
     setBaixaAberta(true);
+  };
+
+  const abrirEdicaoAgendamento = (titulo: any) => {
+    setTituloParaEditar(titulo);
+    setVencimentoEditado(new Date(titulo.dataVencimento).toISOString().slice(0, 10));
+  };
+
+  const salvarAgendamento = () => {
+    if (!tituloParaEditar || !vencimentoEditado) return;
+    atualizarAgendamento.mutate({ id: tituloParaEditar.id, dataVencimento: vencimentoEditado }, {
+      onSuccess: () => {
+        toast.success("Vencimento atualizado com sucesso");
+        setTituloParaEditar(null);
+        invalidarFinanceiro();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
   };
 
   const salvarBaixa = () => {
@@ -425,7 +445,7 @@ export default function FinanceiroPage() {
               <TableBody>{titulosExibidos.map((titulo: any) => {
                 const possuiBaixas = Number(titulo.valorBaixado || 0) > 0.005;
                 const podeCancelar = !["quitado", "cancelado"].includes(titulo.estado) && !possuiBaixas;
-                return <TableRow key={titulo.id} className="hover:bg-muted/20"><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{formatReceivableSaleReference(titulo.origem, titulo.descricao)}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell><span className={`inline-flex items-center gap-1 text-sm ${titulo.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{titulo.tipo === "receber" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{titulo.tipo === "receber" ? "Receber" : "Pagar"}</span></TableCell><TableCell className="text-sm">{formatarDataFinanceira(titulo.dataVencimento)}</TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{possuiBaixas && <Button size="sm" variant="ghost" onClick={() => setTituloBaixas(titulo)}>Baixas</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirBaixa(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Baixar</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" title={possuiBaixas ? "Estorne as baixas antes de cancelar" : "Cancelar título"} disabled={!podeCancelar} onClick={() => setTituloParaCancelar(titulo)}>Cancelar</Button>}</div></TableCell></TableRow>;
+                return <TableRow key={titulo.id} className="hover:bg-muted/20"><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{formatReceivableSaleReference(titulo.origem, titulo.descricao)}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell><span className={`inline-flex items-center gap-1 text-sm ${titulo.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{titulo.tipo === "receber" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{titulo.tipo === "receber" ? "Receber" : "Pagar"}</span></TableCell><TableCell className="text-sm">{formatarDataFinanceira(titulo.dataVencimento)}</TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{possuiBaixas && <Button size="sm" variant="ghost" onClick={() => setTituloBaixas(titulo)}>Baixas</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirEdicaoAgendamento(titulo)}><Pencil className="h-3.5 w-3.5 mr-1.5" />Editar</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirBaixa(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Baixar</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" title={possuiBaixas ? "Estorne as baixas antes de cancelar" : "Cancelar título"} disabled={!podeCancelar} onClick={() => setTituloParaCancelar(titulo)}>Cancelar</Button>}</div></TableCell></TableRow>;
               })}</TableBody>
             </Table>
           ) : <EstadoVazio icon={<CalendarClock className="h-9 w-9" />} texto="Nenhum lançamento financeiro encontrado" acao={() => setLancamentoAberto(true)} labelAcao="Criar lançamento avulso" />}
@@ -484,6 +504,17 @@ export default function FinanceiroPage() {
             <CampoSelect label="Forma de pagamento" value={baixa.formaPagamento} onValueChange={(valor) => setBaixa({ ...baixa, formaPagamento: valor })} opcoes={[["pix", "PIX"], ["dinheiro", "Dinheiro"], ["transferencia", "Transferência"], ["boleto", "Boleto"], ["cartao_credito", "Cartão de crédito"], ["cartao_debito", "Cartão de débito"], ["outro", "Outro"]]} />
             <div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={baixa.observacoes} onChange={(e) => setBaixa({ ...baixa, observacoes: e.target.value})} /></div>
             <Button className="w-full" onClick={salvarBaixa} disabled={registrarBaixa.isPending}>{registrarBaixa.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Confirmar baixa</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(tituloParaEditar)} onOpenChange={(aberto) => !aberto && setTituloParaEditar(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Editar agendamento</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloParaEditar?.descricao}</p><p className="mt-1 text-muted-foreground">Altere a data de vencimento conforme a negociação de pagamento.</p>{tituloParaEditar?.origem === "romaneio_carga" && <p className="mt-2 text-xs text-primary">Este vencimento também será atualizado no romaneio de carga vinculado.</p>}</div>
+            <div className="space-y-2"><Label htmlFor="vencimento-agendamento">Novo vencimento *</Label><Input id="vencimento-agendamento" aria-label="Novo vencimento" type="date" value={vencimentoEditado} onChange={(event) => setVencimentoEditado(event.target.value)} /></div>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarAgendamento.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarAgendamento.isPending}>{atualizarAgendamento.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar vencimento</Button></div>
           </div>
         </DialogContent>
       </Dialog>

@@ -233,3 +233,6 @@
 - [x] Criar um seletor reutilizável com pesquisa digitável e ação Criar novo como primeira opção
 - [x] Aplicar o padrão a fornecedores, clientes, categorias e contas financeiras onde houver seleção operacional
 - [x] Cobrir os seletores pesquisáveis e as criações em contexto com testes e validação visual
+- [x] Permitir editar vencimento e dados financeiros da conta a pagar vinculada a romaneio de carga
+- [x] Sincronizar a alteração de vencimento entre o título financeiro e o romaneio sem criar duplicidade
+- [x] Cobrir a edição de agendamentos vinculados com testes e validação visual

@@ -41,6 +41,11 @@ export const LancamentoManualSchema = z.object({
   observacoes: z.string().max(4000).nullable().optional(),
 });
 
+const AtualizarAgendamentoSchema = z.object({
+  id: z.number().int().positive(),
+  dataVencimento: DataFinanceiraSchema,
+});
+
 const FornecedorSchema = z.object({
   nome: z.string().trim().min(2).max(300),
   contacto: z.string().trim().max(100).nullable().optional(),
@@ -187,6 +192,13 @@ export const financeiroRouter = router({
       )));
       return { grupoParcelamento, titulos };
     }),
+
+    updateAgendamento: protectedProcedure.input(AtualizarAgendamentoSchema).mutation(({ input }) => (
+      db.atualizarAgendamentoFinanceiro({
+        id: input.id,
+        dataVencimento: dataLocal(input.dataVencimento),
+      })
+    )),
 
     baixas: protectedProcedure.input(z.object({ tituloId: z.number().int().positive() })).query(({ input }) => db.listBaixasFinanceiras(input.tituloId)),
     baixar: protectedProcedure.input(z.object({

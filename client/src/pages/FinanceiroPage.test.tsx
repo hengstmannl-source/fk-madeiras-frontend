@@ -9,6 +9,7 @@ const state = vi.hoisted(() => ({
   titulos: [] as Array<Record<string, unknown>>,
   baixas: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
+  atualizarAgendamento: vi.fn(),
   estornar: vi.fn(),
   importar: vi.fn(),
   invalidar: vi.fn(),
@@ -53,6 +54,15 @@ vi.mock("@/lib/trpc", () => {
           baixas: { useQuery: () => ({ data: state.baixas, isLoading: false, refetch: vi.fn() }) },
           createManual: mutationInerte,
           createParcelado: mutationInerte,
+          updateAgendamento: {
+            useMutation: () => ({
+              isPending: false,
+              mutate: (input: { id: number; dataVencimento: string }, callbacks: { onSuccess?: () => void }) => {
+                state.atualizarAgendamento(input);
+                callbacks.onSuccess?.();
+              },
+            }),
+          },
           baixar: mutationInerte,
           conciliarBaixa: mutationInerte,
           estornarBaixa: {
@@ -100,6 +110,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
   beforeEach(() => {
     state.search = "";
     state.cancelar.mockReset();
+    state.atualizarAgendamento.mockReset();
     state.estornar.mockReset();
     state.importar.mockReset();
     state.invalidar.mockReset();
@@ -147,6 +158,18 @@ describe("FinanceiroPage — cancelamento manual", () => {
         juros: "0.00",
         dataVencimento: "2026-08-13T00:00:00.000Z",
       },
+      {
+        id: 13,
+        descricao: "Carga de toras RC-001",
+        origem: "romaneio_carga",
+        tipo: "pagar",
+        estado: "aberto",
+        valorOriginal: "1200.00",
+        valorBaixado: "0.00",
+        desconto: "0.00",
+        juros: "0.00",
+        dataVencimento: "2026-08-12T00:00:00.000Z",
+      },
     ];
   });
 
@@ -187,6 +210,27 @@ describe("FinanceiroPage — cancelamento manual", () => {
   it("identifica a abertura direta do relatório pelo parâmetro de URL", () => {
     expect(abaFinanceiraDaUrl("?aba=fluxo")).toBe("fluxo");
     expect(abaFinanceiraDaUrl("?tipo=receber")).toBe("lancamentos");
+  });
+
+  it("permite reagendar o vencimento de uma conta vinculada ao romaneio de carga", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    const linha = screen.getAllByText("Carga de toras RC-001").map((elemento) => elemento.closest("tr")).find(Boolean);
+    expect(linha).not.toBeNull();
+    await user.click(within(linha!).getByRole("button", { name: "Editar" }));
+
+    expect(screen.getByRole("heading", { name: "Editar agendamento" })).toBeInTheDocument();
+    expect(screen.getByText(/também será atualizado no romaneio de carga vinculado/i)).toBeInTheDocument();
+    const vencimento = screen.getByLabelText("Novo vencimento");
+    await user.clear(vencimento);
+    await user.type(vencimento, "2026-09-11");
+    await user.click(screen.getByRole("button", { name: "Salvar vencimento" }));
+
+    await waitFor(() => {
+      expect(state.atualizarAgendamento).toHaveBeenCalledWith({ id: 13, dataVencimento: "2026-09-11" });
+      expect(state.invalidar).toHaveBeenCalled();
+    });
   });
 
   it("confirma o estorno com motivo e sinaliza a baixa preservada como estornada", async () => {
