@@ -104,46 +104,46 @@ export const RecorrenciaSchema = z.object({
 
 export const financeiroRouter = router({
   fornecedores: router({
-    list: protectedProcedure.query(() => db.listFornecedores()),
+    list: protectedProcedure.query(({ ctx }) => db.listFornecedores(ctx.empresaAtiva!.empresa.id)),
     modeloCsv: protectedProcedure.query(() => db.getModeloImportacaoFornecedoresCsv()),
     prepararImportacaoCsv: protectedProcedure.input(z.object({
       conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
-    })).mutation(({ input }) => db.prepararImportacaoFornecedoresCsv(input.conteudo)),
+    })).mutation(({ ctx, input }) => db.prepararImportacaoFornecedoresCsv(input.conteudo, { empresaId: ctx.empresaAtiva!.empresa.id })),
     importarCsv: protectedProcedure.input(z.object({
       conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
-    })).mutation(({ ctx, input }) => db.importarFornecedoresCsv(input.conteudo, ctx.user.id)),
+    })).mutation(({ ctx, input }) => db.importarFornecedoresCsv(input.conteudo, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(FornecedorSchema).mutation(({ ctx, input }) => (
-      db.createFornecedor({ ...input, criadoPor: ctx.user.id, ativo: true })
+      db.createFornecedor({ ...input, criadoPor: ctx.user.id, ativo: true, empresaId: ctx.empresaAtiva!.empresa.id })
     )),
-    update: protectedProcedure.input(FornecedorSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ input }) => {
+    update: protectedProcedure.input(FornecedorSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => {
       const { id, ...dados } = input;
-      return db.updateFornecedor(id, dados);
+      return db.updateFornecedor(id, dados, ctx.empresaAtiva!.empresa.id);
     }),
-    archive: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input }) => db.archiveFornecedor(input.id)),
+    archive: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.archiveFornecedor(input.id, ctx.empresaAtiva!.empresa.id)),
   }),
 
   categorias: router({
-    list: protectedProcedure.query(() => db.listCategoriasFinanceiras()),
+    list: protectedProcedure.query(({ ctx }) => db.listCategoriasFinanceiras(ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(CategoriaSchema).mutation(({ ctx, input }) => (
-      db.createCategoriaFinanceira({ ...input, criadoPor: ctx.user.id, ativo: true })
+      db.createCategoriaFinanceira({ ...input, criadoPor: ctx.user.id, ativo: true, empresaId: ctx.empresaAtiva!.empresa.id })
     )),
-    update: protectedProcedure.input(CategoriaSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ input }) => {
+    update: protectedProcedure.input(CategoriaSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => {
       const { id, ...dados } = input;
-      return db.updateCategoriaFinanceira(id, dados);
+      return db.updateCategoriaFinanceira(id, dados, ctx.empresaAtiva!.empresa.id);
     }),
   }),
 
   contas: router({
-    list: protectedProcedure.query(() => db.listContasFinanceiras()),
+    list: protectedProcedure.query(({ ctx }) => db.listContasFinanceiras(ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(ContaSchema).mutation(({ ctx, input }) => (
-      db.createContaFinanceira({ ...input, saldoInicial: input.saldoInicial.replace(",", "."), criadoPor: ctx.user.id, ativa: true })
+      db.createContaFinanceira({ ...input, saldoInicial: input.saldoInicial.replace(",", "."), criadoPor: ctx.user.id, ativa: true, empresaId: ctx.empresaAtiva!.empresa.id })
     )),
-    update: protectedProcedure.input(ContaSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ input }) => {
+    update: protectedProcedure.input(ContaSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => {
       const { id, saldoInicial, ...dados } = input;
       return db.updateContaFinanceira(id, {
         ...dados,
         ...(saldoInicial !== undefined ? { saldoInicial: saldoInicial.replace(",", ".") } : {}),
-      });
+      }, ctx.empresaAtiva!.empresa.id);
     }),
   }),
 
@@ -218,7 +218,7 @@ export const financeiroRouter = router({
       estado: z.enum(["aberto", "parcial", "quitado", "vencido", "cancelado"]).optional(),
       clienteId: z.number().int().positive().optional(),
       fornecedorId: z.number().int().positive().optional(),
-    }).optional()).query(({ input }) => db.listTitulosFinanceiros(input)),
+    }).optional()).query(({ ctx, input }) => db.listTitulosFinanceiros(input, { empresaId: ctx.empresaAtiva!.empresa.id })),
 
     createManual: protectedProcedure.input(LancamentoManualSchema).mutation(({ ctx, input }) => (
       db.createTituloFinanceiro({
@@ -230,6 +230,7 @@ export const financeiroRouter = router({
         dataEmissao: dataLocal(input.dataEmissao),
         dataVencimento: dataLocal(input.dataVencimento),
         criadoPor: ctx.user.id,
+        empresaId: ctx.empresaAtiva!.empresa.id,
       })
     )),
 
@@ -252,19 +253,21 @@ export const financeiroRouter = router({
           numeroParcela: indice + 1,
           totalParcelas: input.quantidadeParcelas,
           criadoPor: ctx.user.id,
+          empresaId: ctx.empresaAtiva!.empresa.id,
         })
       )));
       return { grupoParcelamento, titulos };
     }),
 
-    updateAgendamento: protectedProcedure.input(AtualizarAgendamentoSchema).mutation(({ input }) => (
+    updateAgendamento: protectedProcedure.input(AtualizarAgendamentoSchema).mutation(({ ctx, input }) => (
       db.atualizarAgendamentoFinanceiro({
         id: input.id,
         dataVencimento: dataLocal(input.dataVencimento),
+        empresaId: ctx.empresaAtiva!.empresa.id,
       })
     )),
 
-    baixas: protectedProcedure.input(z.object({ tituloId: z.number().int().positive() })).query(({ input }) => db.listBaixasFinanceiras(input.tituloId)),
+    baixas: protectedProcedure.input(z.object({ tituloId: z.number().int().positive() })).query(({ ctx, input }) => db.listBaixasFinanceiras(input.tituloId, ctx.empresaAtiva!.empresa.id)),
     baixar: protectedProcedure.input(z.object({
       tituloId: z.number().int().positive(),
       contaFinanceiraId: z.number().int().positive(),
@@ -277,9 +280,9 @@ export const financeiroRouter = router({
       valor: input.valor.replace(",", "."),
       dataBaixa: dataLocal(input.dataBaixa),
       criadoPor: ctx.user.id,
-    })),
+    }, ctx.empresaAtiva!.empresa.id)),
     conciliarBaixa: protectedProcedure.input(z.object({ id: z.number().int().positive(), conciliada: z.boolean() }))
-      .mutation(({ input }) => db.conciliarBaixaFinanceira(input.id, input.conciliada)),
+      .mutation(({ ctx, input }) => db.conciliarBaixaFinanceira(input.id, input.conciliada, ctx.empresaAtiva!.empresa.id)),
     estornarBaixa: protectedProcedure.input(z.object({
       id: z.number().int().positive(),
       motivo: z.string().trim().min(3, "Informe o motivo do estorno").max(2000),
@@ -290,7 +293,7 @@ export const financeiroRouter = router({
 
   anexos: router({
     list: protectedProcedure.input(z.object({ tituloId: z.number().int().positive() }))
-      .query(({ input }) => db.listAnexosFinanceiros(input.tituloId)),
+      .query(({ ctx, input }) => db.listAnexosFinanceiros(input.tituloId, ctx.empresaAtiva!.empresa.id)),
     upload: protectedProcedure.input(z.object({
       tituloId: z.number().int().positive(),
       nomeArquivo: z.string().trim().min(1).max(300),
@@ -318,20 +321,22 @@ export const financeiroRouter = router({
         storageKey: armazenado.key,
         url: armazenado.url,
         criadoPor: ctx.user.id,
+        empresaId: ctx.empresaAtiva!.empresa.id,
       });
     }),
     remove: protectedProcedure.input(z.object({ id: z.number().int().positive(), tituloId: z.number().int().positive() }))
-      .mutation(({ input }) => db.removerAnexoFinanceiro(input)),
+      .mutation(({ ctx, input }) => db.removerAnexoFinanceiro({ ...input, empresaId: ctx.empresaAtiva!.empresa.id })),
     atualizarBoleto: protectedProcedure.input(z.object({
       tituloId: z.number().int().positive(),
       codigo: z.string().trim().max(200).nullable(),
-    })).mutation(({ input }) => {
+    })).mutation(({ ctx, input }) => {
       const dados = input.codigo ? normalizarDadosBoleto(input.codigo) : { codigoBarras: null, linhaDigitavel: null };
       if (!dados) throw new Error("Informe um código de barras com 44 dígitos ou uma linha digitável com 47 ou 48 dígitos.");
       return db.atualizarDadosBoleto({
         tituloId: input.tituloId,
         codigoBarrasBoleto: dados.codigoBarras,
         linhaDigitavelBoleto: dados.linhaDigitavel,
+        empresaId: ctx.empresaAtiva!.empresa.id,
       });
     }),
   }),

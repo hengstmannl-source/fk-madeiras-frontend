@@ -13,7 +13,7 @@ export function isValidLogoImage(buffer: Buffer, mimeType: "image/png" | "image/
 }
 
 export const empresaRouter = router({
-  get: protectedProcedure.query(async () => db.getEmpresaConfiguracao()),
+  get: protectedProcedure.query(async ({ ctx }) => db.getEmpresaConfiguracao(ctx.empresaAtiva!.empresa.id)),
 
   uploadLogo: protectedProcedure
     .input(z.object({
@@ -28,8 +28,9 @@ export const empresaRouter = router({
       }
 
       const extension = input.mimeType === "image/png" ? "png" : "jpg";
-      const upload = await storagePut(`empresa/logotipo-${ctx.user.id}.${extension}`, image, input.mimeType);
-      const configuracao = await db.saveEmpresaLogo({
+      const empresaId = ctx.empresaAtiva!.empresa.id;
+      const upload = await storagePut(`empresa/${empresaId}/logotipo-${Date.now()}.${extension}`, image, input.mimeType);
+      const configuracao = await db.saveEmpresaLogo(empresaId, {
         key: upload.key,
         url: upload.url,
         mimeType: input.mimeType,
@@ -38,8 +39,8 @@ export const empresaRouter = router({
       return { success: true, configuracao };
     }),
 
-  removeLogo: protectedProcedure.mutation(async () => {
-    const configuracao = await db.clearEmpresaLogo();
+  removeLogo: protectedProcedure.mutation(async ({ ctx }) => {
+    const configuracao = await db.clearEmpresaLogo(ctx.empresaAtiva!.empresa.id);
     return { success: true, configuracao };
   }),
 });

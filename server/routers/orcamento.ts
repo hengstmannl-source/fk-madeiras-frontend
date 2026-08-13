@@ -42,20 +42,26 @@ function parseDataFinanceira(data: string) {
   return new Date(ano, mes - 1, dia, 12, 0, 0);
 }
 
+async function garantirVendaDaEmpresa(id: number, empresaId: number) {
+  const venda = await db.getOrcamentoById(id, empresaId);
+  if (!venda) throw new Error("Venda não encontrada para a empresa ativa");
+  return venda;
+}
+
 export const orcamentoRouter = router({
   list: protectedProcedure
     .input(z.object({
       estado: z.string().optional(),
       clienteId: z.number().optional(),
     }).optional())
-    .query(async ({ input }) => {
-      return db.listOrcamentos(input);
+    .query(async ({ ctx, input }) => {
+      return db.listOrcamentos(input, ctx.empresaAtiva!.empresa.id);
     }),
 
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
-    .query(async ({ input }) => {
-      return db.getOrcamentoWithItems(input.id);
+    .query(async ({ ctx, input }) => {
+      return db.getOrcamentoWithItems(input.id, ctx.empresaAtiva!.empresa.id);
     }),
 
   create: protectedProcedure
@@ -93,6 +99,7 @@ export const orcamentoRouter = router({
           observacoes: input.observacoes ?? null,
           vendedor: input.vendedor ?? null,
           criadoPor: ctx.user.id,
+          empresaId: ctx.empresaAtiva!.empresa.id,
           dataVencimento: input.dataVencimento ? parseDataFinanceira(input.dataVencimento) : now,
           competencia: input.competencia ? parseDataFinanceira(input.competencia) : now,
         },
@@ -111,6 +118,7 @@ export const orcamentoRouter = router({
       confirmacaoDupla: z.boolean().default(false),
     }))
     .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       await db.updateOrcamentoEstado(input.id, input.estado, ctx.user.id, input.confirmacaoDupla);
       if (input.estado === "aprovado") {
         await db.criarTituloReceberDeOrcamento(input.id, ctx.user.id);
@@ -125,7 +133,8 @@ export const orcamentoRouter = router({
       competencia: DataFinanceiraSchema,
       confirmacaoDupla: z.boolean().default(false),
     }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       return db.atualizarDatasOrcamento(input.id, {
         dataVencimento: parseDataFinanceira(input.dataVencimento),
         competencia: parseDataFinanceira(input.competencia),
@@ -135,6 +144,7 @@ export const orcamentoRouter = router({
   delete: protectedProcedure
     .input(z.object({ id: z.number(), confirmacaoDupla: z.boolean().default(false) }))
     .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       await db.deleteOrcamento(input.id, input.confirmacaoDupla, ctx.user.id);
       return { success: true };
     }),
@@ -142,21 +152,28 @@ export const orcamentoRouter = router({
   registrarPagamento: protectedProcedure
     .input(RegistroPagamentoSchema)
     .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       const dataPagamento = parseDataFinanceira(input.pagoEm);
       return db.registrarPagamentoOrcamento(input.id, ctx.user.id, input.formaPagamento, dataPagamento);
     }),
 
   entregarFisicamente: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
-    .mutation(({ ctx, input }) => db.entregarVendaFisicamente(input.id, ctx.user.id)),
+    .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
+      return db.entregarVendaFisicamente(input.id, ctx.user.id);
+    }),
 
   estornarEntrega: protectedProcedure
     .input(z.object({ id: z.number().int().positive(), motivo: z.string().trim().min(3, "Informe o motivo do estorno") }))
-    .mutation(({ ctx, input }) => db.estornarEntregaVenda(input.id, ctx.user.id, input.motivo)),
+    .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
+      return db.estornarEntregaVenda(input.id, ctx.user.id, input.motivo);
+    }),
 
   modelosMedida: router({
-    list: protectedProcedure.query(async () => {
-      const modelos = await db.listModelosMedidaVenda();
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const modelos = await db.listModelosMedidaVenda(ctx.empresaAtiva!.empresa.id);
       return modelos.map((modelo) => ({
         ...modelo,
         comprimentos: JSON.parse(modelo.comprimentos) as Array<{ comprimento: string; quantidade: string }>,
@@ -175,16 +192,18 @@ export const orcamentoRouter = router({
         ...input,
         comprimentos: JSON.stringify(input.comprimentos),
         criadoPor: ctx.user.id,
+        empresaId: ctx.empresaAtiva!.empresa.id,
       });
       return { id };
     }),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
-      .mutation(({ ctx, input }) => db.deleteModeloMedidaVenda(input.id, ctx.user.id)),
+      .mutation(({ ctx, input }) => db.deleteModeloMedidaVenda(input.id, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
   }),
 
   duplicate: protectedProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       return db.duplicateOrcamento(input.id);
     }),
 });

@@ -300,3 +300,16 @@
 - [x] Permitir informar vários comprimentos e quantidades na mesma grade de produção serrada
 - [x] Preservar cálculos de volume, aproveitamento, importação e edição de romaneios com a nova grade
 - [x] Cobrir a grade de produção serrada com testes, validação visual responsiva e publicação
+- [x] Projetar login profissional com acesso individual por colaborador
+- [x] Modelar empresas, equipes e papéis de acesso para operação multiempresa
+- [ ] Garantir isolamento de todos os dados operacionais e financeiros por empresa
+- [x] Criar a experiência de cadastro inicial da empresa e convite de colaboradores
+- [ ] Cobrir autenticação, permissões e segregação de dados com testes e validação visual
+- [x] Criar empresas, membros, convites e credenciais de acesso por e-mail e senha
+- [x] Migrar os dados atuais para o ambiente inicial da FK Madeiras sem perda de histórico
+- [ ] Associar todos os registos operacionais, financeiros e documentos à empresa ativa
+- [ ] Validar todas as consultas e mutações no servidor pela associação empresa-utilizador
+- [ ] Implementar sessão própria, entrada, primeiro acesso e recuperação de senha
+- [x] Criar perfis Proprietário, Administrador, Financeiro, Vendas, Produção/Estoque e Consulta
+- [x] Criar a tela profissional de login e a área de colaboradores com convites
+- [ ] Cobrir o isolamento de empresas, papéis e login com testes automatizados e validação visual

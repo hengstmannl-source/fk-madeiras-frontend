@@ -56,8 +56,8 @@ async function requirePdfAuthentication(req: any, res: any) {
   return false;
 }
 
-async function loadCompanyLogo(pdfDoc: PDFDocument) {
-  const configuracao = await getEmpresaConfiguracao();
+async function loadCompanyLogo(pdfDoc: PDFDocument, empresaId = 1) {
+  const configuracao = await getEmpresaConfiguracao(empresaId);
   if (!configuracao?.logoKey || !configuracao.logoMimeType) return undefined;
 
   try {

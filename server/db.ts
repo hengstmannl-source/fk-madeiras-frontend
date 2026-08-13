@@ -3,6 +3,7 @@ import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
+  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -71,17 +72,218 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// ─── Madeiras ───
-export async function listMadeiras() {
-  const db = await getDb();
-  if (!db) return [];
-  return db.select().from(madeiras).orderBy(desc(madeiras.createdAt));
-}
-
-export async function getMadeiraById(id: number) {
+export async function getUserById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(madeiras).where(eq(madeiras.id, id)).limit(1);
+  const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+  return result[0];
+}
+
+export async function getCredencialPorEmail(emailNormalizado: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select({ credencial: credenciaisUsuarios, usuario: users })
+    .from(credenciaisUsuarios)
+    .innerJoin(users, eq(users.id, credenciaisUsuarios.usuarioId))
+    .where(eq(credenciaisUsuarios.emailNormalizado, emailNormalizado))
+    .limit(1);
+  return result[0];
+}
+
+export async function getEmpresaAtivaDoUsuario(usuarioId: number) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select({ membro: empresaMembros, empresa: empresas })
+    .from(empresaMembros)
+    .innerJoin(empresas, eq(empresas.id, empresaMembros.empresaId))
+    .where(and(eq(empresaMembros.usuarioId, usuarioId), eq(empresaMembros.ativo, true), eq(empresas.ativa, true)))
+    .orderBy(asc(empresaMembros.id))
+    .limit(1);
+  return result[0];
+}
+
+export async function listarEmpresasDoUsuario(usuarioId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ membro: empresaMembros, empresa: empresas })
+    .from(empresaMembros)
+    .innerJoin(empresas, eq(empresas.id, empresaMembros.empresaId))
+    .where(and(eq(empresaMembros.usuarioId, usuarioId), eq(empresaMembros.ativo, true), eq(empresas.ativa, true)))
+    .orderBy(asc(empresas.nome));
+}
+
+export async function registrarFalhaAutenticacao(credencialId: number, bloqueadoAte: Date | null) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db
+    .update(credenciaisUsuarios)
+    .set({ tentativasFalhas: sql`${credenciaisUsuarios.tentativasFalhas} + 1`, bloqueadoAte })
+    .where(eq(credenciaisUsuarios.id, credencialId));
+}
+
+export async function limparFalhasAutenticacao(credencialId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.update(credenciaisUsuarios).set({ tentativasFalhas: 0, bloqueadoAte: null }).where(eq(credenciaisUsuarios.id, credencialId));
+}
+
+export async function listarMembrosEmpresa(empresaId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ membro: empresaMembros, usuario: users })
+    .from(empresaMembros)
+    .innerJoin(users, eq(users.id, empresaMembros.usuarioId))
+    .where(eq(empresaMembros.empresaId, empresaId))
+    .orderBy(asc(users.name));
+}
+
+export async function criarConviteEmpresa(data: {
+  empresaId: number;
+  emailNormalizado: string;
+  papel: "administrador" | "financeiro" | "vendas" | "producao" | "consulta";
+  tokenHash: string;
+  expiraEm: Date;
+  convidadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const result = await db.insert(convitesEmpresa).values(data);
+  return getInsertedId(result as MysqlInsertResult);
+}
+
+export async function getConviteValidoPorHash(tokenHash: string) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db
+    .select({ convite: convitesEmpresa, empresa: empresas })
+    .from(convitesEmpresa)
+    .innerJoin(empresas, eq(empresas.id, convitesEmpresa.empresaId))
+    .where(eq(convitesEmpresa.tokenHash, tokenHash))
+    .limit(1);
+  const encontrado = result[0];
+  if (!encontrado || encontrado.convite.aceitoEm || encontrado.convite.canceladoEm || encontrado.convite.expiraEm <= new Date() || !encontrado.empresa.ativa) return undefined;
+  return encontrado;
+}
+
+export async function aceitarConviteCriandoUsuario(data: {
+  tokenHash: string;
+  nome: string;
+  senhaHash: string;
+  openId: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const resultadoConvite = await tx
+      .select()
+      .from(convitesEmpresa)
+      .where(eq(convitesEmpresa.tokenHash, data.tokenHash))
+      .limit(1);
+    const convite = resultadoConvite[0];
+    if (!convite || convite.aceitoEm || convite.canceladoEm || convite.expiraEm <= new Date()) {
+      throw new Error("CONVITE_INVALIDO");
+    }
+
+    const credencialExistente = await tx
+      .select()
+      .from(credenciaisUsuarios)
+      .where(eq(credenciaisUsuarios.emailNormalizado, convite.emailNormalizado))
+      .limit(1);
+    if (credencialExistente[0]) throw new Error("EMAIL_JA_CADASTRADO");
+
+    const resultadoUsuario = await tx.insert(users).values({
+      openId: data.openId,
+      name: data.nome,
+      email: convite.emailNormalizado,
+      loginMethod: "senha",
+      role: "user",
+      lastSignedIn: new Date(),
+    });
+    const usuarioId = Number((resultadoUsuario as MysqlInsertResult)[0]?.insertId ?? 0);
+    if (!usuarioId) throw new Error("FALHA_AO_CRIAR_USUARIO");
+
+    await tx.insert(credenciaisUsuarios).values({
+      usuarioId,
+      emailNormalizado: convite.emailNormalizado,
+      senhaHash: data.senhaHash,
+    });
+    await tx.insert(empresaMembros).values({
+      empresaId: convite.empresaId,
+      usuarioId,
+      papel: convite.papel,
+      ativo: true,
+      convidadoPor: convite.convidadoPor,
+    });
+    await tx.update(convitesEmpresa).set({ aceitoEm: new Date(), aceitoPor: usuarioId }).where(eq(convitesEmpresa.id, convite.id));
+    return { usuarioId, empresaId: convite.empresaId };
+  });
+}
+
+export async function criarEmpresaComProprietario(data: {
+  nomeEmpresa: string;
+  nomeFantasia?: string;
+  documento?: string;
+  emailEmpresa?: string;
+  telefone?: string;
+  nomeProprietario: string;
+  emailNormalizado: string;
+  senhaHash: string;
+  openId: string;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const emailExistente = await tx
+      .select({ id: credenciaisUsuarios.id })
+      .from(credenciaisUsuarios)
+      .where(eq(credenciaisUsuarios.emailNormalizado, data.emailNormalizado))
+      .limit(1);
+    if (emailExistente[0]) throw new Error("EMAIL_JA_CADASTRADO");
+
+    const resultadoEmpresa = await tx.insert(empresas).values({
+      nome: data.nomeEmpresa,
+      nomeFantasia: data.nomeFantasia ?? null,
+      documento: data.documento ?? null,
+      email: data.emailEmpresa ?? data.emailNormalizado,
+      telefone: data.telefone ?? null,
+    });
+    const empresaId = Number((resultadoEmpresa as MysqlInsertResult)[0]?.insertId ?? 0);
+    if (!empresaId) throw new Error("FALHA_AO_CRIAR_EMPRESA");
+
+    const resultadoUsuario = await tx.insert(users).values({
+      openId: data.openId,
+      name: data.nomeProprietario,
+      email: data.emailNormalizado,
+      loginMethod: "senha",
+      role: "user",
+      lastSignedIn: new Date(),
+    });
+    const usuarioId = Number((resultadoUsuario as MysqlInsertResult)[0]?.insertId ?? 0);
+    if (!usuarioId) throw new Error("FALHA_AO_CRIAR_USUARIO");
+
+    await tx.insert(credenciaisUsuarios).values({ usuarioId, emailNormalizado: data.emailNormalizado, senhaHash: data.senhaHash });
+    await tx.insert(empresaMembros).values({ empresaId, usuarioId, papel: "proprietario", ativo: true });
+    await tx.insert(empresaConfiguracoes).values({ id: empresaId, empresaId });
+    await tx.insert(configuracoesFinanceiras).values({ id: empresaId, empresaId });
+    return { usuarioId, empresaId };
+  });
+}
+
+// ─── Madeiras ───
+export async function listMadeiras(empresaId = 1) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(madeiras).where(eq(madeiras.empresaId, empresaId)).orderBy(desc(madeiras.createdAt));
+}
+
+export async function getMadeiraById(id: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const result = await db.select().from(madeiras).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
@@ -92,34 +294,34 @@ export async function createMadeira(data: InsertMadeira) {
   return result;
 }
 
-export async function updateMadeira(id: number, data: Partial<InsertMadeira>) {
+export async function updateMadeira(id: number, data: Partial<InsertMadeira>, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(madeiras).set(data).where(eq(madeiras.id, id));
+  await db.update(madeiras).set(data).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteMadeira(id: number) {
+export async function deleteMadeira(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(madeiras).set({ ativo: false }).where(eq(madeiras.id, id));
+  await db.update(madeiras).set({ ativo: false }).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId)));
   return { success: true };
 }
 
 // ─── Bitolas ───
-export async function listBitolas(madeiraId?: number) {
+export async function listBitolas(madeiraId?: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   if (madeiraId) {
-    return db.select().from(bitolas).where(eq(bitolas.madeiraId, madeiraId)).orderBy(desc(bitolas.createdAt));
+    return db.select().from(bitolas).where(and(eq(bitolas.madeiraId, madeiraId), eq(bitolas.empresaId, empresaId))).orderBy(desc(bitolas.createdAt));
   }
-  return db.select().from(bitolas).orderBy(desc(bitolas.createdAt));
+  return db.select().from(bitolas).where(eq(bitolas.empresaId, empresaId)).orderBy(desc(bitolas.createdAt));
 }
 
-export async function getBitolaById(id: number) {
+export async function getBitolaById(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(bitolas).where(eq(bitolas.id, id)).limit(1);
+  const result = await db.select().from(bitolas).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
@@ -130,37 +332,37 @@ export async function createBitola(data: InsertBitola) {
   return result;
 }
 
-export async function updateBitola(id: number, data: Partial<InsertBitola>) {
+export async function updateBitola(id: number, data: Partial<InsertBitola>, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(bitolas).set(data).where(eq(bitolas.id, id));
+  await db.update(bitolas).set(data).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteBitola(id: number) {
+export async function deleteBitola(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(bitolas).where(eq(bitolas.id, id));
+  await db.delete(bitolas).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId)));
   return { success: true };
 }
 
 // ─── Clientes ───
-export async function listClientes() {
+export async function listClientes(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(clientes).where(eq(clientes.ativo, true)).orderBy(desc(clientes.createdAt));
+  return db.select().from(clientes).where(and(eq(clientes.ativo, true), eq(clientes.empresaId, empresaId))).orderBy(desc(clientes.createdAt));
 }
 
-export async function listAllClientes() {
+export async function listAllClientes(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(clientes).orderBy(desc(clientes.createdAt));
+  return db.select().from(clientes).where(eq(clientes.empresaId, empresaId)).orderBy(desc(clientes.createdAt));
 }
 
-export async function getClienteById(id: number) {
+export async function getClienteById(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(clientes).where(eq(clientes.id, id)).limit(1);
+  const result = await db.select().from(clientes).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
@@ -182,33 +384,34 @@ export async function createCliente(data: InsertCliente) {
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateCliente(id: number, data: Partial<InsertCliente>) {
+export async function updateCliente(id: number, data: Partial<InsertCliente>, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(clientes).set(data).where(eq(clientes.id, id));
+  await db.update(clientes).set(data).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteCliente(id: number) {
+export async function deleteCliente(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(clientes).set({ ativo: false }).where(eq(clientes.id, id));
+  await db.update(clientes).set({ ativo: false }).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId)));
   return { success: true };
 }
 
 // ─── Configuração da Empresa ───
-export async function getEmpresaConfiguracao() {
+export async function getEmpresaConfiguracao(empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(empresaConfiguracoes).where(eq(empresaConfiguracoes.id, 1)).limit(1);
+  const result = await db.select().from(empresaConfiguracoes).where(eq(empresaConfiguracoes.empresaId, empresaId)).limit(1);
   return result[0];
 }
 
-export async function saveEmpresaLogo(logo: { key: string; url: string; mimeType: string }) {
+export async function saveEmpresaLogo(empresaId: number, logo: { key: string; url: string; mimeType: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.insert(empresaConfiguracoes).values({
-    id: 1,
+    id: empresaId,
+    empresaId,
     logoKey: logo.key,
     logoUrl: logo.url,
     logoMimeType: logo.mimeType,
@@ -219,23 +422,23 @@ export async function saveEmpresaLogo(logo: { key: string; url: string; mimeType
       logoMimeType: logo.mimeType,
     },
   });
-  return getEmpresaConfiguracao();
+  return getEmpresaConfiguracao(empresaId);
 }
 
-export async function clearEmpresaLogo() {
+export async function clearEmpresaLogo(empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.insert(empresaConfiguracoes).values({ id: 1 }).onDuplicateKeyUpdate({
+  await db.insert(empresaConfiguracoes).values({ id: empresaId, empresaId }).onDuplicateKeyUpdate({
     set: { logoKey: null, logoUrl: null, logoMimeType: null },
   });
-  return getEmpresaConfiguracao();
+  return getEmpresaConfiguracao(empresaId);
 }
 
 // ─── Orçamentos ───
-export async function listModelosMedidaVenda() {
+export async function listModelosMedidaVenda(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(modelosMedidaVenda).orderBy(asc(modelosMedidaVenda.nome));
+  return db.select().from(modelosMedidaVenda).where(eq(modelosMedidaVenda.empresaId, empresaId)).orderBy(asc(modelosMedidaVenda.nome));
 }
 
 export async function createModeloMedidaVenda(data: InsertModeloMedidaVenda) {
@@ -245,26 +448,27 @@ export async function createModeloMedidaVenda(data: InsertModeloMedidaVenda) {
   return Number(resultado[0].insertId);
 }
 
-export async function deleteModeloMedidaVenda(id: number, userId: number) {
+export async function deleteModeloMedidaVenda(id: number, userId: number, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId)));
+  await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId), eq(modelosMedidaVenda.empresaId, empresaId)));
 }
 
-export async function listOrcamentos(filters?: { estado?: string; clienteId?: number }) {
+export async function listOrcamentos(filters?: { estado?: string; clienteId?: number }, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
+  conditions.push(eq(orcamentos.empresaId, empresaId));
   if (filters?.estado) conditions.push(eq(orcamentos.estado, filters.estado as any));
   if (filters?.clienteId) conditions.push(eq(orcamentos.clienteId, filters.clienteId));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   return db.select().from(orcamentos).where(where).orderBy(desc(orcamentos.createdAt));
 }
 
-export async function getOrcamentoWithItems(id: number) {
+export async function getOrcamentoWithItems(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
-  const orc = await db.select().from(orcamentos).where(eq(orcamentos.id, id)).limit(1);
+  const orc = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
   if (orc.length === 0) return undefined;
   const itens = await db.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, id));
   return { orcamento: orc[0], itens };
@@ -274,10 +478,10 @@ export function podeAlterarOrcamentoPago(pago: boolean, confirmacaoDupla: boolea
   return !pago || confirmacaoDupla;
 }
 
-export async function getOrcamentoById(id: number) {
+export async function getOrcamentoById(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(orcamentos).where(eq(orcamentos.id, id)).limit(1);
+  const result = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
   return result[0];
 }
 
@@ -493,6 +697,7 @@ export type CriarTituloFinanceiroInput = {
   dataVencimento: Date;
   competencia?: Date | null;
   criadoPor: number;
+  empresaId?: number;
   clienteId?: number | null;
   fornecedorId?: number | null;
   contraparteNome?: string | null;
@@ -506,10 +711,10 @@ export type CriarTituloFinanceiroInput = {
   observacoes?: string | null;
 };
 
-export async function listFornecedores() {
+export async function listFornecedores(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(fornecedores).where(eq(fornecedores.ativo, true)).orderBy(desc(fornecedores.createdAt));
+  return db.select().from(fornecedores).where(and(eq(fornecedores.ativo, true), eq(fornecedores.empresaId, empresaId))).orderBy(desc(fornecedores.createdAt));
 }
 
 export async function createFornecedor(data: InsertFornecedor) {
@@ -525,7 +730,7 @@ export function getModeloImportacaoFornecedoresCsv() {
 
 export async function prepararImportacaoFornecedoresCsv(
   conteudo: string,
-  dependencias?: { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
+  dependencias?: { database?: any; empresaId?: number; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
@@ -534,18 +739,21 @@ export async function prepararImportacaoFornecedoresCsv(
     nome: fornecedores.nome,
     email: fornecedores.email,
     documento: fornecedores.documento,
-  }).from(fornecedores);
+  }).from(fornecedores).where(eq(fornecedores.empresaId, dependencias?.empresaId ?? 1));
   return prepararImportacaoFornecedores({ conteudo, fornecedoresExistentes });
 }
 
 export async function importarFornecedoresCsv(
   conteudo: string,
   userId: number,
+  empresaIdOuDependencias: number | { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> } = 1,
   dependencias?: { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
 ) {
-  const db = dependencias?.database ?? await getDb();
+  const empresaId = typeof empresaIdOuDependencias === "number" ? empresaIdOuDependencias : 1;
+  const dependenciasResolvidas = typeof empresaIdOuDependencias === "number" ? dependencias : empresaIdOuDependencias;
+  const db = dependenciasResolvidas?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const preparo = await prepararImportacaoFornecedoresCsv(conteudo, { database: db, fornecedoresExistentes: dependencias?.fornecedoresExistentes });
+  const preparo = await prepararImportacaoFornecedoresCsv(conteudo, { database: db, empresaId, fornecedoresExistentes: dependenciasResolvidas?.fornecedoresExistentes });
   if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
   await db.transaction(async (tx: any) => {
     await tx.insert(fornecedores).values(preparo.linhas.map((linha) => ({
@@ -557,26 +765,27 @@ export async function importarFornecedoresCsv(
       observacoes: linha.observacoes,
       ativo: true,
       criadoPor: userId,
+      empresaId,
     })));
   });
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>) {
+export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(fornecedores).set(data).where(eq(fornecedores.id, id));
+  await db.update(fornecedores).set(data).where(and(eq(fornecedores.id, id), eq(fornecedores.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function archiveFornecedor(id: number) {
-  return updateFornecedor(id, { ativo: false });
+export async function archiveFornecedor(id: number, empresaId = 1) {
+  return updateFornecedor(id, { ativo: false }, empresaId);
 }
 
-export async function listCategoriasFinanceiras() {
+export async function listCategoriasFinanceiras(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(categoriasFinanceiras).where(eq(categoriasFinanceiras.ativo, true)).orderBy(desc(categoriasFinanceiras.createdAt));
+  return db.select().from(categoriasFinanceiras).where(and(eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).orderBy(desc(categoriasFinanceiras.createdAt));
 }
 
 export async function createCategoriaFinanceira(data: InsertCategoriaFinanceira) {
@@ -586,17 +795,17 @@ export async function createCategoriaFinanceira(data: InsertCategoriaFinanceira)
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>) {
+export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(categoriasFinanceiras).set(data).where(eq(categoriasFinanceiras.id, id));
+  await db.update(categoriasFinanceiras).set(data).where(and(eq(categoriasFinanceiras.id, id), eq(categoriasFinanceiras.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function listContasFinanceiras() {
+export async function listContasFinanceiras(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(contasFinanceiras).where(eq(contasFinanceiras.ativa, true)).orderBy(desc(contasFinanceiras.createdAt));
+  return db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).orderBy(desc(contasFinanceiras.createdAt));
 }
 
 export async function createContaFinanceira(data: InsertContaFinanceira) {
@@ -606,10 +815,10 @@ export async function createContaFinanceira(data: InsertContaFinanceira) {
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>) {
+export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  await db.update(contasFinanceiras).set(data).where(eq(contasFinanceiras.id, id));
+  await db.update(contasFinanceiras).set(data).where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId)));
   return { success: true };
 }
 
@@ -686,21 +895,24 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
     estado: calcularEstadoTitulo({ valorOriginal: input.valorOriginal, dataVencimento: input.dataVencimento }),
     observacoes: input.observacoes ?? null,
     criadoPor: input.criadoPor,
+    empresaId: input.empresaId ?? 1,
   };
   const result = await db.insert(titulosFinanceiros).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function getTituloFinanceiroById(id: number) {
+export async function getTituloFinanceiroById(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.id, id)).limit(1);
+  const result = await db.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, id), eq(titulosFinanceiros.empresaId, empresaId))).limit(1);
   return result[0];
 }
 
-export async function listAnexosFinanceiros(tituloId: number) {
+export async function listAnexosFinanceiros(tituloId: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
+  const titulo = await getTituloFinanceiroById(tituloId, empresaId);
+  if (!titulo) return [];
   return db.select().from(anexosFinanceiros)
     .where(eq(anexosFinanceiros.tituloId, tituloId))
     .orderBy(desc(anexosFinanceiros.createdAt));
@@ -715,18 +927,21 @@ export async function createAnexoFinanceiro(input: {
   storageKey: string;
   url: string;
   criadoPor: number;
+  empresaId?: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId);
+  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId ?? 1);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const result = await db.insert(anexosFinanceiros).values(input);
   return { id: getInsertedId(result as MysqlInsertResult), ...input };
 }
 
-export async function removerAnexoFinanceiro(input: { id: number; tituloId: number }) {
+export async function removerAnexoFinanceiro(input: { id: number; tituloId: number; empresaId?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId ?? 1);
+  if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const anexo = (await db.select().from(anexosFinanceiros)
     .where(and(eq(anexosFinanceiros.id, input.id), eq(anexosFinanceiros.tituloId, input.tituloId))).limit(1))[0];
   if (!anexo) throw new Error("Anexo financeiro não encontrado");
@@ -738,26 +953,27 @@ export async function atualizarDadosBoleto(input: {
   tituloId: number;
   codigoBarrasBoleto: string | null;
   linhaDigitavelBoleto: string | null;
+  empresaId?: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId);
+  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId ?? 1);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const boletoConfirmadoEm = input.codigoBarrasBoleto || input.linhaDigitavelBoleto ? new Date() : null;
   await db.update(titulosFinanceiros).set({
     codigoBarrasBoleto: input.codigoBarrasBoleto,
     linhaDigitavelBoleto: input.linhaDigitavelBoleto,
     boletoConfirmadoEm,
-  }).where(eq(titulosFinanceiros.id, input.tituloId));
+  }).where(and(eq(titulosFinanceiros.id, input.tituloId), eq(titulosFinanceiros.empresaId, input.empresaId ?? 1)));
   return { ...input, boletoConfirmadoEm };
 }
 
-export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date }) {
+export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date; empresaId?: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async (tx: any) => {
-    const titulo = (await tx.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.id, input.id)).limit(1))[0];
+    const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, input.id), eq(titulosFinanceiros.empresaId, input.empresaId ?? 1))).limit(1))[0];
     if (!titulo) throw new Error("Agendamento financeiro não encontrado");
     if (["quitado", "cancelado"].includes(titulo.estado)) {
       throw new Error("Não é possível alterar o vencimento de um título quitado ou cancelado");
@@ -801,11 +1017,12 @@ export async function atualizarEstadoTituloFinanceiro(titulo: any) {
 
 export async function listTitulosFinanceiros(
   filters?: { tipo?: TipoTituloFinanceiro; estado?: string; clienteId?: number; fornecedorId?: number },
-  dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[] },
+  dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[]; empresaId?: number },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db && !dependencias?.titulos) return [];
   const conditions = [];
+  conditions.push(eq(titulosFinanceiros.empresaId, dependencias?.empresaId ?? 1));
   if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
   if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado as any));
   else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
@@ -895,13 +1112,13 @@ export async function importarLancamentosFinanceirosCsv(
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">) {
+export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(data.tituloId);
+  const titulo = await getTituloFinanceiroById(data.tituloId, empresaId);
   if (!titulo) throw new Error("Título financeiro não encontrado");
   if (titulo.estado === "cancelado" || titulo.estado === "quitado") throw new Error("Este título não aceita novas baixas");
-  const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, data.contaFinanceiraId), eq(contasFinanceiras.ativa, true))).limit(1);
+  const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, data.contaFinanceiraId), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).limit(1);
   if (!conta[0]) throw new Error("Informe uma conta financeira ativa para a baixa");
   const valorBaixa = decimalParaNumero(data.valor);
   const saldoAberto = saldoAbertoTitulo(titulo.valorOriginal, titulo.desconto, titulo.juros, titulo.valorBaixado);
@@ -919,9 +1136,11 @@ export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira,
   return { id: getInsertedId(result as MysqlInsertResult), estado: novoEstado, valorBaixado: novoValorBaixado };
 }
 
-export async function listBaixasFinanceiras(tituloId: number) {
+export async function listBaixasFinanceiras(tituloId: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
+  const titulo = await getTituloFinanceiroById(tituloId, empresaId);
+  if (!titulo) return [];
   return db.select({
     id: baixasFinanceiras.id,
     tituloId: baixasFinanceiras.tituloId,
@@ -946,9 +1165,11 @@ export async function listBaixasFinanceiras(tituloId: number) {
     .orderBy(desc(baixasFinanceiras.dataBaixa));
 }
 
-export async function conciliarBaixaFinanceira(id: number, conciliada: boolean) {
+export async function conciliarBaixaFinanceira(id: number, conciliada: boolean, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const baixa = (await db.select({ tituloId: baixasFinanceiras.tituloId }).from(baixasFinanceiras).where(eq(baixasFinanceiras.id, id)).limit(1))[0];
+  if (!baixa || !(await getTituloFinanceiroById(baixa.tituloId, empresaId))) throw new Error("Baixa financeira não encontrada");
   await db.update(baixasFinanceiras).set({ conciliada, conciliadaEm: conciliada ? new Date() : null }).where(eq(baixasFinanceiras.id, id));
   return { success: true };
 }
@@ -1512,19 +1733,19 @@ export async function processarRecorrenciasFinanceiras(agora = new Date(), datab
 }
 
 // ─── Dashboard ───
-export async function getDashboardStats() {
+export async function getDashboardStats(empresaId = 1) {
   const db = await getDb();
   if (!db) return { totalOrcamentos: 0, totalAprovados: 0, totalRascunhos: 0, totalEnviados: 0, totalRejeitados: 0, totalValor: "0", totalClientes: 0, totalMadeiras: 0 };
-  const allOrcamentos = await db.select().from(orcamentos);
+  const allOrcamentos = await db.select().from(orcamentos).where(eq(orcamentos.empresaId, empresaId));
   const totalOrcamentos = allOrcamentos.length;
   const totalAprovados = allOrcamentos.filter(o => o.estado === "aprovado").length;
   const totalRascunhos = allOrcamentos.filter(o => o.estado === "rascunho").length;
   const totalEnviados = allOrcamentos.filter(o => o.estado === "enviado").length;
   const totalRejeitados = allOrcamentos.filter(o => o.estado === "rejeitado").length;
   const totalValor = allOrcamentos.reduce((sum, o) => sum + parseFloat(o.total ?? "0"), 0).toFixed(2);
-  const allClientes = await db.select().from(clientes).where(eq(clientes.ativo, true));
+  const allClientes = await db.select().from(clientes).where(and(eq(clientes.ativo, true), eq(clientes.empresaId, empresaId)));
   const totalClientes = allClientes.length;
-  const allMadeiras = await db.select().from(madeiras).where(eq(madeiras.ativo, true));
+  const allMadeiras = await db.select().from(madeiras).where(and(eq(madeiras.ativo, true), eq(madeiras.empresaId, empresaId)));
   const totalMadeiras = allMadeiras.length;
   // Recent orcamentos (last 5)
   const recent = allOrcamentos.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
@@ -1540,10 +1761,10 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
   });
 }
 
-export async function listPlaquetas(parametros: { busca?: string; limite?: number; deslocamento?: number } = {}) {
+export async function listPlaquetas(parametros: { busca?: string; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, proximoDeslocamento: null };
-  const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
+  const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
   const todas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
   const filtradas = termo ? todas.filter((item) => {
@@ -1558,10 +1779,10 @@ export async function listPlaquetas(parametros: { busca?: string; limite?: numbe
   return { itens, total: filtradas.length, totalDisponiveis: todas.filter((item) => item.estado === "disponivel").length, proximoDeslocamento };
 }
 
-export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}) {
+export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId = 1) {
   const db = await getDb();
   if (!db) return { resumo: { duplicadas: 0, semPlaqueta: 0, pendentesConferencia: 0, disponiveis: 0 }, itens: [] };
-  const brutas = await db.select().from(plaquetas).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
+  const brutas = await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
   const numeradas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
   const excecoes = numeradas.filter((item) => item.situacaoIdentificacao !== "identificada");
@@ -1595,7 +1816,7 @@ export function prepararPecasProducaoCsv(conteudo: string) {
   return validarCsvPecasProducao(conteudo);
 }
 
-export async function prepararTorasProducaoCsv(conteudo: string) {
+export async function prepararTorasProducaoCsv(conteudo: string, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const estoque = await db.select({
@@ -1606,15 +1827,16 @@ export async function prepararTorasProducaoCsv(conteudo: string) {
     diametro: plaquetas.diametro,
     comprimento: plaquetas.comprimento,
     volumeDisponivel: plaquetas.volumeDisponivel,
-  }).from(plaquetas);
+  }).from(plaquetas).where(eq(plaquetas.empresaId, empresaId));
   return prepararImportacaoTorasProducao({ conteudo, plaquetas: estoque });
 }
 
-export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}) {
+export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   const origem = filtros.origem?.trim().toLocaleLowerCase("pt-BR");
   const condicoes = [
+    eq(romaneiosCargaToras.empresaId, empresaId),
     filtros.dataInicial ? gte(romaneiosCargaToras.dataCarga, filtros.dataInicial) : undefined,
     filtros.dataFinal ? lte(romaneiosCargaToras.dataCarga, filtros.dataFinal) : undefined,
   ];
@@ -1622,13 +1844,13 @@ export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dat
   return origem ? resultado.filter((item) => (item.origem ?? "").toLocaleLowerCase("pt-BR").includes(origem)) : resultado;
 }
 
-export async function getRomaneioCargaComPlaquetas(id: number) {
+export async function getRomaneioCargaComPlaquetas(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
-  const carga = await db.select().from(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id)).limit(1);
+  const carga = await db.select().from(romaneiosCargaToras).where(and(eq(romaneiosCargaToras.id, id), eq(romaneiosCargaToras.empresaId, empresaId))).limit(1);
   if (!carga[0]) return undefined;
-  const itens = await db.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id)).orderBy(asc(plaquetas.id));
-  const todas = await db.select().from(plaquetas);
+  const itens = await db.select().from(plaquetas).where(and(eq(plaquetas.romaneioCargaId, id), eq(plaquetas.empresaId, empresaId))).orderBy(asc(plaquetas.id));
+  const todas = await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId));
   const numeradas = numerarDuplicidadesPlaquetas(todas);
   const identificacaoPorId = new Map(numeradas.map((item) => [item.id, item]));
   return { carga: carga[0], plaquetas: itens.map((item) => ({ ...item, ...identificacaoPorId.get(item.id) })) };
@@ -1669,17 +1891,17 @@ function gerarCodigoInternoPlaqueta() {
   return `INT-${crypto.randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase()}`;
 }
 
-async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado?: string | null): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
+async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado?: string | null, empresaId = 1): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
   const codigoFisico = normalizarCodigoPlaqueta(codigoInformado ?? "") || null;
   if (!codigoFisico) {
     return { codigo: `SEM-PLQ-${gerarCodigoInternoPlaqueta().slice(4)}`, codigoFisico: null, situacaoIdentificacao: "sem_plaqueta" };
   }
 
   const mesmoCodigoFisico = or(eq(plaquetas.codigo, codigoFisico), eq(plaquetas.codigoFisico, codigoFisico));
-  const existentes = await tx.select({ id: plaquetas.id }).from(plaquetas).where(mesmoCodigoFisico);
+  const existentes = await tx.select({ id: plaquetas.id }).from(plaquetas).where(and(mesmoCodigoFisico, eq(plaquetas.empresaId, empresaId)));
   if (!existentes.length) return { codigo: codigoFisico, codigoFisico, situacaoIdentificacao: "identificada" };
 
-  await tx.update(plaquetas).set({ codigoFisico, situacaoIdentificacao: "duplicada" }).where(mesmoCodigoFisico);
+  await tx.update(plaquetas).set({ codigoFisico, situacaoIdentificacao: "duplicada" }).where(and(mesmoCodigoFisico, eq(plaquetas.empresaId, empresaId)));
   return { codigo: gerarCodigoInternoPlaqueta(), codigoFisico, situacaoIdentificacao: "duplicada" };
 }
 
@@ -1944,6 +2166,7 @@ export async function createPlaqueta(data: {
   localizacao?: string | null;
   observacoes?: string | null;
   criadoPor: number;
+  empresaId?: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1952,8 +2175,10 @@ export async function createPlaqueta(data: {
     throw new Error("Informe madeira e volume inicial válidos para a plaqueta");
   }
   return db.transaction(async (tx: any) => {
-    const identificacao = await prepararIdentificacaoPlaqueta(tx, data.codigo);
+    const empresaId = data.empresaId ?? 1;
+    const identificacao = await prepararIdentificacaoPlaqueta(tx, data.codigo, empresaId);
     const result = await tx.insert(plaquetas).values({
+      empresaId,
       ...identificacao,
       madeiraNome: data.madeiraNome.trim(),
       espessura: data.espessura ? Number(String(data.espessura).replace(",", ".")).toFixed(2) : null,
@@ -1969,12 +2194,12 @@ export async function createPlaqueta(data: {
       criadoPor: data.criadoPor,
     });
     const id = getInsertedId(result as MysqlInsertResult);
-    await tx.insert(movimentacoesPlaquetas).values({ plaquetaId: id, tipo: "entrada", volume: volumeInicial.toFixed(6), motivo: "Entrada manual de plaqueta", criadoPor: data.criadoPor });
+    await tx.insert(movimentacoesPlaquetas).values({ empresaId, plaquetaId: id, tipo: "entrada", volume: volumeInicial.toFixed(6), motivo: "Entrada manual de plaqueta", criadoPor: data.criadoPor });
     return { id, codigo: identificacao.codigo, codigoFisico: identificacao.codigoFisico, situacaoIdentificacao: identificacao.situacaoIdentificacao };
   });
 }
 
-export async function listRomaneiosProducao() {
+export async function listRomaneiosProducao(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   const [romaneios, totaisToras, totaisPecas] = await Promise.all([
@@ -1998,7 +2223,8 @@ export async function listRomaneiosProducao() {
       aproveitamento: romaneiosProducao.aproveitamento,
       confirmadoEm: romaneiosProducao.confirmadoEm,
     }).from(romaneiosProducao)
-      .leftJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id))
+      .leftJoin(plaquetas, and(eq(romaneiosProducao.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId)))
+      .where(eq(romaneiosProducao.empresaId, empresaId))
       .orderBy(desc(romaneiosProducao.dataProducao), desc(romaneiosProducao.id)),
     db.select({
       romaneioId: itensRomaneioToras.romaneioId,
@@ -2026,13 +2252,13 @@ export async function listRomaneiosProducao() {
   });
 }
 
-export async function listItensRomaneioProducao(romaneioId: number) {
+export async function listItensRomaneioProducao(romaneioId: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  return db.select().from(itensRomaneioProducao).where(eq(itensRomaneioProducao.romaneioId, romaneioId)).orderBy(itensRomaneioProducao.id);
+  return db.select().from(itensRomaneioProducao).where(and(eq(itensRomaneioProducao.romaneioId, romaneioId), eq(itensRomaneioProducao.empresaId, empresaId))).orderBy(itensRomaneioProducao.id);
 }
 
-export async function getRomaneioProducaoComItens(romaneioId: number) {
+export async function getRomaneioProducaoComItens(romaneioId: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return null;
   const romaneio = (await db.select({
@@ -2051,10 +2277,10 @@ export async function getRomaneioProducaoComItens(romaneioId: number) {
     plaquetaCodigo: plaquetas.codigo,
     origemPlaqueta: plaquetas.origem,
     localizacaoPlaqueta: plaquetas.localizacao,
-  }).from(romaneiosProducao).leftJoin(plaquetas, eq(romaneiosProducao.plaquetaId, plaquetas.id)).where(eq(romaneiosProducao.id, romaneioId)).limit(1))[0];
+  }).from(romaneiosProducao).leftJoin(plaquetas, and(eq(romaneiosProducao.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId))).where(and(eq(romaneiosProducao.id, romaneioId), eq(romaneiosProducao.empresaId, empresaId))).limit(1))[0];
   if (!romaneio) return null;
   const [itens, toras] = await Promise.all([
-    listItensRomaneioProducao(romaneioId),
+    listItensRomaneioProducao(romaneioId, empresaId),
     db.select({
       id: itensRomaneioToras.id,
       plaquetaId: itensRomaneioToras.plaquetaId,
@@ -2063,7 +2289,7 @@ export async function getRomaneioProducaoComItens(romaneioId: number) {
       diametro: itensRomaneioToras.diametro,
       comprimento: itensRomaneioToras.comprimento,
       volume: itensRomaneioToras.volume,
-    }).from(itensRomaneioToras).innerJoin(plaquetas, eq(itensRomaneioToras.plaquetaId, plaquetas.id)).where(eq(itensRomaneioToras.romaneioId, romaneioId)),
+    }).from(itensRomaneioToras).innerJoin(plaquetas, and(eq(itensRomaneioToras.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId))).where(and(eq(itensRomaneioToras.romaneioId, romaneioId), eq(itensRomaneioToras.empresaId, empresaId))),
   ]);
   return { romaneio, itens, toras };
 }
@@ -2078,6 +2304,7 @@ export async function confirmarRomaneioProducao(data: {
   observacoes?: string | null;
   itens: ItemProducaoEntrada[];
   criadoPor: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2092,8 +2319,9 @@ export async function confirmarRomaneioProducao(data: {
         if (!Number.isFinite(volumeInicial) || volumeInicial <= 0 || !entrada.tora.madeiraNome.trim()) {
           throw new Error("Informe essência e volume válidos para a nova plaqueta");
         }
-        const identificacao = await prepararIdentificacaoPlaqueta(tx, entrada.novaPlaqueta.codigo);
+        const identificacao = await prepararIdentificacaoPlaqueta(tx, entrada.novaPlaqueta.codigo, data.empresaId);
         const insercaoPlaqueta = await tx.insert(plaquetas).values({
+          empresaId: data.empresaId,
           ...identificacao,
           madeiraNome: entrada.tora.madeiraNome.trim(),
           diametro: entrada.tora.diametro ? Number(String(entrada.tora.diametro).replace(",", ".")).toFixed(2) : null,
@@ -2108,15 +2336,16 @@ export async function confirmarRomaneioProducao(data: {
         });
         const plaquetaId = getInsertedId(insercaoPlaqueta as MysqlInsertResult);
         await tx.insert(movimentacoesPlaquetas).values({
+          empresaId: data.empresaId,
           plaquetaId,
           tipo: "entrada",
           volume: volumeInicial.toFixed(6),
           motivo: "Entrada imediata pela Produção Diária",
           criadoPor: data.criadoPor,
         });
-        plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, plaquetaId)).limit(1))[0];
+        plaqueta = (await tx.select().from(plaquetas).where(and(eq(plaquetas.id, plaquetaId), eq(plaquetas.empresaId, data.empresaId))).limit(1))[0];
       } else {
-        plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, entrada.plaquetaId!)).limit(1))[0];
+        plaqueta = (await tx.select().from(plaquetas).where(and(eq(plaquetas.id, entrada.plaquetaId!), eq(plaquetas.empresaId, data.empresaId))).limit(1))[0];
       }
       if (!plaqueta) throw new Error("A plaqueta selecionada não foi encontrada");
       if (plaqueta.situacaoIdentificacao === "duplicada") {
@@ -2131,6 +2360,7 @@ export async function confirmarRomaneioProducao(data: {
     const primeiraTora = calculo.toras[0];
     const numeroTemporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
     const insercaoRomaneio = await tx.insert(romaneiosProducao).values({
+      empresaId: data.empresaId,
       numero: numeroTemporario,
       plaquetaId: primeiraTora.plaqueta.id,
       totalToras: calculo.totalToras,
@@ -2156,6 +2386,7 @@ export async function confirmarRomaneioProducao(data: {
     for (const entrada of calculo.toras) {
       const plaquetaId = entrada.plaqueta.id!;
       await tx.insert(itensRomaneioToras).values({
+        empresaId: data.empresaId,
         romaneioId,
         plaquetaId,
         madeiraNome: entrada.tora.madeiraNome.trim(),
@@ -2170,8 +2401,9 @@ export async function confirmarRomaneioProducao(data: {
         volumeInicial: entrada.volume.toFixed(6),
         volumeDisponivel: "0.000000",
         estado: "consumida",
-      }).where(eq(plaquetas.id, plaquetaId));
+      }).where(and(eq(plaquetas.id, plaquetaId), eq(plaquetas.empresaId, data.empresaId)));
       await tx.insert(movimentacoesPlaquetas).values({
+        empresaId: data.empresaId,
         plaquetaId,
         romaneioId,
         tipo: "consumo",
@@ -2189,6 +2421,7 @@ export async function confirmarRomaneioProducao(data: {
         comprimento: item.comprimento.toFixed(2),
       };
       const insercaoItem = await tx.insert(itensRomaneioProducao).values({
+        empresaId: data.empresaId,
         romaneioId,
         ...dimensoes,
         quantidade: item.quantidade,
@@ -2197,6 +2430,7 @@ export async function confirmarRomaneioProducao(data: {
       });
       const itemRomaneioId = getInsertedId(insercaoItem as MysqlInsertResult);
       const insercaoLote = await tx.insert(lotesPecasSerradas).values({
+        empresaId: data.empresaId,
         romaneioId,
         itemRomaneioId,
         ...dimensoes,
@@ -2207,7 +2441,7 @@ export async function confirmarRomaneioProducao(data: {
         estado: "disponivel",
       });
       const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
-      await tx.insert(movimentacoesEstoqueSerrado).values({ loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Entrada do romaneio ${numero}`, criadoPor: data.criadoPor });
+      await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Entrada do romaneio ${numero}`, criadoPor: data.criadoPor });
     }
     return { id: romaneioId, numero, ...calculo };
   });
@@ -2220,14 +2454,15 @@ export async function atualizarRomaneioProducao(id: number, data: {
   observacoes?: string | null;
   itens: ItemProducaoEntrada[];
   atualizadoPor: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx) => {
-    const romaneio = (await tx.select().from(romaneiosProducao).where(eq(romaneiosProducao.id, id)).limit(1))[0];
+    const romaneio = (await tx.select().from(romaneiosProducao).where(and(eq(romaneiosProducao.id, id), eq(romaneiosProducao.empresaId, data.empresaId))).limit(1))[0];
     if (!romaneio) throw new Error("Romaneio de produção não encontrado");
 
-    const lotes = await tx.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.romaneioId, id));
+    const lotes = await tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.romaneioId, id), eq(lotesPecasSerradas.empresaId, data.empresaId)));
     for (const lote of lotes) {
       const movimentosPosteriores = await tx.select({ id: movimentacoesEstoqueSerrado.id }).from(movimentacoesEstoqueSerrado)
         .where(and(eq(movimentacoesEstoqueSerrado.loteId, lote.id), ne(movimentacoesEstoqueSerrado.tipo, "entrada_producao"))).limit(1);
@@ -2236,11 +2471,11 @@ export async function atualizarRomaneioProducao(id: number, data: {
       }
     }
 
-    const torasRegistradas = await tx.select().from(itensRomaneioToras).where(eq(itensRomaneioToras.romaneioId, id));
+    const torasRegistradas = await tx.select().from(itensRomaneioToras).where(and(eq(itensRomaneioToras.romaneioId, id), eq(itensRomaneioToras.empresaId, data.empresaId)));
     if (!torasRegistradas.length) throw new Error("O romaneio não possui toras rastreáveis para recalcular o aproveitamento");
     const toras = [] as Array<{ plaqueta: typeof plaquetas.$inferSelect; tora: { madeiraNome: string; diametro: string | null; comprimento: string | null; volume: string } }>;
     for (const toraRegistrada of torasRegistradas) {
-      const plaqueta = (await tx.select().from(plaquetas).where(eq(plaquetas.id, toraRegistrada.plaquetaId)).limit(1))[0];
+      const plaqueta = (await tx.select().from(plaquetas).where(and(eq(plaquetas.id, toraRegistrada.plaquetaId), eq(plaquetas.empresaId, data.empresaId))).limit(1))[0];
       if (!plaqueta) throw new Error("Uma plaqueta vinculada a este romaneio não foi encontrada");
       toras.push({
         plaqueta,
@@ -2267,7 +2502,7 @@ export async function atualizarRomaneioProducao(id: number, data: {
       observacoes: data.observacoes?.trim() || null,
       volumeTora: calculo.volumeTora.toFixed(6),
       aproveitamento: calculo.aproveitamento.toFixed(2),
-    }).where(eq(romaneiosProducao.id, id));
+    }).where(and(eq(romaneiosProducao.id, id), eq(romaneiosProducao.empresaId, data.empresaId)));
 
     for (const item of calculo.itens) {
       const dimensoes = {
@@ -2277,6 +2512,7 @@ export async function atualizarRomaneioProducao(id: number, data: {
         comprimento: item.comprimento.toFixed(2),
       };
       const insercaoItem = await tx.insert(itensRomaneioProducao).values({
+        empresaId: data.empresaId,
         romaneioId: id,
         ...dimensoes,
         quantidade: item.quantidade,
@@ -2285,6 +2521,7 @@ export async function atualizarRomaneioProducao(id: number, data: {
       });
       const itemRomaneioId = getInsertedId(insercaoItem as MysqlInsertResult);
       const insercaoLote = await tx.insert(lotesPecasSerradas).values({
+        empresaId: data.empresaId,
         romaneioId: id,
         itemRomaneioId,
         ...dimensoes,
@@ -2296,6 +2533,7 @@ export async function atualizarRomaneioProducao(id: number, data: {
       });
       const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
       await tx.insert(movimentacoesEstoqueSerrado).values({
+        empresaId: data.empresaId,
         loteId,
         tipo: "entrada_producao",
         quantidade: item.quantidade,
@@ -2307,14 +2545,14 @@ export async function atualizarRomaneioProducao(id: number, data: {
   });
 }
 
-export async function getResumoEstoqueSerrado() {
+export async function getResumoEstoqueSerrado(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
-  const lotes = await db.select().from(lotesPecasSerradas);
+  const lotes = await db.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.empresaId, empresaId));
   return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado" && lote.quantidadeDisponivel !== 0));
 }
 
-export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFinal?: Date) {
+export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFinal?: Date, empresaId = 1) {
   const db = await getDb();
   if (!db) return { linhas: [], resumo: { itensAnalisados: 0, itensEmRutura: 0, itensCriticos: 0, pecasEmDeficit: 0, saidasNoPeriodo: 0 }, periodo: { dataInicial: new Date(), dataFinal: new Date(), dias: 1 } };
   const fim = dataFinal ? new Date(dataFinal) : new Date();
@@ -2323,8 +2561,8 @@ export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFina
   if (!dataInicial) inicio.setDate(inicio.getDate() - 89);
   inicio.setHours(0, 0, 0, 0);
   const [lotes, movimentos] = await Promise.all([
-    db.select().from(lotesPecasSerradas),
-    db.select().from(movimentacoesEstoqueSerrado),
+    db.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.empresaId, empresaId)),
+    db.select().from(movimentacoesEstoqueSerrado).where(eq(movimentacoesEstoqueSerrado.empresaId, empresaId)),
   ]);
   const movimentosNoPeriodo = movimentos.filter((movimento) => {
     const dataMovimento = new Date(movimento.createdAt).getTime();
@@ -2337,12 +2575,12 @@ export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFina
   };
 }
 
-export async function listAjustesEstoqueSerrado() {
+export async function listAjustesEstoqueSerrado(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   const [movimentos, lotes, utilizadores] = await Promise.all([
-    db.select().from(movimentacoesEstoqueSerrado),
-    db.select().from(lotesPecasSerradas),
+    db.select().from(movimentacoesEstoqueSerrado).where(eq(movimentacoesEstoqueSerrado.empresaId, empresaId)),
+    db.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.empresaId, empresaId)),
     db.select({ id: users.id, name: users.name }).from(users),
   ]);
   const lotesPorId = new Map(lotes.map((lote) => [lote.id, lote]));
@@ -2376,6 +2614,7 @@ export async function ajustarEstoqueSerrado(data: {
   quantidadeContada: number;
   motivo: string;
   criadoPor: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2543,14 +2782,15 @@ async function getOrCreateCategoriaPagamentoDiesel(tx: any, userId: number): Pro
   return getInsertedId(resultado as MysqlInsertResult);
 }
 
-export async function getResumoTanqueDiesel() {
+export async function getResumoTanqueDiesel(empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [notasComFornecedor, abastecimentos, titulos] = await Promise.all([
     db.select({ nota: notasDiesel, fornecedorNome: fornecedores.nome }).from(notasDiesel)
-      .leftJoin(fornecedores, eq(notasDiesel.fornecedorId, fornecedores.id)).orderBy(desc(notasDiesel.dataNota)),
-    db.select().from(abastecimentosDiesel).orderBy(desc(abastecimentosDiesel.dataAbastecimento)),
-    db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.origem, "nota_diesel")),
+      .leftJoin(fornecedores, and(eq(notasDiesel.fornecedorId, fornecedores.id), eq(fornecedores.empresaId, empresaId)))
+      .where(eq(notasDiesel.empresaId, empresaId)).orderBy(desc(notasDiesel.dataNota)),
+    db.select().from(abastecimentosDiesel).where(eq(abastecimentosDiesel.empresaId, empresaId)).orderBy(desc(abastecimentosDiesel.dataAbastecimento)),
+    db.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.origem, "nota_diesel"), eq(titulosFinanceiros.empresaId, empresaId))),
   ]);
   const tituloPorNota = new Map<number, any>(titulos.filter((titulo: any) => titulo.notaDieselId).map((titulo: any) => [titulo.notaDieselId, titulo]));
   const resumo = calcularResumoTanqueDiesel(notasComFornecedor.map(({ nota }: any) => nota), abastecimentos);
@@ -2574,16 +2814,18 @@ export async function criarNotaDiesel(data: {
   dataVencimento: Date;
   observacoes?: string | null;
   criadoPor: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {
-    const fornecedor = (await tx.select().from(fornecedores).where(eq(fornecedores.id, data.fornecedorId)).limit(1))[0];
+    const fornecedor = (await tx.select().from(fornecedores).where(and(eq(fornecedores.id, data.fornecedorId), eq(fornecedores.empresaId, data.empresaId))).limit(1))[0];
     if (!fornecedor) throw new Error("Fornecedor não encontrado para a nota de diesel");
     const litros = Number(data.litros.replace(",", "."));
     const valorTotal = Number(data.valorTotal.replace(",", "."));
     if (!(litros > 0) || !(valorTotal > 0)) throw new Error("Informe litros e valor total válidos para a nota de diesel");
     const notaResultado = await tx.insert(notasDiesel).values({
+      empresaId: data.empresaId,
       numeroNota: data.numeroNota?.trim() || null,
       fornecedorId: data.fornecedorId,
       litros: litros.toFixed(3),
@@ -2596,6 +2838,7 @@ export async function criarNotaDiesel(data: {
     const notaDieselId = getInsertedId(notaResultado as MysqlInsertResult);
     const categoriaId = await getOrCreateCategoriaPagamentoDiesel(tx, data.criadoPor);
     const tituloResultado = await tx.insert(titulosFinanceiros).values({
+      empresaId: data.empresaId,
       tipo: "pagar",
       origem: "nota_diesel",
       chaveImportacao: null,
@@ -2635,17 +2878,19 @@ export async function registrarAbastecimentoDiesel(data: {
   dataAbastecimento: Date;
   observacoes?: string | null;
   criadoPor: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (!data.destino.trim()) throw new Error("Informe o destino do abastecimento");
   return db.transaction(async (tx: any) => {
     const [notas, abastecimentos] = await Promise.all([
-      tx.select().from(notasDiesel),
-      tx.select().from(abastecimentosDiesel),
+      tx.select().from(notasDiesel).where(eq(notasDiesel.empresaId, data.empresaId)),
+      tx.select().from(abastecimentosDiesel).where(eq(abastecimentosDiesel.empresaId, data.empresaId)),
     ]);
     const custo = calcularCustoAbastecimentoDiesel(calcularResumoTanqueDiesel(notas, abastecimentos), data.litros);
     const resultado = await tx.insert(abastecimentosDiesel).values({
+      empresaId: data.empresaId,
       destino: data.destino.trim(),
       responsavel: data.responsavel?.trim() || null,
       litros: custo.litros.toFixed(3),

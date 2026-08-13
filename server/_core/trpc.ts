@@ -10,6 +10,37 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
+type ModuloOperacional = "financeiro" | "vendas" | "producao";
+
+const acessosPorModulo: Record<ModuloOperacional, readonly string[]> = {
+  financeiro: ["proprietario", "administrador", "financeiro"],
+  vendas: ["proprietario", "administrador", "vendas"],
+  producao: ["proprietario", "administrador", "producao_estoque"],
+};
+
+const moduloDaRota: Record<string, ModuloOperacional> = {
+  financeiro: "financeiro",
+  orcamento: "vendas",
+  cliente: "vendas",
+  producao: "producao",
+  diesel: "producao",
+  madeira: "producao",
+  bitola: "producao",
+};
+
+export function mensagemDeBloqueioPorPerfil(params: { papel: string; papelPlataforma: string; caminho: string; tipo: "query" | "mutation" | "subscription" }) {
+  const rotaPrincipal = params.caminho.split(".")[0];
+  const modulo = moduloDaRota[rotaPrincipal];
+  const usuarioPlataformaAdmin = params.papelPlataforma === "admin";
+  if (modulo && !usuarioPlataformaAdmin && params.papel !== "consulta" && !acessosPorModulo[modulo].includes(params.papel)) {
+    return "O seu perfil não tem acesso a este módulo.";
+  }
+  if (params.papel === "consulta" && params.tipo === "mutation") {
+    return "O perfil de consulta não pode alterar dados.";
+  }
+  return null;
+}
+
 const requireUser = t.middleware(async opts => {
   const { ctx, next } = opts;
 
@@ -17,10 +48,23 @@ const requireUser = t.middleware(async opts => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
+  if (!ctx.empresaAtiva) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "O seu acesso não está associado a uma empresa ativa." });
+  }
+
+  const bloqueioPorPerfil = mensagemDeBloqueioPorPerfil({
+    papel: ctx.empresaAtiva.membro.papel,
+    papelPlataforma: ctx.user.role,
+    caminho: opts.path,
+    tipo: opts.type,
+  });
+  if (bloqueioPorPerfil) throw new TRPCError({ code: "FORBIDDEN", message: bloqueioPorPerfil });
+
   return next({
     ctx: {
       ...ctx,
       user: ctx.user,
+      empresaAtiva: ctx.empresaAtiva,
     },
   });
 });
@@ -31,7 +75,9 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    if (!ctx.user || ctx.user.role !== 'admin') {
+    const papel = ctx.empresaAtiva?.membro.papel;
+    const podeAdministrarEmpresa = papel === "proprietario" || papel === "administrador";
+    if (!ctx.user || (!podeAdministrarEmpresa && ctx.user.role !== 'admin')) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
@@ -39,6 +85,7 @@ export const adminProcedure = t.procedure.use(
       ctx: {
         ...ctx,
         user: ctx.user,
+        empresaAtiva: ctx.empresaAtiva,
       },
     });
   }),

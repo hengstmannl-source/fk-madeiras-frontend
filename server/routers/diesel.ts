@@ -31,16 +31,18 @@ const AbastecimentoDieselSchema = z.object({
 });
 
 export const dieselRouter = router({
-  resumo: protectedProcedure.query(() => db.getResumoTanqueDiesel()),
+  resumo: protectedProcedure.query(({ ctx }) => db.getResumoTanqueDiesel(ctx.empresaAtiva!.empresa.id)),
   criarNota: protectedProcedure.input(NotaDieselSchema).mutation(({ input, ctx }) => db.criarNotaDiesel({
     ...input,
     dataNota: dataLocal(input.dataNota),
     dataVencimento: dataLocal(input.dataVencimento),
     criadoPor: ctx.user.id,
+    empresaId: ctx.empresaAtiva!.empresa.id,
   })),
   registrarAbastecimento: protectedProcedure.input(AbastecimentoDieselSchema).mutation(({ input, ctx }) => db.registrarAbastecimentoDiesel({
     ...input,
     dataAbastecimento: dataLocal(input.dataAbastecimento),
     criadoPor: ctx.user.id,
+    empresaId: ctx.empresaAtiva!.empresa.id,
   })),
 });

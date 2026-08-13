@@ -111,12 +111,12 @@ const RomaneioSchema = z.object({
 
 export const producaoRouter = router({
   cargas: router({
-    list: protectedProcedure.input(FiltrosCargasSchema.optional()).query(({ input }) => db.listRomaneiosCargaToras({
+    list: protectedProcedure.input(FiltrosCargasSchema.optional()).query(({ ctx, input }) => db.listRomaneiosCargaToras({
       dataInicial: input?.dataInicial ? dataLocal(input.dataInicial) : undefined,
       dataFinal: input?.dataFinal ? dataLocal(input.dataFinal) : undefined,
       origem: input?.origem,
-    })),
-    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioCargaComPlaquetas(input.id)),
+    }, ctx.empresaAtiva!.empresa.id)),
+    get: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ ctx, input }) => db.getRomaneioCargaComPlaquetas(input.id, ctx.empresaAtiva!.empresa.id)),
     modeloPlaquetasCsv: protectedProcedure.query(() => db.getModeloImportacaoPlaquetasCargaCsv()),
     importarPlaquetasCsv: protectedProcedure.input(RomaneioCargaSchema.omit({ plaquetas: true }).extend({
       conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
@@ -139,40 +139,44 @@ export const producaoRouter = router({
     excluir: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.excluirRomaneioCargaToras(input.id, ctx.user.id)),
   }),
   plaquetas: router({
-    list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ input }) => db.listPlaquetas(input)),
-    relatorioExcecoes: protectedProcedure.input(RelatorioExcecoesPlaquetasSchema.optional()).query(({ input }) => db.getRelatorioExcecoesPlaquetas(input)),
+    list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ ctx, input }) => db.listPlaquetas(input, ctx.empresaAtiva!.empresa.id)),
+    relatorioExcecoes: protectedProcedure.input(RelatorioExcecoesPlaquetasSchema.optional()).query(({ ctx, input }) => db.getRelatorioExcecoesPlaquetas(input, ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({
       ...input,
       dataEntrada: dataLocal(input.dataEntrada),
       criadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
     })),
   }),
   romaneios: router({
-    list: protectedProcedure.query(() => db.listRomaneiosProducao()),
-    itens: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.listItensRomaneioProducao(input.id)),
-    detalhe: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ input }) => db.getRomaneioProducaoComItens(input.id)),
+    list: protectedProcedure.query(({ ctx }) => db.listRomaneiosProducao(ctx.empresaAtiva!.empresa.id)),
+    itens: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ ctx, input }) => db.listItensRomaneioProducao(input.id, ctx.empresaAtiva!.empresa.id)),
+    detalhe: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ ctx, input }) => db.getRomaneioProducaoComItens(input.id, ctx.empresaAtiva!.empresa.id)),
     modeloTorasCsv: protectedProcedure.query(() => db.getModeloImportacaoTorasProducaoCsv()),
-    importarTorasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ input }) => db.prepararTorasProducaoCsv(input.conteudo)),
+    importarTorasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ ctx, input }) => db.prepararTorasProducaoCsv(input.conteudo, ctx.empresaAtiva!.empresa.id)),
     modeloPecasCsv: protectedProcedure.query(() => db.getModeloImportacaoPecasProducaoCsv()),
     importarPecasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ input }) => db.prepararPecasProducaoCsv(input.conteudo)),
     confirmar: protectedProcedure.input(RomaneioSchema).mutation(({ ctx, input }) => db.confirmarRomaneioProducao({
       ...input,
       dataProducao: dataLocal(input.dataProducao),
       criadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
     })),
     update: protectedProcedure.input(RomaneioSchema.omit({ toras: true }).extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.atualizarRomaneioProducao(input.id, {
       ...input,
       dataProducao: dataLocal(input.dataProducao),
       atualizadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
     })),
   }),
   estoque: router({
-    resumo: protectedProcedure.query(() => db.getResumoEstoqueSerrado()),
-    relatorio: protectedProcedure.input(RelatorioInventarioSchema.optional()).query(({ input }) => db.getRelatorioInventarioSerrado(
+    resumo: protectedProcedure.query(({ ctx }) => db.getResumoEstoqueSerrado(ctx.empresaAtiva!.empresa.id)),
+    relatorio: protectedProcedure.input(RelatorioInventarioSchema.optional()).query(({ ctx, input }) => db.getRelatorioInventarioSerrado(
       input?.dataInicial ? dataLocal(input.dataInicial) : undefined,
       input?.dataFinal ? dataLocal(input.dataFinal) : undefined,
+      ctx.empresaAtiva!.empresa.id,
     )),
-    ajustes: protectedProcedure.query(() => db.listAjustesEstoqueSerrado()),
-    ajustar: adminProcedure.input(AjusteEstoqueSerradoSchema).mutation(({ ctx, input }) => db.ajustarEstoqueSerrado({ ...input, criadoPor: ctx.user.id })),
+    ajustes: protectedProcedure.query(({ ctx }) => db.listAjustesEstoqueSerrado(ctx.empresaAtiva!.empresa.id)),
+    ajustar: adminProcedure.input(AjusteEstoqueSerradoSchema).mutation(({ ctx, input }) => db.ajustarEstoqueSerrado({ ...input, criadoPor: ctx.user.id, empresaId: ctx.empresaAtiva!.empresa.id })),
   }),
 });

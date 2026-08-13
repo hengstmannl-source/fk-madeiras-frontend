@@ -24,6 +24,10 @@ const ctx = {
     updatedAt: new Date(),
     lastSignedIn: new Date(),
   },
+  empresaAtiva: {
+    empresa: { id: 1, nome: "FK Madeiras" },
+    membro: { id: 1, empresaId: 1, usuarioId: 7, papel: "proprietario", ativo: true },
+  },
 } as unknown as TrpcContext;
 
 describe("cliente.create", () => {
@@ -46,6 +50,7 @@ describe("cliente.create", () => {
       contacto: "+55 11 99999-9999",
       email: "contato@exemplo.com",
       criadoPor: 7,
+      empresaId: 1,
     });
     expect(result).toEqual({ success: true, id: 42 });
   });

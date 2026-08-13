@@ -20,11 +20,18 @@ import EstoquePage from "./pages/EstoquePage";
 import RelatorioPlaquetasPage from "./pages/RelatorioPlaquetasPage";
 import InventarioPage from "./pages/InventarioPage";
 import DieselPage from "./pages/DieselPage";
+import EquipePage from "./pages/EquipePage";
+import { CadastroEmpresaPage, ConvitePage, LoginPage } from "./pages/AcessoPage";
 
 function Router() {
   return (
-    <DashboardLayout>
-      <Switch>
+    <Switch>
+      <Route path="/login" component={LoginPage} />
+      <Route path="/cadastro" component={CadastroEmpresaPage} />
+      <Route path="/convite/:token" component={ConvitePage} />
+      <Route>
+        <DashboardLayout>
+          <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/madeiras" component={MadeirasPage} />
         <Route path="/clientes" component={ClientesPage} />
@@ -40,11 +47,14 @@ function Router() {
         <Route path="/estoque/plaquetas" component={RelatorioPlaquetasPage} />
         <Route path="/inventario" component={InventarioPage} />
         <Route path="/diesel" component={DieselPage} />
-        <Route path="/empresa" component={EmpresaPage} />
+            <Route path="/empresa" component={EmpresaPage} />
+            <Route path="/equipe" component={EquipePage} />
         <Route path="/404" component={NotFound} />
-        <Route component={NotFound} />
-      </Switch>
-    </DashboardLayout>
+            <Route component={NotFound} />
+          </Switch>
+        </DashboardLayout>
+      </Route>
+    </Switch>
   );
 }
 

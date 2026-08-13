@@ -31,7 +31,7 @@ import {
   ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
-import { useLocation, useSearch } from "wouter";
+import { Redirect, useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { toast } from "sonner";
@@ -63,6 +63,7 @@ export const dashboardNavigation = {
   gestao: [
     { icon: Users, label: "Clientes", path: "/clientes" },
     { icon: Building2, label: "Empresa", path: "/empresa" },
+    { icon: Users, label: "Colaboradores", path: "/equipe" },
   ],
   producao: [
     { icon: Factory, label: "Produção", path: "/producao" },
@@ -128,30 +129,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (loading) return <DashboardLayoutSkeleton />;
 
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-background">
-        <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-16 h-16 rounded-xl bg-primary flex items-center justify-center mb-2">
-              <span className="text-primary-foreground text-xl font-bold">FK</span>
-            </div>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              FK Madeiras
-            </h1>
-            <p className="text-sm text-muted-foreground text-center max-w-sm">
-              Sistema de gestão de vendas e financeiro para madeireira
-            </p>
-          </div>
-          <Button
-            onClick={() => startLogin()}
-            size="lg"
-            className="w-full shadow-lg hover:shadow-xl transition-all"
-          >
-            Iniciar Sessão
-          </Button>
-        </div>
-      </div>
-    );
+    return <Redirect to="/login" />;
   }
 
   return (
