@@ -293,3 +293,6 @@
 - [x] Extrair, validar e exibir código de barras ou linha digitável de boleto para conferência
 - [x] Exibir anexos e dados de boleto ao criar, editar e consultar um agendamento de pagamento
 - [x] Cobrir anexos, identificação de boleto e permissões com testes, validação visual e publicação
+- [x] Adicionar cópia em um clique do código de barras ou linha digitável do boleto com confirmação visual
+- [x] Criar modal de pré-visualização segura para imagens e PDFs anexados aos lançamentos
+- [x] Cobrir cópia e pré-visualização com testes, validação visual e publicação

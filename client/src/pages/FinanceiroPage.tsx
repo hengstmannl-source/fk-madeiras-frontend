@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import {
   ArrowDownToLine, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
-  CircleAlert, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2, Paperclip, Pencil, Plus, RefreshCw, RotateCcw, ScanLine, Tags, Upload, WalletCards, X,
+  CircleAlert, CircleDollarSign, Copy, Download, Eye, FileSpreadsheet, Landmark, Loader2, Paperclip, Pencil, Plus, RefreshCw, RotateCcw, ScanLine, Tags, Upload, WalletCards, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -151,6 +151,16 @@ export default function FinanceiroPage() {
   const [preparoFornecedores, setPreparoFornecedores] = useState<{ linhas: Array<{ numeroLinha: number; nome: string; contacto: string | null; email: string | null; documento: string | null }>; erros: string[] } | null>(null);
   const [anexosLancamento, setAnexosLancamento] = useState<File[]>([]);
   const [codigoBoletoLancamento, setCodigoBoletoLancamento] = useState("");
+  const [anexoParaVisualizar, setAnexoParaVisualizar] = useState<{ nomeArquivo: string; url: string; mimeType: string } | null>(null);
+
+  const copiarCodigoBoleto = async (codigo: string) => {
+    try {
+      await navigator.clipboard.writeText(codigo);
+      toast.success("Código do boleto copiado para a área de transferência");
+    } catch {
+      toast.error("Não foi possível copiar o código. Selecione os dígitos manualmente.");
+    }
+  };
 
   useEffect(() => {
     setAba(abaFinanceiraDaUrl(search));
@@ -714,14 +724,24 @@ export default function FinanceiroPage() {
           <div className="space-y-4">
             <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloParaEditar?.descricao}</p><p className="mt-1 text-muted-foreground">Altere a data de vencimento conforme a negociação de pagamento.</p>{tituloParaEditar?.origem === "romaneio_carga" && <p className="mt-2 text-xs text-primary">Este vencimento também será atualizado no romaneio de carga vinculado.</p>}</div>
             <div className="space-y-2"><Label htmlFor="vencimento-agendamento">Novo vencimento *</Label><Input id="vencimento-agendamento" aria-label="Novo vencimento" type="date" value={vencimentoEditado} onChange={(event) => setVencimentoEditado(event.target.value)} /></div>
-            {tituloParaEditar?.tipo === "pagar" && (tituloParaEditar?.linhaDigitavelBoleto || tituloParaEditar?.codigoBarrasBoleto) && <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3"><p className="text-sm font-medium text-amber-950">Dados do boleto</p><p className="mt-1 text-xs text-amber-900">{tituloParaEditar?.linhaDigitavelBoleto ? "Linha digitável" : "Código de barras"}</p><code className="mt-1 block break-all rounded bg-background px-2 py-1.5 text-xs text-foreground">{tituloParaEditar?.linhaDigitavelBoleto ?? tituloParaEditar?.codigoBarrasBoleto}</code><p className="mt-2 text-xs text-amber-900">Confira os dígitos com o documento antes de efetuar o pagamento.</p></div>}
+            {tituloParaEditar?.tipo === "pagar" && (tituloParaEditar?.linhaDigitavelBoleto || tituloParaEditar?.codigoBarrasBoleto) && <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-amber-950">Dados do boleto</p><p className="mt-1 text-xs text-amber-900">{tituloParaEditar?.linhaDigitavelBoleto ? "Linha digitável" : "Código de barras"}</p></div><Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => void copiarCodigoBoleto(tituloParaEditar.linhaDigitavelBoleto ?? tituloParaEditar.codigoBarrasBoleto ?? "")}><Copy className="mr-1.5 h-3.5 w-3.5" />Copiar</Button></div><code className="mt-2 block break-all rounded bg-background px-2 py-1.5 text-xs text-foreground">{tituloParaEditar?.linhaDigitavelBoleto ?? tituloParaEditar?.codigoBarrasBoleto}</code><p className="mt-2 text-xs text-amber-900">Confira os dígitos com o documento antes de efetuar o pagamento.</p></div>}
             <div className="space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/30 p-3">
               <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-amber-950">Documentos vinculados</p><p className="mt-0.5 text-xs text-amber-900">Notas fiscais, boletos e imagens do agendamento.</p></div><Label htmlFor="anexar-documentos-edicao" className="cursor-pointer"><span className="inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">{enviarAnexoFinanceiro.isPending ? "Enviando..." : "Anexar"}</span></Label></div>
               <Input id="anexar-documentos-edicao" className="sr-only" aria-label="Anexar documentos ao agendamento" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple disabled={enviarAnexoFinanceiro.isPending} onChange={(evento) => { void anexarDocumentosAoTitulo(evento.target.files); evento.currentTarget.value = ""; }} />
-              {anexosTituloEditado.isLoading ? <p className="py-2 text-xs text-muted-foreground">Carregando documentos...</p> : anexosTituloEditado.data?.length ? <div className="space-y-1.5">{anexosTituloEditado.data.map((anexo: any) => <div key={anexo.id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" /><a className="min-w-0 flex-1 truncate font-medium hover:underline" href={anexo.url} target="_blank" rel="noreferrer">{anexo.nomeArquivo}</a><span className="shrink-0 text-muted-foreground">{(Number(anexo.tamanhoBytes) / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" disabled={removerAnexoFinanceiro.isPending} onClick={() => removerAnexoFinanceiro.mutate({ id: anexo.id, tituloId: tituloParaEditar.id }, { onSuccess: () => { toast.success("Documento removido"); void anexosTituloEditado.refetch(); }, onError: (erro) => toast.error(erro.message) })}>Remover</Button></div>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-3 text-center text-xs text-muted-foreground">Nenhum documento anexado a este agendamento.</p>}
+              {anexosTituloEditado.isLoading ? <p className="py-2 text-xs text-muted-foreground">Carregando documentos...</p> : anexosTituloEditado.data?.length ? <div className="space-y-1.5">{anexosTituloEditado.data.map((anexo: any) => <div key={anexo.id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate font-medium">{anexo.nomeArquivo}</span><span className="shrink-0 text-muted-foreground">{(Number(anexo.tamanhoBytes) / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2" aria-label={`Visualizar ${anexo.nomeArquivo}`} onClick={() => setAnexoParaVisualizar({ nomeArquivo: anexo.nomeArquivo, url: anexo.url, mimeType: anexo.mimeType })}><Eye className="h-3.5 w-3.5" /></Button><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" disabled={removerAnexoFinanceiro.isPending} onClick={() => removerAnexoFinanceiro.mutate({ id: anexo.id, tituloId: tituloParaEditar.id }, { onSuccess: () => { toast.success("Documento removido"); void anexosTituloEditado.refetch(); }, onError: (erro) => toast.error(erro.message) })}>Remover</Button></div>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-3 text-center text-xs text-muted-foreground">Nenhum documento anexado a este agendamento.</p>}
             </div>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarAgendamento.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarAgendamento.isPending}>{atualizarAgendamento.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar vencimento</Button></div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(anexoParaVisualizar)} onOpenChange={(aberto) => !aberto && setAnexoParaVisualizar(null)}>
+        <DialogContent className="flex h-[88vh] max-w-5xl flex-col overflow-hidden p-0">
+          <DialogHeader className="border-b px-5 py-4"><DialogTitle className="truncate pr-8">{anexoParaVisualizar?.nomeArquivo}</DialogTitle></DialogHeader>
+          <div className="min-h-0 flex-1 bg-muted/30 p-3">
+            {anexoParaVisualizar?.mimeType.startsWith("image/") ? <img src={anexoParaVisualizar.url} alt={`Pré-visualização de ${anexoParaVisualizar.nomeArquivo}`} className="h-full w-full object-contain" /> : anexoParaVisualizar?.mimeType === "application/pdf" ? <iframe title={`Pré-visualização de ${anexoParaVisualizar.nomeArquivo}`} src={anexoParaVisualizar.url} className="h-full w-full rounded-md border bg-background" /> : <div className="flex h-full flex-col items-center justify-center gap-3 text-center text-sm text-muted-foreground"><Paperclip className="h-8 w-8" /><p>Este tipo de documento não possui pré-visualização incorporada.</p></div>}
+          </div>
+          {anexoParaVisualizar && <div className="flex justify-end border-t px-5 py-3"><Button asChild variant="outline"><a href={anexoParaVisualizar.url} target="_blank" rel="noreferrer">Abrir em nova aba</a></Button></div>}
         </DialogContent>
       </Dialog>
 

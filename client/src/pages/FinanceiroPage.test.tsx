@@ -8,6 +8,7 @@ const state = vi.hoisted(() => ({
   search: "",
   titulos: [] as Array<Record<string, unknown>>,
   baixas: [] as Array<Record<string, unknown>>,
+  anexos: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
   atualizarAgendamento: vi.fn(),
   estornar: vi.fn(),
@@ -94,7 +95,12 @@ vi.mock("@/lib/trpc", () => {
         },
         categorias: { list: queryVazia, create: mutationInerte },
         fornecedores: { list: queryVazia, create: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
-        anexos: { upload: mutationInerte, atualizarBoleto: mutationInerte, list: queryVazia, remove: mutationInerte },
+        anexos: {
+          upload: mutationInerte,
+          atualizarBoleto: mutationInerte,
+          list: { useQuery: () => ({ data: state.anexos, isLoading: false, refetch: vi.fn() }) },
+          remove: mutationInerte,
+        },
         contas: { list: queryVazia, create: mutationInerte },
         recorrencias: { list: queryVazia, create: mutationInerte },
         alertas: { list: queryVazia },
@@ -124,6 +130,14 @@ describe("FinanceiroPage — cancelamento manual", () => {
     state.invalidar.mockReset();
     state.exportarPdf.mockReset();
     state.exportarPdf.mockResolvedValue(undefined);
+    state.anexos = [{
+      id: 91,
+      tituloId: 13,
+      nomeArquivo: "boleto-agosto.pdf",
+      mimeType: "application/pdf",
+      tamanhoBytes: 1024,
+      url: "https://documentos.exemplo/boleto-agosto.pdf",
+    }];
     state.baixas = [{
       id: 40,
       tituloId: 12,
@@ -179,6 +193,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
         desconto: "0.00",
         juros: "0.00",
         dataVencimento: "2026-08-12T00:00:00.000Z",
+        linhaDigitavelBoleto: "00190500954014481606906809350314337370000000100",
       },
     ];
   });
@@ -353,6 +368,24 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const codigo = screen.getByLabelText("Código de barras ou linha digitável");
     await user.type(codigo, "00190500954014481606906809350314337370000000100");
     expect(codigo).toHaveValue("00190500954014481606906809350314337370000000100");
+  });
+
+  it("copia o código do boleto e pré-visualiza o PDF anexado ao agendamento", async () => {
+    const copiar = vi.fn().mockResolvedValue(undefined);
+    const user = userEvent.setup();
+    Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copiar } });
+    render(<FinanceiroPage />);
+
+    const tabelaPagar = screen.getAllByRole("table").find((tabela) => within(tabela).queryByText("Carga de toras RC-001"));
+    expect(tabelaPagar).toBeDefined();
+    fireEvent.click(within(tabelaPagar!).getByRole("button", { name: "Editar" }));
+
+    const dialogo = await screen.findByRole("dialog");
+    await user.click(within(dialogo).getByRole("button", { name: "Copiar" }));
+    await waitFor(() => expect(copiar).toHaveBeenCalledWith("00190500954014481606906809350314337370000000100"));
+
+    await user.click(within(dialogo).getByRole("button", { name: "Visualizar boleto-agosto.pdf" }));
+    expect(screen.getByTitle("Pré-visualização de boleto-agosto.pdf")).toHaveAttribute("src", "https://documentos.exemplo/boleto-agosto.pdf");
   });
 
   it("exporta somente os títulos visíveis após aplicar os filtros", async () => {
