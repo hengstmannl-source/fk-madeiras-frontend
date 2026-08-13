@@ -37,6 +37,7 @@ export function criarLinhasComprimentoVazias(inicio = 1, quantidade = 4): LinhaC
 }
 
 export function criarItensVendaPorMedida(input: {
+  madeiraId?: number | null;
   madeiraNome: string;
   precoM3: string;
   espessuraCm: string;
@@ -77,7 +78,7 @@ export function criarItensVendaPorMedida(input: {
       const valorPeca = calculateValorPeca(precoLinear, comprimento);
       const valorTotal = calculateValorTotal(valorPeca, quantidade);
       return {
-        madeiraId: null,
+        madeiraId: input.madeiraId ?? null,
         bitolaId: null,
         madeiraNome,
         bitolaDescricao: `${formatDimensionCm(espessura)}×${formatDimensionCm(largura)} cm`,

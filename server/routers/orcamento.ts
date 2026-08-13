@@ -35,6 +35,7 @@ export const RegistroPagamentoSchema = z.object({
 });
 
 const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
+const LinhaModeloSchema = z.object({ comprimento: z.string().trim().min(1), quantidade: z.string().trim().min(1) });
 
 function parseDataFinanceira(data: string) {
   const [ano, mes, dia] = data.split("-").map(Number);
@@ -152,6 +153,34 @@ export const orcamentoRouter = router({
   estornarEntrega: protectedProcedure
     .input(z.object({ id: z.number().int().positive(), motivo: z.string().trim().min(3, "Informe o motivo do estorno") }))
     .mutation(({ ctx, input }) => db.estornarEntregaVenda(input.id, ctx.user.id, input.motivo)),
+
+  modelosMedida: router({
+    list: protectedProcedure.query(async () => {
+      const modelos = await db.listModelosMedidaVenda();
+      return modelos.map((modelo) => ({
+        ...modelo,
+        comprimentos: JSON.parse(modelo.comprimentos) as Array<{ comprimento: string; quantidade: string }>,
+      }));
+    }),
+    create: protectedProcedure.input(z.object({
+      nome: z.string().trim().min(2).max(120),
+      madeiraId: z.number().int().positive().nullable(),
+      madeiraNome: z.string().trim().min(2).max(200),
+      precoM3: z.string().trim().min(1),
+      espessuraCm: z.string().trim().min(1),
+      larguraCm: z.string().trim().min(1),
+      comprimentos: z.array(LinhaModeloSchema).min(1),
+    })).mutation(async ({ ctx, input }) => {
+      const id = await db.createModeloMedidaVenda({
+        ...input,
+        comprimentos: JSON.stringify(input.comprimentos),
+        criadoPor: ctx.user.id,
+      });
+      return { id };
+    }),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
+      .mutation(({ ctx, input }) => db.deleteModeloMedidaVenda(input.id, ctx.user.id)),
+  }),
 
   duplicate: protectedProcedure
     .input(z.object({ id: z.number() }))

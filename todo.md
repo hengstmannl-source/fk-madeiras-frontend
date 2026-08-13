@@ -263,3 +263,7 @@
 - [x] Preservar cálculo, resumo, validações e baixa de estoque dos itens individuais gerados
 - [x] Cobrir o lançamento agrupado de itens de venda com testes e validação visual
 - [x] Ajustar a grelha de comprimentos para manter todos os campos e ações acessíveis no celular
+- [x] Exibir a disponibilidade do estoque serrado para cada comprimento informado no romaneio de venda
+- [x] Transformar Madeira em lista pesquisável, padronizada e com ação Criar novo
+- [x] Permitir guardar, selecionar e excluir modelos reutilizáveis de medidas frequentes
+- [x] Cobrir disponibilidade, modelos e cadastro de madeira com testes e validação visual

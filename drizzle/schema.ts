@@ -124,6 +124,23 @@ export const itensOrcamento = mysqlTable("itensOrcamento", {
 export type ItemOrcamento = typeof itensOrcamento.$inferSelect;
 export type InsertItemOrcamento = typeof itensOrcamento.$inferInsert;
 
+export const modelosMedidaVenda = mysqlTable("modelosMedidaVenda", {
+  id: int("id").autoincrement().primaryKey(),
+  nome: varchar("nome", { length: 120 }).notNull(),
+  madeiraId: int("madeiraId"),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  precoM3: decimal("precoM3", { precision: 12, scale: 2 }).notNull(),
+  espessuraCm: decimal("espessuraCm", { precision: 8, scale: 2 }).notNull(),
+  larguraCm: decimal("larguraCm", { precision: 8, scale: 2 }).notNull(),
+  comprimentos: text("comprimentos").notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type ModeloMedidaVenda = typeof modelosMedidaVenda.$inferSelect;
+export type InsertModeloMedidaVenda = typeof modelosMedidaVenda.$inferInsert;
+
 export const historicoAlteracoes = mysqlTable("historicoAlteracoes", {
   id: int("id").autoincrement().primaryKey(),
   orcamentoId: int("orcamentoId").notNull(),

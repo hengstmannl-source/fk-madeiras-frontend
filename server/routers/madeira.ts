@@ -15,11 +15,11 @@ export const madeiraRouter = router({
       unidadeMedida: z.string().default("m³"),
     }))
     .mutation(async ({ ctx, input }) => {
-      await db.createMadeira({
+      const result = await db.createMadeira({
         ...input,
         criadoPor: ctx.user.id,
       });
-      return { success: true };
+      return { success: true, id: Number(result[0].insertId) };
     }),
 
   update: protectedProcedure

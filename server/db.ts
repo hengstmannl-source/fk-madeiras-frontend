@@ -2,12 +2,12 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
-  orcamentos, itensOrcamento, historicoAlteracoes, empresaConfiguracoes,
+  orcamentos, itensOrcamento, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros,
   plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
-  type InsertOrcamento, type InsertItemOrcamento, type InsertFornecedor,
+  type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
@@ -229,6 +229,25 @@ export async function clearEmpresaLogo() {
 }
 
 // ─── Orçamentos ───
+export async function listModelosMedidaVenda() {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(modelosMedidaVenda).orderBy(asc(modelosMedidaVenda.nome));
+}
+
+export async function createModeloMedidaVenda(data: InsertModeloMedidaVenda) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const resultado = await db.insert(modelosMedidaVenda).values(data);
+  return Number(resultado[0].insertId);
+}
+
+export async function deleteModeloMedidaVenda(id: number, userId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId)));
+}
+
 export async function listOrcamentos(filters?: { estado?: string; clienteId?: number }) {
   const db = await getDb();
   if (!db) return [];

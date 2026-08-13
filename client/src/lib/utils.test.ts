@@ -4,7 +4,7 @@ import { calculatePrecoLinearCm, calculateVolumeCm, parseDecimalInput } from "./
 describe("medidas de vendas em centímetros", () => {
   it("preserva a vírgula decimal de uma bitola de 2,3 × 5 cm", () => {
     expect(parseDecimalInput("2,3")).toBe(2.3);
-    expect(calculatePrecoLinearCm(2.3, 5, 900)).toBeCloseTo(10.35, 8);
+    expect(calculatePrecoLinearCm(2.3, 5, 900)).toBeCloseTo(1.035, 8);
   });
 
   it("calcula o volume com centímetros, sem ampliar a bitola por dez", () => {

@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator, UserPlus, Check, ChevronsUpDown } from "lucide-react";
@@ -17,6 +18,7 @@ import {
   formatMeasurement,
 } from "@/lib/utils";
 import { criarItensVendaPorMedida, criarLinhasComprimentoVazias, type LinhaComprimentoVenda } from "@/lib/vendaItemGroup";
+import { disponibilidadeEstoqueVenda, prepararModeloMedida } from "@/lib/vendaMedidas";
 import {
   Dialog,
   DialogContent,
@@ -60,10 +62,25 @@ export default function OrcamentoNovo() {
   const [dataVencimento, setDataVencimento] = useState(() => dataLocalParaInput());
   const [competencia, setCompetencia] = useState(() => dataLocalParaInput());
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
-  const [grupoItem, setGrupoItem] = useState({ madeiraNome: "", precoM3: "", espessuraCm: "", larguraCm: "" });
+  const [grupoItem, setGrupoItem] = useState({ madeiraId: null as number | null, madeiraNome: "", precoM3: "", espessuraCm: "", larguraCm: "" });
   const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(() => criarLinhasComprimentoVazias());
+  const madeiras = trpc.madeira.list.useQuery();
+  const estoqueSerrado = trpc.producao.estoque.resumo.useQuery();
+  const createMadeira = trpc.madeira.create.useMutation();
+  const [novaMadeiraOpen, setNovaMadeiraOpen] = useState(false);
+  const [novaMadeiraForm, setNovaMadeiraForm] = useState({ nome: "", precoM3: "", descricao: "" });
+  const modelosMedida = trpc.orcamento.modelosMedida.list.useQuery();
+  const criarModeloMedida = trpc.orcamento.modelosMedida.create.useMutation();
+  const excluirModeloMedida = trpc.orcamento.modelosMedida.delete.useMutation();
+  const [modeloOpen, setModeloOpen] = useState(false);
+  const [nomeModelo, setNomeModelo] = useState("");
 
   const clienteSelecionado = clientes.data?.find((cliente) => cliente.id === Number(clienteId));
+  const opcoesMadeira = useMemo(() => (madeiras.data ?? []).map((madeira) => ({
+    value: String(madeira.id),
+    label: madeira.nome,
+    details: `Preço padrão: ${formatCurrency(madeira.precoM3)}/m³`,
+  })), [madeiras.data]);
 
   const totals = useMemo(() => {
     let subtotal = 0;
@@ -99,6 +116,10 @@ export default function OrcamentoNovo() {
     setLinhasComprimento((linhas) => linhas.length === 1 ? linhas : linhas.filter((linha) => linha.id !== id));
   };
 
+  const disponibilidadeLinha = (comprimento: string) => {
+    return disponibilidadeEstoqueVenda({ estoque: estoqueSerrado.data ?? [], madeiraNome: grupoItem.madeiraNome, espessuraCm: grupoItem.espessuraCm, larguraCm: grupoItem.larguraCm, comprimento });
+  };
+
   const adicionarGrupoItens = () => {
     const resultado = criarItensVendaPorMedida({ ...grupoItem, linhas: linhasComprimento });
     if (resultado.erro) { toast.error(resultado.erro); return; }
@@ -112,6 +133,44 @@ export default function OrcamentoNovo() {
 
   const create = trpc.orcamento.create.useMutation();
   const utils = trpc.useUtils();
+
+  const selecionarMadeira = (valor: string) => {
+    const madeira = madeiras.data?.find((item) => item.id === Number(valor));
+    if (!madeira) return;
+    setGrupoItem((grupo) => ({ ...grupo, madeiraId: madeira.id, madeiraNome: madeira.nome, precoM3: String(madeira.precoM3) }));
+  };
+
+  const criarMadeiraEmContexto = () => {
+    if (!novaMadeiraForm.nome.trim()) { toast.error("Informe o nome da madeira"); return; }
+    if (!novaMadeiraForm.precoM3.trim() || Number(novaMadeiraForm.precoM3.replace(",", ".")) < 0) { toast.error("Informe um preço por m³ válido"); return; }
+    createMadeira.mutate({ ...novaMadeiraForm, nome: novaMadeiraForm.nome.trim(), unidadeMedida: "m³" }, {
+      onSuccess: async (resultado) => {
+        await utils.madeira.list.invalidate();
+        setGrupoItem((grupo) => ({ ...grupo, madeiraId: resultado.id, madeiraNome: novaMadeiraForm.nome.trim(), precoM3: novaMadeiraForm.precoM3 }));
+        setNovaMadeiraForm({ nome: "", precoM3: "", descricao: "" });
+        setNovaMadeiraOpen(false);
+        toast.success("Madeira criada e selecionada");
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const aplicarModeloMedida = (id: string) => {
+    const modelo = modelosMedida.data?.find((item) => item.id === Number(id));
+    if (!modelo) return;
+    setGrupoItem({ madeiraId: modelo.madeiraId, madeiraNome: modelo.madeiraNome, precoM3: String(modelo.precoM3), espessuraCm: String(modelo.espessuraCm), larguraCm: String(modelo.larguraCm) });
+    setLinhasComprimento(modelo.comprimentos.map((linha, indice) => ({ id: Date.now() + indice, comprimento: linha.comprimento, quantidade: linha.quantidade })));
+    toast.success(`Modelo “${modelo.nome}” aplicado`);
+  };
+
+  const salvarModeloMedida = () => {
+    const modelo = prepararModeloMedida({ nome: nomeModelo, madeiraNome: grupoItem.madeiraNome, precoM3: grupoItem.precoM3, espessuraCm: grupoItem.espessuraCm, larguraCm: grupoItem.larguraCm, linhas: linhasComprimento });
+    if (modelo.erro) { toast.error(modelo.erro); return; }
+    criarModeloMedida.mutate({ nome: modelo.nome!, madeiraId: grupoItem.madeiraId, madeiraNome: grupoItem.madeiraNome, precoM3: grupoItem.precoM3, espessuraCm: grupoItem.espessuraCm, larguraCm: grupoItem.larguraCm, comprimentos: modelo.comprimentos }, {
+      onSuccess: async () => { await utils.orcamento.modelosMedida.list.invalidate(); setNomeModelo(""); setModeloOpen(false); toast.success("Modelo de medida guardado"); },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
 
   const handleCriarCliente = () => {
     if (!novoClienteForm.nome.trim()) { toast.error("Nome é obrigatório"); return; }
@@ -260,12 +319,12 @@ export default function OrcamentoNovo() {
           {/* Adicionar itens por medida */}
           <Card className="border border-border/50 shadow-sm">
             <CardContent className="p-5">
-              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-sm flex items-center gap-2"><Calculator className="h-4 w-4" />Romaneio de itens</h3><p className="mt-1 text-xs text-muted-foreground">Defina a medida uma vez e preencha todos os comprimentos e quantidades abaixo.</p></div><span className="text-xs font-medium text-primary">Medida em centímetros</span></div>
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-sm flex items-center gap-2"><Calculator className="h-4 w-4" />Romaneio de itens</h3><p className="mt-1 text-xs text-muted-foreground">Defina a medida uma vez e preencha todos os comprimentos e quantidades abaixo.</p></div><div className="flex flex-wrap items-center gap-2"><select aria-label="Aplicar modelo de medida" defaultValue="" onChange={(e) => { aplicarModeloMedida(e.target.value); e.currentTarget.value = ""; }} className="h-9 max-w-48 rounded-md border border-input bg-background px-2 text-xs"><option value="">Aplicar modelo...</option>{modelosMedida.data?.map((modelo) => <option key={modelo.id} value={modelo.id}>{modelo.nome}</option>)}</select><Button type="button" size="sm" variant="outline" onClick={() => setModeloOpen(true)}><Save className="mr-1.5 h-3.5 w-3.5" />Guardar medida</Button><span className="text-xs font-medium text-primary">Medida em centímetros</span></div></div>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2 space-y-2">
                     <Label>Madeira *</Label>
-                    <Input value={grupoItem.madeiraNome} onChange={(e) => setGrupoItem({ ...grupoItem, madeiraNome: e.target.value })} placeholder="Ex.: Guarandi" className="bg-white" />
+                    <SearchableEntitySelect value={grupoItem.madeiraId ? String(grupoItem.madeiraId) : ""} onValueChange={selecionarMadeira} options={opcoesMadeira} placeholder="Selecione a madeira" searchPlaceholder="Pesquisar madeira..." emptyLabel="Nenhuma madeira encontrada." createLabel="Criar nova madeira" onCreate={() => setNovaMadeiraOpen(true)} ariaLabel="Selecionar madeira" className="bg-white" />
                   </div>
                   <div className="space-y-2">
                     <Label>Preço por m³ (R$) *</Label>
@@ -284,7 +343,7 @@ export default function OrcamentoNovo() {
                 </div>
                 <div className="overflow-hidden rounded-lg border border-border/70">
                   <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2"><div><p className="text-sm font-medium">Comprimentos do romaneio</p><p className="text-xs text-muted-foreground">Preencha cada comprimento e a quantidade de peças correspondente.</p></div><span className="text-xs text-muted-foreground">m / peças</span></div>
-                  <div className="venda-comprimentos"><table className="w-full table-fixed text-sm"><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th className="w-[45%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[42%] px-3 py-2 text-left font-medium">Quantidade</th><th className="w-[13%] px-2 py-2 text-right font-medium">Ação</th></tr></thead><tbody>{linhasComprimento.map((linha, indice) => <tr key={linha.id} className="border-t border-border/50"><td className="p-2"><Input aria-label={`Comprimento da linha ${indice + 1}`} value={linha.comprimento} onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)} inputMode="decimal" placeholder="Ex.: 3,00" className="h-9 bg-white" /></td><td className="p-2"><Input aria-label={`Quantidade da linha ${indice + 1}`} value={linha.quantidade} onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)} type="number" min="1" placeholder="Ex.: 20" className="h-9 bg-white" /></td><td className="p-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Remover comprimento ${indice + 1}`} disabled={linhasComprimento.length === 1} onClick={() => removerLinhaComprimento(linha.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody></table></div>
+                  <div className="venda-comprimentos"><table className="w-full table-fixed text-sm"><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th className="w-[45%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[42%] px-3 py-2 text-left font-medium">Quantidade / estoque</th><th className="w-[13%] px-2 py-2 text-right font-medium">Ação</th></tr></thead><tbody>{linhasComprimento.map((linha, indice) => { const disponibilidade = disponibilidadeLinha(linha.comprimento); const quantidadeInformada = Number(linha.quantidade); const deficit = disponibilidade !== null && Number.isFinite(quantidadeInformada) && quantidadeInformada > disponibilidade; return <tr key={linha.id} className="border-t border-border/50"><td className="p-2"><Input aria-label={`Comprimento da linha ${indice + 1}`} value={linha.comprimento} onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)} inputMode="decimal" placeholder="Ex.: 3,00" className="h-9 bg-white" /></td><td className="p-2"><Input aria-label={`Quantidade da linha ${indice + 1}`} value={linha.quantidade} onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)} type="number" min="1" placeholder="Ex.: 20" className="h-9 bg-white" /><p className={`mt-1 text-[11px] font-medium ${disponibilidade === null ? "text-muted-foreground" : deficit ? "text-rose-700" : "text-emerald-700"}`}>{disponibilidade === null ? "Informe a medida" : deficit ? `Déficit de ${quantidadeInformada - disponibilidade} peça(s)` : `${disponibilidade} peça(s) em estoque`}</p></td><td className="p-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Remover comprimento ${indice + 1}`} disabled={linhasComprimento.length === 1} onClick={() => removerLinhaComprimento(linha.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>; })}</tbody></table></div>
                   <div className="border-t bg-muted/10 px-3 py-2"><Button type="button" size="sm" variant="outline" onClick={adicionarLinhaComprimento}><Plus className="mr-1.5 h-3.5 w-3.5" />Adicionar comprimento</Button></div>
                 </div>
                 <Button onClick={adicionarGrupoItens} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -362,6 +421,25 @@ export default function OrcamentoNovo() {
           </Card>
         </div>
       </div>
+
+      <Dialog open={novaMadeiraOpen} onOpenChange={setNovaMadeiraOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Nova Madeira</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1">
+            <div className="space-y-2"><Label>Nome *</Label><Input value={novaMadeiraForm.nome} onChange={(e) => setNovaMadeiraForm({ ...novaMadeiraForm, nome: e.target.value })} placeholder="Ex.: Guarandi" className="bg-white" autoFocus /></div>
+            <div className="space-y-2"><Label>Preço padrão por m³ (R$) *</Label><Input value={novaMadeiraForm.precoM3} onChange={(e) => setNovaMadeiraForm({ ...novaMadeiraForm, precoM3: e.target.value })} inputMode="decimal" placeholder="2400,00" className="bg-white" /></div>
+            <div className="space-y-2"><Label>Observação</Label><Textarea value={novaMadeiraForm.descricao} onChange={(e) => setNovaMadeiraForm({ ...novaMadeiraForm, descricao: e.target.value })} placeholder="Opcional" className="bg-white" rows={2} /></div>
+            <Button type="button" onClick={criarMadeiraEmContexto} disabled={createMadeira.isPending} className="w-full">{createMadeira.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}Criar e selecionar madeira</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={modeloOpen} onOpenChange={setModeloOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Guardar modelo de medida</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1"><p className="text-sm text-muted-foreground">O modelo guardará a madeira, o preço, a bitola, a largura e todos os comprimentos preenchidos neste romaneio.</p><div className="space-y-2"><Label>Nome do modelo *</Label><Input value={nomeModelo} onChange={(e) => setNomeModelo(e.target.value)} placeholder="Ex.: Cedrinho 2 × 5" className="bg-white" autoFocus /></div><Button type="button" onClick={salvarModeloMedida} disabled={criarModeloMedida.isPending} className="w-full">{criarModeloMedida.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Guardar modelo</Button><div className="border-t pt-3"><p className="mb-2 text-xs font-medium text-muted-foreground">Modelos guardados</p><div className="max-h-36 space-y-1 overflow-y-auto">{modelosMedida.data?.length ? modelosMedida.data.map((modelo) => <div key={modelo.id} className="flex items-center justify-between rounded border px-2 py-1.5 text-sm"><span className="truncate">{modelo.nome}</span><Button type="button" size="sm" variant="ghost" className="h-7 text-destructive" onClick={() => excluirModeloMedida.mutate({ id: modelo.id }, { onSuccess: () => utils.orcamento.modelosMedida.list.invalidate() })}>Excluir</Button></div>) : <p className="text-xs text-muted-foreground">Nenhum modelo guardado.</p>}</div></div></div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog: Criar cliente em contexto */}
       <Dialog open={novoClienteOpen} onOpenChange={setNovoClienteOpen}>
