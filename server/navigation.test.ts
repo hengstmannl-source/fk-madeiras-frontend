@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { dashboardMenuItems, dashboardNavigation, getNavigationPresentation, handleNavigationItemClick } from "../client/src/components/DashboardLayout";
+import { dashboardMenuItems, dashboardNavigation, getNavigationPresentation, handleNavigationItemClick, isItemActive } from "../client/src/components/DashboardLayout";
 
 describe("navegação principal", () => {
   it("não apresenta o cadastro de madeiras como aba lateral", () => {
@@ -22,6 +22,16 @@ describe("navegação principal", () => {
     for (const item of dashboardNavigation.combustivel) handleNavigationItemClick(item, navigate, notify);
     expect(navigate).toHaveBeenCalledWith("/diesel");
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  it("leva os atalhos financeiros diretamente às listas corretas e os destaca pela URL", () => {
+    const [, contasPagar, contasReceber] = dashboardNavigation.financeiro;
+    expect(contasPagar.path).toBe("/financeiro?tipo=pagar");
+    expect(contasReceber.path).toBe("/financeiro?tipo=receber");
+    expect(isItemActive(contasPagar, "/financeiro", "?tipo=pagar")).toBe(true);
+    expect(isItemActive(contasPagar, "/financeiro", "?tipo=receber")).toBe(false);
+    expect(isItemActive(contasReceber, "/financeiro", "?tipo=receber")).toBe(true);
+    expect(isItemActive(dashboardNavigation.financeiro[0], "/financeiro", "?tipo=receber")).toBe(true);
   });
 
   it("mantém a barra lateral recolhível no desktop e ativa o cabeçalho de navegação no mobile", () => {

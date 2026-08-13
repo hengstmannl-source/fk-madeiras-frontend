@@ -146,7 +146,7 @@ export default function FinanceiroPage() {
   const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
 
   useEffect(() => {
-    if (abaFinanceiraDaUrl(search) === "fluxo") setAba("fluxo");
+    setAba(abaFinanceiraDaUrl(search));
   }, [search]);
   const [lancamento, setLancamento] = useState(valorInicialLancamento);
   const [baixa, setBaixa] = useState({ contaFinanceiraId: "", valor: "", dataBaixa: hoje(), formaPagamento: "pix", observacoes: "" });
@@ -156,6 +156,7 @@ export default function FinanceiroPage() {
   const [cliente, setCliente] = useState({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" });
   const [recorrencia, setRecorrencia] = useState(valorInicialRecorrencia);
   const tipoAtalho = new URLSearchParams(search).get("tipo") === "pagar" ? "pagar" : new URLSearchParams(search).get("tipo") === "receber" ? "receber" : null;
+  const acessoDiretoLista = tipoAtalho !== null;
 
   useEffect(() => {
     if (tipoAtalho) setVisaoFinanceira(tipoAtalho);
@@ -488,18 +489,18 @@ export default function FinanceiroPage() {
         <div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => setImportacaoAberta(true)}><Upload className="mr-2 h-4 w-4" />Importar CSV</Button><Button onClick={() => setLancamentoAberto(true)} className="bg-primary text-primary-foreground"><Plus className="h-4 w-4 mr-2" />Novo lançamento avulso</Button></div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      {!acessoDiretoLista && <div className="grid gap-4 md:grid-cols-3">
         <ResumoCard label="A receber" valor={resumo.receber} icon={<ArrowDownToLine className="h-5 w-5" />} color="text-emerald-700 bg-emerald-50" />
         <ResumoCard label="A pagar" valor={resumo.pagar} icon={<ArrowUpFromLine className="h-5 w-5" />} color="text-rose-700 bg-rose-50" />
         <ResumoCard label="Saldo projetado" valor={resumo.receber - resumo.pagar} icon={<CircleDollarSign className="h-5 w-5" />} color="text-primary bg-primary/10" descricao={resumo.vencidos > 0 ? `${formatCurrency(resumo.vencidos)} em atraso` : "Nenhum título vencido"} />
-      </div>
+      </div>}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      {!acessoDiretoLista && <div className="grid gap-4 lg:grid-cols-2">
         <ListaCompromissos titulo="Títulos vencidos" descricao="Pendências que exigem atenção" titulos={compromissos.vencidos} classe="border-rose-200" vazio="Nenhum título vencido" />
         <ListaCompromissos titulo="Próximos 30 dias" descricao="Vencimentos previstos para o período" titulos={compromissos.proximos} classe="border-amber-200" vazio="Nenhum compromisso próximo" />
-      </div>
+      </div>}
 
-      {alertas.data?.length ? <section className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm overflow-hidden"><div className="flex items-center gap-2 border-b border-amber-200 px-5 py-4"><CircleAlert className="h-5 w-5 text-amber-700" /><div><h2 className="font-semibold text-sm text-amber-950">Alertas automáticos</h2><p className="text-xs text-amber-800">Gerados diariamente a partir dos vencimentos em aberto.</p></div><Badge className="ml-auto bg-amber-100 text-amber-800 hover:bg-amber-100">{alertas.data.length}</Badge></div><div className="divide-y divide-amber-100">{alertas.data.slice(0, 5).map((alerta: any) => <div key={alerta.id} className="flex items-center justify-between gap-4 px-5 py-3"><div><p className="text-sm font-medium text-amber-950">{alerta.mensagem}</p><p className="mt-0.5 text-xs text-amber-800">{alerta.tipo === "vencido" ? "Vencido" : "Próximo do vencimento"} · {formatCurrency(alerta.valorOriginal)}</p></div><Badge variant="outline" className="border-amber-300 bg-white text-amber-800">{alerta.tipo === "vencido" ? "Atenção" : "Acompanhar"}</Badge></div>)}</div></section> : null}
+      {!acessoDiretoLista && alertas.data?.length ? <section className="rounded-xl border border-amber-200 bg-amber-50/40 shadow-sm overflow-hidden"><div className="flex items-center gap-2 border-b border-amber-200 px-5 py-4"><CircleAlert className="h-5 w-5 text-amber-700" /><div><h2 className="font-semibold text-sm text-amber-950">Alertas automáticos</h2><p className="text-xs text-amber-800">Gerados diariamente a partir dos vencimentos em aberto.</p></div><Badge className="ml-auto bg-amber-100 text-amber-800 hover:bg-amber-100">{alertas.data.length}</Badge></div><div className="divide-y divide-amber-100">{alertas.data.slice(0, 5).map((alerta: any) => <div key={alerta.id} className="flex items-center justify-between gap-4 px-5 py-3"><div><p className="text-sm font-medium text-amber-950">{alerta.mensagem}</p><p className="mt-0.5 text-xs text-amber-800">{alerta.tipo === "vencido" ? "Vencido" : "Próximo do vencimento"} · {formatCurrency(alerta.valorOriginal)}</p></div><Badge variant="outline" className="border-amber-300 bg-white text-amber-800">{alerta.tipo === "vencido" ? "Atenção" : "Acompanhar"}</Badge></div>)}</div></section> : null}
 
       <div className="flex items-center gap-1 overflow-x-auto border-b border-border">
         {abas.map(([id, label, Icon]) => <button key={id} onClick={() => setAba(id)} className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${aba === id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}><Icon className="h-4 w-4" />{label}</button>)}

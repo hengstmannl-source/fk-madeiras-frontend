@@ -25,15 +25,16 @@ import {
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  LayoutDashboard, LogOut, PanelLeft, Users,
+  LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
   ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { toast } from "sonner";
+import { useTheme } from "@/contexts/ThemeContext";
 
 type NavigationItem = {
   icon: typeof LayoutDashboard;
@@ -153,11 +154,13 @@ type DashboardLayoutContentProps = {
 function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
   const [location, setLocation] = useLocation();
+  const search = useSearch();
+  const { theme, toggleTheme } = useTheme();
   const { state, toggleSidebar } = useSidebar();
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = dashboardMenuItems.find((item) => isItemActive(item, location));
+  const activeMenuItem = dashboardMenuItems.find((item) => isItemActive(item, location, search));
   const isMobile = useIsMobile();
   const navigationPresentation = getNavigationPresentation(isMobile);
 
@@ -213,18 +216,19 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   <span className="text-primary-foreground text-xs font-bold">FK</span>
                 </div>
               )}
+              {!isCollapsed && <button onClick={toggleTheme} title={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>}
             </div>
           </SidebarHeader>
 
           <SidebarContent className="gap-0 px-2 py-1">
             <SidebarMenu>
-              {dashboardNavigation.principal.map((item) => <NavigationButton key={item.path} item={item} location={location} navigate={setLocation} />)}
+              {dashboardNavigation.principal.map((item) => <NavigationButton key={item.path} item={item} location={location} search={search} navigate={setLocation} />)}
             </SidebarMenu>
-            <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} navigate={setLocation} renderPrincipal />
-            <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} navigate={setLocation} />
-            <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} navigate={setLocation} />
-            <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} navigate={setLocation} />
-            <NavigationGroup label="Combustível" items={dashboardNavigation.combustivel} location={location} navigate={setLocation} />
+            <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} search={search} navigate={setLocation} renderPrincipal />
+            <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} search={search} navigate={setLocation} />
+            <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} search={search} navigate={setLocation} />
+            <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} search={search} navigate={setLocation} />
+            <NavigationGroup label="Combustível" items={dashboardNavigation.combustivel} location={location} search={search} navigate={setLocation} />
           </SidebarContent>
 
           <SidebarFooter className="p-3">
@@ -250,6 +254,10 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                 <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Terminar Sessão</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
+                  {theme === "dark" ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                  <span>{theme === "dark" ? "Usar modo claro" : "Usar modo escuro"}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -279,14 +287,18 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   );
 }
 
-function isItemActive(item: NavigationItem, location: string) {
+export function isItemActive(item: NavigationItem, location: string, search = "") {
   if (item.path === "/") return location === "/";
   if (item.path === "/orcamentos") return location === "/orcamentos" || (location.startsWith("/orcamentos/") && !location.startsWith("/orcamentos/aprovados"));
+  if (item.path.startsWith("/financeiro?")) {
+    const [, itemSearch = ""] = item.path.split("?");
+    return location === "/financeiro" && new URLSearchParams(search).get("tipo") === new URLSearchParams(itemSearch).get("tipo");
+  }
   return location === item.path || (item.path !== "/financeiro" && location.startsWith(item.path));
 }
 
-function NavigationButton({ item, location, navigate }: { item: NavigationItem; location: string; navigate: (path: string) => void }) {
-  const active = isItemActive(item, location);
+function NavigationButton({ item, location, search, navigate }: { item: NavigationItem; location: string; search: string; navigate: (path: string) => void }) {
+  const active = isItemActive(item, location, search);
   return <SidebarMenuItem><SidebarMenuButton isActive={active} onClick={() => navigate(item.path)} tooltip={item.label} className="h-10 transition-all font-medium text-sm"><item.icon className={`h-4 w-4 ${active ? "text-primary" : ""}`} /><span>{item.label}</span></SidebarMenuButton></SidebarMenuItem>;
 }
 
@@ -294,8 +306,8 @@ export function getFutureModuleMessage(label: string) {
   return `${label} será disponibilizado em uma próxima etapa.`;
 }
 
-function NavigationGroup({ label, items, location, navigate, renderPrincipal = false }: { label: string; items: NavigationItem[]; location: string; navigate: (path: string) => void; renderPrincipal?: boolean }) {
+function NavigationGroup({ label, items, location, search, navigate, renderPrincipal = false }: { label: string; items: NavigationItem[]; location: string; search: string; navigate: (path: string) => void; renderPrincipal?: boolean }) {
   const principal = renderPrincipal ? items[0] : undefined;
   const subitems = renderPrincipal ? items.slice(1) : items;
-  return <div className="mt-2"><p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground group-data-[collapsible=icon]:hidden">{label}</p><SidebarMenu>{principal ? <NavigationButton item={principal} location={location} navigate={navigate} /> : null}<SidebarMenuSub>{subitems.map((item) => { const active = isItemActive(item, location); return <SidebarMenuSubItem key={item.path}><SidebarMenuSubButton isActive={active} onClick={() => handleNavigationItemClick(item, navigate, toast.info)} className={item.disabled ? "text-muted-foreground/70" : ""}><item.icon className={`h-3.5 w-3.5 ${active ? "text-primary" : ""}`} /><span>{item.label}</span>{item.disabled ? <span className="ml-auto text-[10px] text-muted-foreground">Em breve</span> : null}</SidebarMenuSubButton></SidebarMenuSubItem>; })}</SidebarMenuSub></SidebarMenu></div>;
+  return <div className="mt-2"><p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">{label}</p><SidebarMenu>{principal ? <NavigationButton item={principal} location={location} search={search} navigate={navigate} /> : null}<SidebarMenuSub>{subitems.map((item) => { const active = isItemActive(item, location, search); return <SidebarMenuSubItem key={item.path}><SidebarMenuSubButton isActive={active} onClick={() => handleNavigationItemClick(item, navigate, toast.info)} className={item.disabled ? "text-sidebar-foreground/60" : "font-medium"}><item.icon className={`h-3.5 w-3.5 ${active ? "text-primary" : "text-sidebar-foreground"}`} /><span>{item.label}</span>{item.disabled ? <span className="ml-auto text-[10px] text-sidebar-foreground/70">Em breve</span> : null}</SidebarMenuSubButton></SidebarMenuSubItem>; })}</SidebarMenuSub></SidebarMenu></div>;
 }

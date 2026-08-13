@@ -225,6 +225,17 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(abaFinanceiraDaUrl("?tipo=receber")).toBe("lancamentos");
   });
 
+  it("abre a lista solicitada pela lateral sem repetir o resumo financeiro", () => {
+    state.search = "?tipo=receber";
+    const { container } = render(<FinanceiroPage />);
+    const tela = within(container);
+
+    expect(tela.getByText("Gestão de títulos")).toBeInTheDocument();
+    expect(tela.getAllByText("Contas a receber").length).toBeGreaterThan(1);
+    expect(tela.queryByText("Títulos vencidos")).not.toBeInTheDocument();
+    expect(tela.queryByText("Próximos 30 dias")).not.toBeInTheDocument();
+  });
+
   it("separa as quatro listas financeiras, filtra títulos e destaca os compromissos do dia", async () => {
     const user = userEvent.setup();
     const hoje = new Date().toISOString();

@@ -246,3 +246,8 @@
 - [x] Implementar cálculo e consulta da previsão semanal de fluxo de caixa com títulos em aberto
 - [x] Exibir painel semanal de entradas, saídas, resultado e saldo projetado no Fluxo de Caixa
 - [x] Exportar em PDF as listas financeiras visíveis, respeitando filtros e totais
+- [x] Fazer Contas a pagar e Contas a receber abrirem diretamente as listas financeiras correspondentes
+- [x] Reforçar o contraste e a legibilidade dos itens da barra lateral
+- [x] Adicionar alternância persistente entre modo claro e modo escuro
+- [x] Cobrir navegação financeira e alternância de tema com testes e validação visual
+- [x] Fazer os atalhos financeiros abrirem a lista no topo da tela, sem reter o resumo antes da lista
