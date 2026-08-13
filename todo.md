@@ -251,3 +251,7 @@
 - [x] Adicionar alternância persistente entre modo claro e modo escuro
 - [x] Cobrir navegação financeira e alternância de tema com testes e validação visual
 - [x] Fazer os atalhos financeiros abrirem a lista no topo da tela, sem reter o resumo antes da lista
+- [x] Permitir expandir e recolher individualmente os grupos de menus da barra lateral
+- [x] Adicionar atalhos laterais diretos para Contas pagas e Contas recebidas
+- [x] Cobrir os grupos expansíveis e os novos atalhos com testes e validação visual
+- [x] Fazer os atalhos de Contas pagas e Contas recebidas exibirem diretamente seus históricos

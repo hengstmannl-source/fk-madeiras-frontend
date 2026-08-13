@@ -22,10 +22,11 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
+  ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
   ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck,
 } from "lucide-react";
@@ -51,6 +52,8 @@ export const dashboardNavigation = {
     { icon: WalletCards, label: "Financeiro", path: "/financeiro" },
     { icon: ArrowUpFromLine, label: "Contas a pagar", path: "/financeiro?tipo=pagar" },
     { icon: ArrowDownToLine, label: "Contas a receber", path: "/financeiro?tipo=receber" },
+    { icon: BadgeCheck, label: "Contas pagas", path: "/financeiro?tipo=pagas" },
+    { icon: CircleDollarSign, label: "Contas recebidas", path: "/financeiro?tipo=recebidas" },
   ],
   vendas: [
     { icon: FileText, label: "Vendas", path: "/orcamentos" },
@@ -93,9 +96,21 @@ export function handleNavigationItemClick(
 }
 
 const SIDEBAR_WIDTH_KEY = "sidebar-width";
+const SIDEBAR_GROUPS_KEY = "sidebar-expanded-groups";
 const DEFAULT_WIDTH = 280;
 const MIN_WIDTH = 200;
 const MAX_WIDTH = 480;
+
+export function gruposExpandidosIniciais(valorSalvo: string | null): Record<string, boolean> {
+  const padrao = Object.fromEntries(getNavigationPresentation(false).groups.map((grupo) => [grupo, true]));
+  if (!valorSalvo) return padrao;
+  try {
+    const grupos = JSON.parse(valorSalvo) as Record<string, unknown>;
+    return Object.fromEntries(Object.keys(padrao).map((grupo) => [grupo, grupos[grupo] !== false]));
+  } catch {
+    return padrao;
+  }
+}
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const [sidebarWidth, setSidebarWidth] = useState(() => {
@@ -163,8 +178,10 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const activeMenuItem = dashboardMenuItems.find((item) => isItemActive(item, location, search));
   const isMobile = useIsMobile();
   const navigationPresentation = getNavigationPresentation(isMobile);
+  const [gruposExpandidos, setGruposExpandidos] = useState(() => gruposExpandidosIniciais(localStorage.getItem(SIDEBAR_GROUPS_KEY)));
 
   useEffect(() => { if (isCollapsed) setIsResizing(false); }, [isCollapsed]);
+  useEffect(() => { localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(gruposExpandidos)); }, [gruposExpandidos]);
 
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
@@ -224,11 +241,11 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
             <SidebarMenu>
               {dashboardNavigation.principal.map((item) => <NavigationButton key={item.path} item={item} location={location} search={search} navigate={setLocation} />)}
             </SidebarMenu>
-            <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} search={search} navigate={setLocation} renderPrincipal />
-            <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} search={search} navigate={setLocation} />
-            <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} search={search} navigate={setLocation} />
-            <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} search={search} navigate={setLocation} />
-            <NavigationGroup label="Combustível" items={dashboardNavigation.combustivel} location={location} search={search} navigate={setLocation} />
+            <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} search={search} navigate={setLocation} renderPrincipal open={gruposExpandidos.Financeiro} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Financeiro: aberto }))} />
+            <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Vendas} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Vendas: aberto }))} />
+            <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Gestão} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Gestão: aberto }))} />
+            <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Produção} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Produção: aberto }))} />
+            <NavigationGroup label="Combustível" items={dashboardNavigation.combustivel} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Combustível} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Combustível: aberto }))} />
           </SidebarContent>
 
           <SidebarFooter className="p-3">
@@ -306,8 +323,8 @@ export function getFutureModuleMessage(label: string) {
   return `${label} será disponibilizado em uma próxima etapa.`;
 }
 
-function NavigationGroup({ label, items, location, search, navigate, renderPrincipal = false }: { label: string; items: NavigationItem[]; location: string; search: string; navigate: (path: string) => void; renderPrincipal?: boolean }) {
+function NavigationGroup({ label, items, location, search, navigate, renderPrincipal = false, open, onOpenChange }: { label: string; items: NavigationItem[]; location: string; search: string; navigate: (path: string) => void; renderPrincipal?: boolean; open: boolean; onOpenChange: (open: boolean) => void }) {
   const principal = renderPrincipal ? items[0] : undefined;
   const subitems = renderPrincipal ? items.slice(1) : items;
-  return <div className="mt-2"><p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/80 group-data-[collapsible=icon]:hidden">{label}</p><SidebarMenu>{principal ? <NavigationButton item={principal} location={location} search={search} navigate={navigate} /> : null}<SidebarMenuSub>{subitems.map((item) => { const active = isItemActive(item, location, search); return <SidebarMenuSubItem key={item.path}><SidebarMenuSubButton isActive={active} onClick={() => handleNavigationItemClick(item, navigate, toast.info)} className={item.disabled ? "text-sidebar-foreground/60" : "font-medium"}><item.icon className={`h-3.5 w-3.5 ${active ? "text-primary" : "text-sidebar-foreground"}`} /><span>{item.label}</span>{item.disabled ? <span className="ml-auto text-[10px] text-sidebar-foreground/70">Em breve</span> : null}</SidebarMenuSubButton></SidebarMenuSubItem>; })}</SidebarMenuSub></SidebarMenu></div>;
+  return <Collapsible open={open} onOpenChange={onOpenChange} className="mt-2"><div className="flex items-center px-2 pb-1 group-data-[collapsible=icon]:hidden"><p className="flex-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/80">{label}</p><CollapsibleTrigger asChild><button type="button" aria-label={`${open ? "Recolher" : "Expandir"} grupo ${label}`} className="flex h-5 w-5 items-center justify-center rounded text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"><ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${open ? "rotate-0" : "-rotate-90"}`} /></button></CollapsibleTrigger></div><CollapsibleContent className="overflow-hidden data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:animate-in data-[state=open]:fade-in-0 group-data-[collapsible=icon]:hidden"><SidebarMenu>{principal ? <NavigationButton item={principal} location={location} search={search} navigate={navigate} /> : null}<SidebarMenuSub>{subitems.map((item) => { const active = isItemActive(item, location, search); return <SidebarMenuSubItem key={item.path}><SidebarMenuSubButton isActive={active} onClick={() => handleNavigationItemClick(item, navigate, toast.info)} className={item.disabled ? "text-sidebar-foreground/60" : "font-medium"}><item.icon className={`h-3.5 w-3.5 ${active ? "text-primary" : "text-sidebar-foreground"}`} /><span>{item.label}</span>{item.disabled ? <span className="ml-auto text-[10px] text-sidebar-foreground/70">Em breve</span> : null}</SidebarMenuSubButton></SidebarMenuSubItem>; })}</SidebarMenuSub></SidebarMenu></CollapsibleContent></Collapsible>;
 }

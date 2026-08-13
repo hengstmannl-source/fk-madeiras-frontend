@@ -223,6 +223,8 @@ describe("FinanceiroPage — cancelamento manual", () => {
   it("identifica a abertura direta do relatório pelo parâmetro de URL", () => {
     expect(abaFinanceiraDaUrl("?aba=fluxo")).toBe("fluxo");
     expect(abaFinanceiraDaUrl("?tipo=receber")).toBe("lancamentos");
+    expect(abaFinanceiraDaUrl("?tipo=pagas")).toBe("lancamentos");
+    expect(abaFinanceiraDaUrl("?tipo=recebidas")).toBe("lancamentos");
   });
 
   it("abre a lista solicitada pela lateral sem repetir o resumo financeiro", () => {
@@ -234,6 +236,15 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(tela.getAllByText("Contas a receber").length).toBeGreaterThan(1);
     expect(tela.queryByText("Títulos vencidos")).not.toBeInTheDocument();
     expect(tela.queryByText("Próximos 30 dias")).not.toBeInTheDocument();
+  });
+
+  it("abre os históricos financeiros diretamente pelos novos atalhos laterais", () => {
+    state.search = "?tipo=pagas";
+    const { container } = render(<FinanceiroPage />);
+    const tela = within(container);
+
+    expect(tela.getAllByText("Contas pagas").length).toBeGreaterThan(1);
+    expect(tela.queryByText("Títulos vencidos")).not.toBeInTheDocument();
   });
 
   it("separa as quatro listas financeiras, filtra títulos e destaca os compromissos do dia", async () => {

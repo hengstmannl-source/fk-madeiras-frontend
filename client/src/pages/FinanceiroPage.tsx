@@ -155,7 +155,10 @@ export default function FinanceiroPage() {
   const [conta, setConta] = useState({ nome: "", tipo: "caixa" as "caixa" | "banco" | "carteira" | "outro", saldoInicial: "0", observacoes: "" });
   const [cliente, setCliente] = useState({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" });
   const [recorrencia, setRecorrencia] = useState(valorInicialRecorrencia);
-  const tipoAtalho = new URLSearchParams(search).get("tipo") === "pagar" ? "pagar" : new URLSearchParams(search).get("tipo") === "receber" ? "receber" : null;
+  const tipoConsulta = new URLSearchParams(search).get("tipo");
+  const tipoAtalho: VisaoFinanceira | null = ["pagar", "receber", "pagas", "recebidas"].includes(tipoConsulta ?? "")
+    ? tipoConsulta as VisaoFinanceira
+    : null;
   const acessoDiretoLista = tipoAtalho !== null;
 
   useEffect(() => {
