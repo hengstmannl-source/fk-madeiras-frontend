@@ -1,13 +1,47 @@
 import * as React from "react";
+import { createContext, isValidElement, useContext, useState, type ReactNode } from "react";
 import * as SelectPrimitive from "@radix-ui/react-select";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
+const CRIAR_NOVO_VALOR = "__criar_novo__";
+
+type SelectContextValue = {
+  searchable: boolean;
+  onCreate?: () => void;
+  createLabel: string;
+};
+
+const SelectContext = createContext<SelectContextValue>({ searchable: true, createLabel: "Criar novo" });
+const SelectSearchContext = createContext("");
+
+function textoDoItem(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node);
+  if (Array.isArray(node)) return node.map(textoDoItem).join(" ");
+  if (isValidElement<{ children?: ReactNode }>(node)) return textoDoItem(node.props.children);
+  return "";
+}
+
 function Select({
+  searchable = true,
+  onCreate,
+  createLabel = "Criar novo",
+  onValueChange,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+}: React.ComponentProps<typeof SelectPrimitive.Root> & { searchable?: boolean; onCreate?: () => void; createLabel?: string }) {
+  return (
+    <SelectContext.Provider value={{ searchable, onCreate, createLabel }}>
+      <SelectPrimitive.Root
+        data-slot="select"
+        {...props}
+        onValueChange={(value) => {
+          if (value === CRIAR_NOVO_VALOR && onCreate) { onCreate(); return; }
+          onValueChange?.(value);
+        }}
+      />
+    </SelectContext.Provider>
+  );
 }
 
 function SelectGroup({
@@ -55,6 +89,8 @@ function SelectContent({
   align = "center",
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Content>) {
+  const { searchable, onCreate, createLabel } = useContext(SelectContext);
+  const [pesquisa, setPesquisa] = useState("");
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content
@@ -77,7 +113,11 @@ function SelectContent({
               "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1"
           )}
         >
-          {children}
+          <SelectSearchContext.Provider value={pesquisa}>
+            {searchable && <div className="sticky top-0 z-10 mb-1 bg-popover px-1 pt-1"><input aria-label="Pesquisar na lista" autoFocus value={pesquisa} onChange={(event) => setPesquisa(event.target.value)} onKeyDown={(event) => event.stopPropagation()} placeholder="Pesquisar..." className="h-8 w-full rounded-sm border border-input bg-background px-2 text-sm outline-none focus:ring-2 focus:ring-ring/40" /></div>}
+            {onCreate && <SelectItem value={CRIAR_NOVO_VALOR} className="font-semibold text-primary">+ {createLabel}</SelectItem>}
+            {children}
+          </SelectSearchContext.Provider>
         </SelectPrimitive.Viewport>
         <SelectScrollDownButton />
       </SelectPrimitive.Content>
@@ -103,6 +143,10 @@ function SelectItem({
   children,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Item>) {
+  const pesquisa = useContext(SelectSearchContext);
+  const corresponde = textoDoItem(children).toLocaleLowerCase("pt-BR").includes(pesquisa.trim().toLocaleLowerCase("pt-BR"));
+  const manterVisivel = props.value === CRIAR_NOVO_VALOR;
+  if (pesquisa.trim() && !corresponde && !manterVisivel) return null;
   return (
     <SelectPrimitive.Item
       data-slot="select-item"

@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandSeparator } from "@/components/ui/command";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator, UserPlus, Check, ChevronsUpDown } from "lucide-react";
 import { useLocation } from "wouter";
@@ -228,6 +228,20 @@ export default function OrcamentoNovo() {
                         <Command>
                           <CommandInput placeholder="Digite nome ou telefone..." />
                           <CommandList>
+                            <CommandGroup heading="Ação rápida">
+                              <CommandItem
+                                value="criar novo cliente"
+                                onSelect={() => {
+                                  setClienteSelectorOpen(false);
+                                  setNovoClienteOpen(true);
+                                }}
+                                className="text-primary"
+                              >
+                                <Plus className="h-4 w-4" />
+                                <span className="font-medium">Criar novo cliente</span>
+                              </CommandItem>
+                            </CommandGroup>
+                            <CommandSeparator />
                             <CommandEmpty>Nenhum cliente encontrado.</CommandEmpty>
                             <CommandGroup heading="Clientes">
                               {clientes.data?.map((cliente) => (

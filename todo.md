@@ -229,3 +229,7 @@
 - [x] Lançar o custo real de diesel somente por abastecimento, usando o custo médio do tanque
 - [x] Implementar a tela de Diesel com saldo, notas agendadas e histórico de abastecimentos
 - [x] Cobrir o módulo de combustível com testes e validação visual
+- [x] Inventariar os seletores de entidades em todos os módulos e definir os pontos de criação contextual
+- [x] Criar um seletor reutilizável com pesquisa digitável e ação Criar novo como primeira opção
+- [x] Aplicar o padrão a fornecedores, clientes, categorias e contas financeiras onde houver seleção operacional
+- [x] Cobrir os seletores pesquisáveis e as criações em contexto com testes e validação visual

@@ -4,8 +4,16 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { toast } from "sonner";
 
-const { criarCargaMutate, importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
+vi.stubGlobal("ResizeObserver", class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+});
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+
+const { criarCargaMutate, criarFornecedorMutate, importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
   criarCargaMutate: vi.fn(),
+  criarFornecedorMutate: vi.fn(),
   importarMutate: vi.fn(),
   excluirMutate: vi.fn(),
   perfilAtual: { role: "admin" },
@@ -24,7 +32,7 @@ vi.mock("@/lib/trpc", () => {
   const mutation = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
   return {
     trpc: {
-      useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar } } }),
+      useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar } }, financeiro: { fornecedores: { list: invalidar } } }),
       producao: {
         cargas: {
           list: { useQuery: cargasListQuery },
@@ -38,7 +46,7 @@ vi.mock("@/lib/trpc", () => {
         plaquetas: { list: { useQuery: plaquetasListQuery }, create: mutation },
         estoque: { resumo: { useQuery: estoqueResumoQuery } },
       },
-      financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Madeiras Norte" }], isLoading: false }) } } },
+      financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Madeiras Norte" }], isLoading: false }) }, create: { useMutation: () => ({ mutate: criarFornecedorMutate, isPending: false }) } } },
     },
   };
 });
@@ -48,6 +56,7 @@ import EstoquePage from "./EstoquePage";
 afterEach(() => {
   cleanup();
   criarCargaMutate.mockReset();
+  criarFornecedorMutate.mockReset();
   importarMutate.mockReset();
   excluirMutate.mockReset();
   cargasListQuery.mockClear();
@@ -159,7 +168,8 @@ describe("EstoquePage", () => {
     await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
     await user.clear(screen.getByLabelText("Vencimento da conta a pagar"));
     await user.type(screen.getByLabelText("Vencimento da conta a pagar"), "2026-09-10");
-    await user.selectOptions(screen.getByRole("combobox", { name: "Fornecedor da carga" }), "7");
+    await user.click(screen.getByRole("combobox", { name: "Fornecedor da carga" }));
+    await user.click(screen.getByText("Madeiras Norte"));
     await user.type(screen.getByPlaceholderText("PLQ-001"), "TOR-0200");
     await user.type(screen.getByPlaceholderText("Ex.: Cedrinho"), "Cumaru");
     await user.type(screen.getByRole("textbox", { name: "Diâmetro (cm)" }), "25");
@@ -167,6 +177,19 @@ describe("EstoquePage", () => {
     await user.type(screen.getByPlaceholderText("900,00"), "900");
     await user.click(screen.getByRole("button", { name: "Confirmar entrada" }));
     expect(criarCargaMutate).toHaveBeenCalledWith(expect.objectContaining({ dataVencimento: "2026-09-10", fornecedorId: 7 }), expect.any(Object));
+  });
+
+  it("permite criar um fornecedor diretamente no seletor da carga", async () => {
+    const user = userEvent.setup();
+    criarFornecedorMutate.mockImplementationOnce((_entrada, opcoes) => opcoes.onSuccess({ id: 12, nome: "Serraria Campo" }));
+    render(<EstoquePage />);
+    await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
+    await user.click(screen.getByRole("combobox", { name: "Fornecedor da carga" }));
+    await user.click(screen.getByText("Criar novo fornecedor"));
+    await user.type(screen.getByPlaceholderText("Ex.: Fazenda Boa Vista"), "Serraria Campo");
+    await user.click(screen.getByRole("button", { name: "Criar e selecionar" }));
+    expect(criarFornecedorMutate).toHaveBeenCalledWith({ nome: "Serraria Campo" }, expect.any(Object));
+    expect(toast.success).toHaveBeenCalledWith("Fornecedor criado e selecionado.");
   });
 
   it("oferece importação por planilha CSV com modelo e dados do romaneio", async () => {

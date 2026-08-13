@@ -46,7 +46,7 @@ vi.mock("@/lib/trpc", () => {
           intercambios: { modeloLancamentosCsv: invalidar, exportarLancamentosCsv: invalidar },
         },
       }),
-      cliente: { list: queryVazia },
+      cliente: { list: queryVazia, create: mutationInerte },
       financeiro: {
         titulos: {
           list: { useQuery: () => ({ data: state.titulos, isLoading: false }) },

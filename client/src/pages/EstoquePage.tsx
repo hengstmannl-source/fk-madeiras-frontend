@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
+import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 
 type PlaquetaCarga = {
   codigo: string;
@@ -88,6 +89,9 @@ export default function EstoquePage() {
   const [cabecalhoImportacao, setCabecalhoImportacao] = useState<CabecalhoCarga>(novoCabecalhoCarga);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
   const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
+  const [novoFornecedorAberto, setNovoFornecedorAberto] = useState(false);
+  const [nomeNovoFornecedor, setNomeNovoFornecedor] = useState("");
+  const [contextoFornecedor, setContextoFornecedor] = useState<"carga" | "importacao" | null>(null);
   const carregouEdicao = useRef<number | null>(null);
   const utils = trpc.useUtils();
   const { user } = useAuth();
@@ -136,6 +140,29 @@ export default function EstoquePage() {
   const atualizarCarga = trpc.producao.cargas.update.useMutation();
   const excluirCarga = trpc.producao.cargas.excluir.useMutation();
   const importarPlaquetasCsv = trpc.producao.cargas.importarPlaquetasCsv.useMutation();
+  const criarFornecedor = trpc.financeiro.fornecedores.create.useMutation();
+
+  const abrirNovoFornecedor = (contexto: "carga" | "importacao") => {
+    setContextoFornecedor(contexto);
+    setNovoFornecedorAberto(true);
+  };
+  const salvarNovoFornecedor = () => {
+    const nome = nomeNovoFornecedor.trim();
+    if (nome.length < 2) { toast.error("Informe o nome do fornecedor."); return; }
+    criarFornecedor.mutate({ nome }, {
+      onSuccess: (fornecedor) => {
+        const fornecedorId = String(fornecedor.id);
+        if (contextoFornecedor === "carga") setCarga((anterior) => ({ ...anterior, fornecedorId }));
+        if (contextoFornecedor === "importacao") setCabecalhoImportacao((anterior) => ({ ...anterior, fornecedorId }));
+        toast.success("Fornecedor criado e selecionado.");
+        setNomeNovoFornecedor("");
+        setNovoFornecedorAberto(false);
+        setContextoFornecedor(null);
+        utils.financeiro.fornecedores.list.invalidate();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
 
   useEffect(() => {
     const detalhe = detalheCarga.data;
@@ -301,7 +328,7 @@ export default function EstoquePage() {
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
               <Campo label="Data da carga *"><Input type="date" value={carga.dataCarga} onChange={(evento) => setCarga((anterior) => ({ ...anterior, dataCarga: evento.target.value }))} /></Campo>
               <Campo label="Vencimento da conta a pagar *"><Input aria-label="Vencimento da conta a pagar" type="date" value={carga.dataVencimento} onChange={(evento) => setCarga((anterior) => ({ ...anterior, dataVencimento: evento.target.value }))} /></Campo>
-              <Campo label="Fornecedor"><select aria-label="Fornecedor da carga" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" value={carga.fornecedorId} onChange={(evento) => setCarga((anterior) => ({ ...anterior, fornecedorId: evento.target.value }))}><option value="">Usar origem como contraparte</option>{(fornecedores.data ?? []).map((fornecedor: any) => <option key={fornecedor.id} value={String(fornecedor.id)}>{fornecedor.nome}</option>)}</select></Campo>
+              <Campo label="Fornecedor"><SearchableEntitySelect ariaLabel="Fornecedor da carga" value={carga.fornecedorId} onValueChange={(fornecedorId) => setCarga((anterior) => ({ ...anterior, fornecedorId }))} placeholder="Usar origem como contraparte" searchPlaceholder="Digite o nome do fornecedor..." createLabel="Criar novo fornecedor" onCreate={() => abrirNovoFornecedor("carga")} options={(fornecedores.data ?? []).map((fornecedor: any) => ({ value: String(fornecedor.id), label: fornecedor.nome, details: fornecedor.contacto ?? fornecedor.email ?? null }))} /></Campo>
               <Campo label="Origem"><Input value={carga.origem} onChange={(evento) => setCarga((anterior) => ({ ...anterior, origem: evento.target.value }))} placeholder="Fornecedor ou fazenda" /></Campo>
               <Campo label="Responsável"><Input value={carga.responsavel} onChange={(evento) => setCarga((anterior) => ({ ...anterior, responsavel: evento.target.value }))} placeholder="Quem recebeu" /></Campo>
               <Campo label="Frete por m³ (R$)" ajuda="Ex.: R$ 30,00 × volume total"><Input aria-label="Frete por m³ (R$)" inputMode="decimal" value={carga.fretePorMetroCubico} onChange={(evento) => setCarga((anterior) => ({ ...anterior, fretePorMetroCubico: evento.target.value }))} placeholder="0,00" /></Campo>
@@ -344,7 +371,7 @@ export default function EstoquePage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Campo label="Data da carga *"><Input type="date" value={cabecalhoImportacao.dataCarga} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, dataCarga: evento.target.value }))} /></Campo>
             <Campo label="Vencimento da conta a pagar *"><Input aria-label="Vencimento da conta a pagar (importação)" type="date" value={cabecalhoImportacao.dataVencimento} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, dataVencimento: evento.target.value }))} /></Campo>
-            <Campo label="Fornecedor"><select aria-label="Fornecedor da carga importada" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50" value={cabecalhoImportacao.fornecedorId} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, fornecedorId: evento.target.value }))}><option value="">Usar origem como contraparte</option>{(fornecedores.data ?? []).map((fornecedor: any) => <option key={fornecedor.id} value={String(fornecedor.id)}>{fornecedor.nome}</option>)}</select></Campo>
+            <Campo label="Fornecedor"><SearchableEntitySelect ariaLabel="Fornecedor da carga importada" value={cabecalhoImportacao.fornecedorId} onValueChange={(fornecedorId) => setCabecalhoImportacao((anterior) => ({ ...anterior, fornecedorId }))} placeholder="Usar origem como contraparte" searchPlaceholder="Digite o nome do fornecedor..." createLabel="Criar novo fornecedor" onCreate={() => abrirNovoFornecedor("importacao")} options={(fornecedores.data ?? []).map((fornecedor: any) => ({ value: String(fornecedor.id), label: fornecedor.nome, details: fornecedor.contacto ?? fornecedor.email ?? null }))} /></Campo>
             <Campo label="Frete por m³ (R$)" ajuda="Ex.: R$ 30,00 × volume total"><Input inputMode="decimal" value={cabecalhoImportacao.fretePorMetroCubico} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, fretePorMetroCubico: evento.target.value }))} placeholder="0,00" /></Campo>
             <Campo label="Origem"><Input value={cabecalhoImportacao.origem} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, origem: evento.target.value }))} placeholder="Fornecedor ou fazenda" /></Campo>
             <Campo label="Responsável"><Input value={cabecalhoImportacao.responsavel} onChange={(evento) => setCabecalhoImportacao((anterior) => ({ ...anterior, responsavel: evento.target.value }))} placeholder="Quem recebeu" /></Campo>
@@ -363,6 +390,9 @@ export default function EstoquePage() {
         <AlertDialogFooter><AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel><AlertDialogAction className="bg-destructive text-destructive-foreground hover:bg-destructive/90" disabled={excluindo} onClick={confirmarExclusao}>{excluindo && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Excluir romaneio</AlertDialogAction></AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    <Dialog open={novoFornecedorAberto} onOpenChange={(aberto) => { setNovoFornecedorAberto(aberto); if (!aberto) setContextoFornecedor(null); }}>
+      <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Criar novo fornecedor</DialogTitle><DialogDescription>O fornecedor será cadastrado e selecionado no romaneio em edição.</DialogDescription></DialogHeader><Campo label="Nome do fornecedor *"><Input autoFocus value={nomeNovoFornecedor} onChange={(evento) => setNomeNovoFornecedor(evento.target.value)} placeholder="Ex.: Fazenda Boa Vista" onKeyDown={(evento) => { if (evento.key === "Enter") salvarNovoFornecedor(); }} /></Campo><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setNovoFornecedorAberto(false)} disabled={criarFornecedor.isPending}>Cancelar</Button><Button onClick={salvarNovoFornecedor} disabled={criarFornecedor.isPending}>{criarFornecedor.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Criar e selecionar</Button></div></DialogContent>
+    </Dialog>
   </div>;
 }
 

@@ -2,8 +2,16 @@ import userEvent from "@testing-library/user-event";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { criarNotaMutate, registrarAbastecimentoMutate, resumoQuery } = vi.hoisted(() => ({
+vi.stubGlobal("ResizeObserver", class {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+});
+Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+
+const { criarNotaMutate, criarFornecedorMutate, registrarAbastecimentoMutate, resumoQuery } = vi.hoisted(() => ({
   criarNotaMutate: vi.fn(),
+  criarFornecedorMutate: vi.fn(),
   registrarAbastecimentoMutate: vi.fn(),
   resumoQuery: vi.fn(() => ({
     data: {
@@ -23,13 +31,13 @@ vi.mock("@/lib/trpc", () => {
   const invalidar = { invalidate: vi.fn() };
   return {
     trpc: {
-      useUtils: () => ({ diesel: { resumo: invalidar } }),
+      useUtils: () => ({ diesel: { resumo: invalidar }, financeiro: { fornecedores: { list: invalidar } } }),
       diesel: {
         resumo: { useQuery: resumoQuery },
         criarNota: { useMutation: () => ({ mutate: criarNotaMutate, isPending: false }) },
         registrarAbastecimento: { useMutation: () => ({ mutate: registrarAbastecimentoMutate, isPending: false }) },
       },
-      financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Posto Central" }], isLoading: false }) } } },
+      financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Posto Central" }], isLoading: false }) }, create: { useMutation: () => ({ mutate: criarFornecedorMutate, isPending: false }) } } },
     },
   };
 });
@@ -39,6 +47,7 @@ import DieselPage from "./DieselPage";
 afterEach(() => {
   cleanup();
   criarNotaMutate.mockReset();
+  criarFornecedorMutate.mockReset();
   registrarAbastecimentoMutate.mockReset();
   resumoQuery.mockClear();
 });
@@ -61,12 +70,27 @@ describe("DieselPage", () => {
     render(<DieselPage />);
 
     await user.click(screen.getByRole("button", { name: "Nova nota de diesel" }));
-    await user.selectOptions(screen.getByLabelText("Fornecedor da nota de diesel"), "7");
+    await user.click(screen.getByRole("combobox", { name: "Fornecedor da nota de diesel" }));
+    await user.click(screen.getAllByText("Posto Central").at(-1)!);
     await user.type(screen.getByPlaceholderText("Ex.: 1.000"), "1000");
     await user.type(screen.getByPlaceholderText("Ex.: 6.500,00"), "6500,00");
     await user.click(screen.getByRole("button", { name: "Agendar pagamento e adicionar ao tanque" }));
 
     expect(criarNotaMutate).toHaveBeenCalledWith(expect.objectContaining({ fornecedorId: 7, litros: "1000", valorTotal: "6500,00" }), expect.any(Object));
+  });
+
+  it("permite criar o fornecedor diretamente na nota de diesel", async () => {
+    const user = userEvent.setup();
+    criarFornecedorMutate.mockImplementationOnce((_entrada, opcoes) => opcoes.onSuccess({ id: 8, nome: "Posto Novo" }));
+    render(<DieselPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova nota de diesel" }));
+    await user.click(screen.getByRole("combobox", { name: "Fornecedor da nota de diesel" }));
+    await user.click(screen.getByText("Criar novo fornecedor"));
+    await user.type(screen.getByPlaceholderText("Ex.: Posto Central"), "Posto Novo");
+    await user.click(screen.getByRole("button", { name: "Criar e selecionar" }));
+
+    expect(criarFornecedorMutate).toHaveBeenCalledWith({ nome: "Posto Novo" }, expect.any(Object));
   });
 
   it("regista um abastecimento com destino, sem criar uma nova conta a pagar", async () => {
