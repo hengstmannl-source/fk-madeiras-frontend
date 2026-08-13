@@ -288,3 +288,8 @@
 - [x] Numerar duplicidades de forma discreta como plaqueta física, plaqueta física² e sucessivas ocorrências
 - [x] Aplicar a identificação discreta na interface e nos PDFs de romaneio de carga
 - [x] Cobrir o relatório e a numeração de duplicidade com testes, validação visual e publicação
+- [x] Modelar anexos financeiros e dados extraídos de boleto com rastreabilidade por lançamento
+- [x] Permitir anexar notas fiscais, boletos e imagens nos lançamentos financeiros com armazenamento seguro
+- [x] Extrair, validar e exibir código de barras ou linha digitável de boleto para conferência
+- [x] Exibir anexos e dados de boleto ao criar, editar e consultar um agendamento de pagamento
+- [x] Cobrir anexos, identificação de boleto e permissões com testes, validação visual e publicação

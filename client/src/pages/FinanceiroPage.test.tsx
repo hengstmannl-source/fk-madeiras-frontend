@@ -32,7 +32,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/financeiroPdf", () => ({ exportarListaFinanceiraPdf: state.exportarPdf }));
 
 vi.mock("@/lib/trpc", () => {
-  const mutationInerte = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
+  const mutationInerte = { useMutation: () => ({ mutate: vi.fn(), mutateAsync: vi.fn().mockResolvedValue({}), isPending: false }) };
   const queryVazia = { useQuery: () => ({ data: [], isLoading: false }) };
   const invalidar = { invalidate: state.invalidar };
 
@@ -46,6 +46,7 @@ vi.mock("@/lib/trpc", () => {
           contas: { list: invalidar },
           recorrencias: { list: invalidar },
           alertas: { list: invalidar },
+          anexos: { list: invalidar },
           relatorios: { fluxoCaixa: invalidar, previsaoSemanal: invalidar },
           intercambios: { modeloLancamentosCsv: invalidar, exportarLancamentosCsv: invalidar },
         },
@@ -93,6 +94,7 @@ vi.mock("@/lib/trpc", () => {
         },
         categorias: { list: queryVazia, create: mutationInerte },
         fornecedores: { list: queryVazia, create: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
+        anexos: { upload: mutationInerte, atualizarBoleto: mutationInerte, list: queryVazia, remove: mutationInerte },
         contas: { list: queryVazia, create: mutationInerte },
         recorrencias: { list: queryVazia, create: mutationInerte },
         alertas: { list: queryVazia },
@@ -331,6 +333,26 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(screen.getByRole("heading", { name: "Importar lançamentos financeiros" })).toBeInTheDocument();
     expect(screen.getByText(/se houver alguma linha inválida/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Arquivo CSV para importação")).toHaveAttribute("accept", ".csv,text/csv");
+  });
+
+  it("permite preparar documentos e conferir a linha digitável em um lançamento a pagar", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    fireEvent.click(screen.getByRole("button", { name: /novo lançamento avulso/i }));
+
+    expect(screen.getByText("Documentos do lançamento")).toBeInTheDocument();
+    const seletorTipo = screen.getByText("Conta a receber", { exact: true }).closest('[role="combobox"]');
+    fireEvent.click(seletorTipo!);
+    fireEvent.click(screen.getByRole("option", { name: "Conta a pagar" }));
+    const anexo = screen.getByLabelText("Anexar documentos do lançamento");
+    expect(anexo).toHaveAttribute("accept", "application/pdf,image/jpeg,image/png,image/webp");
+    fireEvent.change(anexo, { target: { files: [new File(["boleto"], "boleto-agosto.pdf", { type: "application/pdf" })] } });
+    expect(screen.getByText("boleto-agosto.pdf")).toBeInTheDocument();
+
+    const codigo = screen.getByLabelText("Código de barras ou linha digitável");
+    await user.type(codigo, "00190500954014481606906809350314337370000000100");
+    expect(codigo).toHaveValue("00190500954014481606906809350314337370000000100");
   });
 
   it("exporta somente os títulos visíveis após aplicar os filtros", async () => {

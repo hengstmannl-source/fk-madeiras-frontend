@@ -4,7 +4,7 @@ import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
-  baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario,
+  baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
@@ -696,6 +696,60 @@ export async function getTituloFinanceiroById(id: number) {
   if (!db) return undefined;
   const result = await db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.id, id)).limit(1);
   return result[0];
+}
+
+export async function listAnexosFinanceiros(tituloId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(anexosFinanceiros)
+    .where(eq(anexosFinanceiros.tituloId, tituloId))
+    .orderBy(desc(anexosFinanceiros.createdAt));
+}
+
+export async function createAnexoFinanceiro(input: {
+  tituloId: number;
+  nomeArquivo: string;
+  mimeType: string;
+  tamanhoBytes: number;
+  tipo: "nota_fiscal" | "boleto" | "comprovante" | "outro";
+  storageKey: string;
+  url: string;
+  criadoPor: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const titulo = await getTituloFinanceiroById(input.tituloId);
+  if (!titulo) throw new Error("Lançamento financeiro não encontrado");
+  const result = await db.insert(anexosFinanceiros).values(input);
+  return { id: getInsertedId(result as MysqlInsertResult), ...input };
+}
+
+export async function removerAnexoFinanceiro(input: { id: number; tituloId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const anexo = (await db.select().from(anexosFinanceiros)
+    .where(and(eq(anexosFinanceiros.id, input.id), eq(anexosFinanceiros.tituloId, input.tituloId))).limit(1))[0];
+  if (!anexo) throw new Error("Anexo financeiro não encontrado");
+  await db.delete(anexosFinanceiros).where(eq(anexosFinanceiros.id, anexo.id));
+  return { success: true, id: anexo.id };
+}
+
+export async function atualizarDadosBoleto(input: {
+  tituloId: number;
+  codigoBarrasBoleto: string | null;
+  linhaDigitavelBoleto: string | null;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const titulo = await getTituloFinanceiroById(input.tituloId);
+  if (!titulo) throw new Error("Lançamento financeiro não encontrado");
+  const boletoConfirmadoEm = input.codigoBarrasBoleto || input.linhaDigitavelBoleto ? new Date() : null;
+  await db.update(titulosFinanceiros).set({
+    codigoBarrasBoleto: input.codigoBarrasBoleto,
+    linhaDigitavelBoleto: input.linhaDigitavelBoleto,
+    boletoConfirmadoEm,
+  }).where(eq(titulosFinanceiros.id, input.tituloId));
+  return { ...input, boletoConfirmadoEm };
 }
 
 export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date }) {

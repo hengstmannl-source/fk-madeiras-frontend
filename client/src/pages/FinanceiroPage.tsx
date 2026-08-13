@@ -14,7 +14,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import {
   ArrowDownToLine, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
-  CircleAlert, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2, Pencil, Plus, RefreshCw, RotateCcw, Tags, Upload, WalletCards,
+  CircleAlert, CircleDollarSign, Download, FileSpreadsheet, Landmark, Loader2, Paperclip, Pencil, Plus, RefreshCw, RotateCcw, ScanLine, Tags, Upload, WalletCards, X,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -149,6 +149,8 @@ export default function FinanceiroPage() {
   const [arquivoFornecedores, setArquivoFornecedores] = useState<File | null>(null);
   const [conteudoImportacaoFornecedores, setConteudoImportacaoFornecedores] = useState("");
   const [preparoFornecedores, setPreparoFornecedores] = useState<{ linhas: Array<{ numeroLinha: number; nome: string; contacto: string | null; email: string | null; documento: string | null }>; erros: string[] } | null>(null);
+  const [anexosLancamento, setAnexosLancamento] = useState<File[]>([]);
+  const [codigoBoletoLancamento, setCodigoBoletoLancamento] = useState("");
 
   useEffect(() => {
     setAba(abaFinanceiraDaUrl(search));
@@ -204,6 +206,13 @@ export default function FinanceiroPage() {
   const importarLancamentos = trpc.financeiro.intercambios.importarLancamentosCsv.useMutation();
   const prepararImportacaoFornecedores = trpc.financeiro.fornecedores.prepararImportacaoCsv.useMutation();
   const importarFornecedores = trpc.financeiro.fornecedores.importarCsv.useMutation();
+  const enviarAnexoFinanceiro = trpc.financeiro.anexos.upload.useMutation();
+  const atualizarBoletoFinanceiro = trpc.financeiro.anexos.atualizarBoleto.useMutation();
+  const anexosTituloEditado = trpc.financeiro.anexos.list.useQuery(
+    { tituloId: tituloParaEditar?.id ?? 0 },
+    { enabled: Boolean(tituloParaEditar) },
+  );
+  const removerAnexoFinanceiro = trpc.financeiro.anexos.remove.useMutation();
   const maiorFluxoDiario = useMemo(() => Math.max(...(fluxoCaixa.data?.dias ?? []).flatMap((dia: any) => [Number(dia.entradas), Number(dia.saidas)]), 1), [fluxoCaixa.data]);
 
   const resumo = useMemo(() => {
@@ -299,6 +308,56 @@ export default function FinanceiroPage() {
     if (entidade === "cliente") { setCliente({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" }); setClienteAberto(true); }
   };
 
+  const arquivoParaBase64 = (arquivo: File) => new Promise<string>((resolve, reject) => {
+    const leitor = new FileReader();
+    leitor.onload = () => resolve(String(leitor.result).split(",")[1] ?? "");
+    leitor.onerror = () => reject(new Error("Não foi possível ler o arquivo."));
+    leitor.readAsDataURL(arquivo);
+  });
+
+  const selecionarAnexosLancamento = (arquivos: FileList | null) => {
+    const permitidos = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    const novos = Array.from(arquivos ?? []);
+    const invalidos = novos.filter((arquivo) => !permitidos.includes(arquivo.type) || arquivo.size > 8 * 1024 * 1024);
+    if (invalidos.length) toast.error("Envie apenas PDF, JPG, PNG ou WEBP de até 8 MB.");
+    setAnexosLancamento((atuais) => [...atuais, ...novos.filter((arquivo) => permitidos.includes(arquivo.type) && arquivo.size <= 8 * 1024 * 1024)].slice(0, 6));
+  };
+
+  const detectarCodigoDeImagem = async () => {
+    const imagem = anexosLancamento.find((arquivo) => arquivo.type.startsWith("image/"));
+    const Detector = (globalThis as any).BarcodeDetector;
+    if (!imagem) { toast.error("Anexe uma imagem do boleto antes de tentar a leitura."); return; }
+    if (!Detector) { toast.message("A leitura automática não está disponível neste navegador. Informe a linha digitável manualmente."); return; }
+    try {
+      const detector = new Detector({ formats: ["i25", "code_128", "interleaved_2_of_5"] });
+      const resultado = await detector.detect(await createImageBitmap(imagem));
+      const codigo = resultado[0]?.rawValue?.replace(/\D/g, "") ?? "";
+      if (!codigo) { toast.error("Não foi possível ler o código. Confira a imagem ou informe a linha digitável."); return; }
+      setCodigoBoletoLancamento(codigo);
+      toast.success("Código identificado. Confira os dígitos antes de salvar.");
+    } catch { toast.error("Não foi possível ler o código nesta imagem. Informe a linha digitável."); }
+  };
+
+  const anexarDocumentosAoTitulo = async (arquivos: FileList | null) => {
+    const tituloId = tituloParaEditar?.id;
+    if (!tituloId) return;
+    const permitidos = ["application/pdf", "image/jpeg", "image/png", "image/webp"];
+    const validos = Array.from(arquivos ?? []).filter((arquivo) => permitidos.includes(arquivo.type) && arquivo.size <= 8 * 1024 * 1024);
+    if (!validos.length) { toast.error("Envie apenas PDF, JPG, PNG ou WEBP de até 8 MB."); return; }
+    try {
+      await Promise.all(validos.slice(0, 6).map(async (arquivo) => enviarAnexoFinanceiro.mutateAsync({
+        tituloId,
+        nomeArquivo: arquivo.name,
+        mimeType: arquivo.type,
+        tamanhoBytes: arquivo.size,
+        tipo: arquivo.type === "application/pdf" && /boleto/i.test(arquivo.name) ? "boleto" : arquivo.type === "application/pdf" ? "nota_fiscal" : "outro",
+        base64: await arquivoParaBase64(arquivo),
+      })));
+      toast.success(validos.length === 1 ? "Documento anexado" : "Documentos anexados");
+      await anexosTituloEditado.refetch();
+    } catch (erro: any) { toast.error(erro.message || "Não foi possível anexar o documento."); }
+  };
+
   const salvarLancamento = () => {
     if (!lancamento.categoriaId) { toast.error("Selecione uma categoria financeira"); return; }
     const { parcelar, quantidadeParcelas, ...dadosLancamento } = lancamento;
@@ -310,20 +369,36 @@ export default function FinanceiroPage() {
       contraparteNome: lancamento.contraparteNome || null,
       observacoes: lancamento.observacoes || null,
     };
-    const concluir = () => {
+    const concluir = async (resultado: any) => {
+      const tituloId = resultado?.id ?? resultado?.titulos?.[0]?.id;
+      try {
+        if (tituloId) {
+          await Promise.all(anexosLancamento.map(async (arquivo) => enviarAnexoFinanceiro.mutateAsync({
+            tituloId,
+            nomeArquivo: arquivo.name,
+            mimeType: arquivo.type,
+            tamanhoBytes: arquivo.size,
+            tipo: arquivo.type === "application/pdf" && /boleto/i.test(arquivo.name) ? "boleto" : arquivo.type === "application/pdf" ? "nota_fiscal" : "outro",
+            base64: await arquivoParaBase64(arquivo),
+          })));
+          if (codigoBoletoLancamento.trim()) await atualizarBoletoFinanceiro.mutateAsync({ tituloId, codigo: codigoBoletoLancamento });
+        }
+      } catch (erro: any) { toast.error(`Lançamento criado, mas não foi possível concluir um anexo: ${erro.message}`); }
       toast.success(parcelar ? "Lançamento parcelado criado" : "Lançamento não programado criado");
       invalidarFinanceiro();
       setLancamentoAberto(false);
       setLancamento(valorInicialLancamento());
+      setAnexosLancamento([]);
+      setCodigoBoletoLancamento("");
     };
     if (parcelar) {
       criarLancamentoParcelado.mutate({ ...dados, quantidadeParcelas: Number(quantidadeParcelas) }, {
-        onSuccess: concluir,
+        onSuccess: (resultado) => { void concluir(resultado); },
         onError: (erro) => toast.error(erro.message),
       });
     } else {
       criarLancamento.mutate(dados, {
-        onSuccess: concluir,
+        onSuccess: (resultado) => { void concluir(resultado); },
         onError: (erro) => toast.error(erro.message),
       });
     }
@@ -607,8 +682,14 @@ export default function FinanceiroPage() {
             <div className="rounded-lg border border-border bg-muted/20 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Parcelar lançamento</p><p className="mt-0.5 text-xs text-muted-foreground">Cada parcela será criada como um título independente.</p></div><input type="checkbox" checked={lancamento.parcelar} onChange={(e) => setLancamento({ ...lancamento, parcelar: e.target.checked })} className="h-4 w-4 accent-primary" aria-label="Parcelar lançamento" /></div>{lancamento.parcelar && <div className="mt-3 max-w-[180px]"><Campo label="Quantidade de parcelas" type="number" value={lancamento.quantidadeParcelas} onChange={(valor) => setLancamento({ ...lancamento, quantidadeParcelas: valor })} /></div>}</div>
             <div className="grid grid-cols-2 gap-3">{lancamento.tipo === "receber" ? <div className="space-y-2"><Label>Cliente (opcional)</Label><Select value={lancamento.clienteId || "nenhum"} onCreate={() => abrirCriacaoContextual("cliente", "lancamento")} createLabel="Criar novo cliente" onValueChange={(valor) => setLancamento({ ...lancamento, clienteId: valor === "nenhum" ? "" : valor })}><SelectTrigger className="w-full"><SelectValue placeholder="Pesquisar cliente" /></SelectTrigger><SelectContent><SelectItem value="nenhum">Sem cliente vinculado</SelectItem>{(clientes.data ?? []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>)}</SelectContent></Select></div> : <div className="space-y-2"><Label>Fornecedor (opcional)</Label><Select value={lancamento.fornecedorId || "nenhum"} onCreate={() => abrirCriacaoContextual("fornecedor", "lancamento")} createLabel="Criar novo fornecedor" onValueChange={(valor) => setLancamento({ ...lancamento, fornecedorId: valor === "nenhum" ? "" : valor })}><SelectTrigger className="w-full"><SelectValue placeholder="Pesquisar fornecedor" /></SelectTrigger><SelectContent><SelectItem value="nenhum">Sem fornecedor vinculado</SelectItem>{(fornecedores.data ?? []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>)}</SelectContent></Select></div>}<Campo label="Contraparte livre" value={lancamento.contraparteNome} onChange={(valor) => setLancamento({ ...lancamento, contraparteNome: valor })} /></div>
             <div className="grid grid-cols-2 gap-3"><Campo label="Desconto (R$)" value={lancamento.desconto} onChange={(valor) => setLancamento({ ...lancamento, desconto: valor })} /><Campo label="Juros (R$)" value={lancamento.juros} onChange={(valor) => setLancamento({ ...lancamento, juros: valor })} /></div>
+            <div className="space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/40 p-3">
+              <div><p className="text-sm font-medium text-amber-950">Documentos do lançamento</p><p className="mt-0.5 text-xs text-amber-900">Anexe nota fiscal, boleto ou imagem. PDF, JPG, PNG e WEBP; até 8 MB por arquivo.</p></div>
+              <Input aria-label="Anexar documentos do lançamento" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple onChange={(evento) => { selecionarAnexosLancamento(evento.target.files); evento.currentTarget.value = ""; }} />
+              {anexosLancamento.length > 0 && <div className="space-y-1.5">{anexosLancamento.map((arquivo, indice) => <div key={`${arquivo.name}-${indice}`} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 text-primary" /><span className="min-w-0 flex-1 truncate">{arquivo.name}</span><span className="text-muted-foreground">{(arquivo.size / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="icon" variant="ghost" className="h-6 w-6" aria-label={`Remover ${arquivo.name}`} onClick={() => setAnexosLancamento((atuais) => atuais.filter((_, posicao) => posicao !== indice))}><X className="h-3.5 w-3.5" /></Button></div>)}</div>}
+              {lancamento.tipo === "pagar" && <div className="space-y-2 border-t border-amber-200 pt-3"><div className="flex items-center justify-between gap-2"><Label htmlFor="codigo-boleto">Código de barras ou linha digitável</Label><Button type="button" size="sm" variant="outline" onClick={() => void detectarCodigoDeImagem()}><ScanLine className="mr-1.5 h-3.5 w-3.5" />Ler imagem</Button></div><Input id="codigo-boleto" value={codigoBoletoLancamento} onChange={(evento) => setCodigoBoletoLancamento(evento.target.value.replace(/\D/g, ""))} placeholder="Cole ou confira os dígitos do boleto" inputMode="numeric" /><p className="text-xs text-muted-foreground">A leitura automática é assistida: confirme os dígitos identificados antes de criar o lançamento.</p></div>}
+            </div>
             <div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={lancamento.observacoes} onChange={(e) => setLancamento({ ...lancamento, observacoes: e.target.value })} /></div>
-            <Button className="w-full" onClick={salvarLancamento} disabled={criarLancamento.isPending || criarLancamentoParcelado.isPending}>{(criarLancamento.isPending || criarLancamentoParcelado.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{lancamento.parcelar ? "Criar parcelas" : "Criar lançamento"}</Button>
+            <Button className="w-full" onClick={salvarLancamento} disabled={criarLancamento.isPending || criarLancamentoParcelado.isPending || enviarAnexoFinanceiro.isPending || atualizarBoletoFinanceiro.isPending}>{(criarLancamento.isPending || criarLancamentoParcelado.isPending || enviarAnexoFinanceiro.isPending || atualizarBoletoFinanceiro.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{lancamento.parcelar ? "Criar parcelas" : "Criar lançamento"}</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -628,11 +709,17 @@ export default function FinanceiroPage() {
       </Dialog>
 
       <Dialog open={Boolean(tituloParaEditar)} onOpenChange={(aberto) => !aberto && setTituloParaEditar(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader><DialogTitle>Editar agendamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloParaEditar?.descricao}</p><p className="mt-1 text-muted-foreground">Altere a data de vencimento conforme a negociação de pagamento.</p>{tituloParaEditar?.origem === "romaneio_carga" && <p className="mt-2 text-xs text-primary">Este vencimento também será atualizado no romaneio de carga vinculado.</p>}</div>
             <div className="space-y-2"><Label htmlFor="vencimento-agendamento">Novo vencimento *</Label><Input id="vencimento-agendamento" aria-label="Novo vencimento" type="date" value={vencimentoEditado} onChange={(event) => setVencimentoEditado(event.target.value)} /></div>
+            {tituloParaEditar?.tipo === "pagar" && (tituloParaEditar?.linhaDigitavelBoleto || tituloParaEditar?.codigoBarrasBoleto) && <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3"><p className="text-sm font-medium text-amber-950">Dados do boleto</p><p className="mt-1 text-xs text-amber-900">{tituloParaEditar?.linhaDigitavelBoleto ? "Linha digitável" : "Código de barras"}</p><code className="mt-1 block break-all rounded bg-background px-2 py-1.5 text-xs text-foreground">{tituloParaEditar?.linhaDigitavelBoleto ?? tituloParaEditar?.codigoBarrasBoleto}</code><p className="mt-2 text-xs text-amber-900">Confira os dígitos com o documento antes de efetuar o pagamento.</p></div>}
+            <div className="space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/30 p-3">
+              <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-amber-950">Documentos vinculados</p><p className="mt-0.5 text-xs text-amber-900">Notas fiscais, boletos e imagens do agendamento.</p></div><Label htmlFor="anexar-documentos-edicao" className="cursor-pointer"><span className="inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">{enviarAnexoFinanceiro.isPending ? "Enviando..." : "Anexar"}</span></Label></div>
+              <Input id="anexar-documentos-edicao" className="sr-only" aria-label="Anexar documentos ao agendamento" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple disabled={enviarAnexoFinanceiro.isPending} onChange={(evento) => { void anexarDocumentosAoTitulo(evento.target.files); evento.currentTarget.value = ""; }} />
+              {anexosTituloEditado.isLoading ? <p className="py-2 text-xs text-muted-foreground">Carregando documentos...</p> : anexosTituloEditado.data?.length ? <div className="space-y-1.5">{anexosTituloEditado.data.map((anexo: any) => <div key={anexo.id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" /><a className="min-w-0 flex-1 truncate font-medium hover:underline" href={anexo.url} target="_blank" rel="noreferrer">{anexo.nomeArquivo}</a><span className="shrink-0 text-muted-foreground">{(Number(anexo.tamanhoBytes) / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" disabled={removerAnexoFinanceiro.isPending} onClick={() => removerAnexoFinanceiro.mutate({ id: anexo.id, tituloId: tituloParaEditar.id }, { onSuccess: () => { toast.success("Documento removido"); void anexosTituloEditado.refetch(); }, onError: (erro) => toast.error(erro.message) })}>Remover</Button></div>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-3 text-center text-xs text-muted-foreground">Nenhum documento anexado a este agendamento.</p>}
+            </div>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarAgendamento.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarAgendamento.isPending}>{atualizarAgendamento.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar vencimento</Button></div>
           </div>
         </DialogContent>

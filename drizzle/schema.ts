@@ -428,6 +428,9 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   dataVencimento: timestamp("dataVencimento").notNull(),
   competencia: timestamp("competencia"),
   estado: mysqlEnum("estado", ["aberto", "parcial", "quitado", "vencido", "cancelado"]).notNull().default("aberto"),
+  codigoBarrasBoleto: varchar("codigoBarrasBoleto", { length: 60 }),
+  linhaDigitavelBoleto: varchar("linhaDigitavelBoleto", { length: 60 }),
+  boletoConfirmadoEm: timestamp("boletoConfirmadoEm"),
   observacoes: text("observacoes"),
   canceladoEm: timestamp("canceladoEm"),
   canceladoPor: int("canceladoPor"),
@@ -438,6 +441,22 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
 
 export type TituloFinanceiro = typeof titulosFinanceiros.$inferSelect;
 export type InsertTituloFinanceiro = typeof titulosFinanceiros.$inferInsert;
+
+export const anexosFinanceiros = mysqlTable("anexosFinanceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  tituloId: int("tituloId").notNull(),
+  nomeArquivo: varchar("nomeArquivo", { length: 300 }).notNull(),
+  mimeType: varchar("mimeType", { length: 100 }).notNull(),
+  tamanhoBytes: int("tamanhoBytes").notNull(),
+  tipo: mysqlEnum("tipo", ["nota_fiscal", "boleto", "comprovante", "outro"]).notNull().default("outro"),
+  storageKey: varchar("storageKey", { length: 500 }).notNull().unique(),
+  url: varchar("url", { length: 1000 }).notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AnexoFinanceiro = typeof anexosFinanceiros.$inferSelect;
+export type InsertAnexoFinanceiro = typeof anexosFinanceiros.$inferInsert;
 
 export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),

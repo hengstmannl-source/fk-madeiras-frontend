@@ -2,6 +2,8 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import { calcularParcelas } from "../financeiro.logic";
+import { storagePut } from "../storage";
+import { normalizarDadosBoleto } from "../../shared/boleto";
 
 export const TipoTituloSchema = z.enum(["receber", "pagar"]);
 export const FormaPagamentoFinanceiraSchema = z.enum([
@@ -26,6 +28,21 @@ function adicionarMeses(data: Date, meses: number): Date {
   const proxima = new Date(data);
   proxima.setMonth(proxima.getMonth() + meses);
   return proxima;
+}
+
+const MIME_TYPES_ANEXO = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+const TIPOS_ANEXO_FINANCEIRO = z.enum(["nota_fiscal", "boleto", "comprovante", "outro"]);
+
+function assinaturaValidaAnexo(mimeType: string, bytes: Buffer): boolean {
+  if (mimeType === "application/pdf") return bytes.subarray(0, 4).toString() === "%PDF";
+  if (mimeType === "image/png") return bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  if (mimeType === "image/jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (mimeType === "image/webp") return bytes.subarray(0, 4).toString() === "RIFF" && bytes.subarray(8, 12).toString() === "WEBP";
+  return false;
+}
+
+function nomeSeguroAnexo(nome: string) {
+  return nome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 180) || "documento";
 }
 
 export const LancamentoManualSchema = z.object({
@@ -269,6 +286,54 @@ export const financeiroRouter = router({
     })).mutation(({ ctx, input }) => db.estornarBaixaFinanceira(input.id, ctx.user.id, input.motivo)),
     cancelar: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => db.cancelarTituloFinanceiro(input.id, ctx.user.id)),
+  }),
+
+  anexos: router({
+    list: protectedProcedure.input(z.object({ tituloId: z.number().int().positive() }))
+      .query(({ input }) => db.listAnexosFinanceiros(input.tituloId)),
+    upload: protectedProcedure.input(z.object({
+      tituloId: z.number().int().positive(),
+      nomeArquivo: z.string().trim().min(1).max(300),
+      mimeType: z.string().max(100),
+      tamanhoBytes: z.number().int().positive().max(8 * 1024 * 1024),
+      tipo: TIPOS_ANEXO_FINANCEIRO,
+      base64: z.string().min(8).max(12_000_000),
+    })).mutation(async ({ ctx, input }) => {
+      if (!MIME_TYPES_ANEXO.has(input.mimeType)) throw new Error("Formato não permitido. Envie PDF, JPG, PNG ou WEBP.");
+      const bytes = Buffer.from(input.base64, "base64");
+      if (!bytes.length || bytes.length !== input.tamanhoBytes || !assinaturaValidaAnexo(input.mimeType, bytes)) {
+        throw new Error("O conteúdo do arquivo não corresponde ao formato informado.");
+      }
+      const armazenado = await storagePut(
+        `financeiro/titulo-${input.tituloId}/${Date.now()}-${nomeSeguroAnexo(input.nomeArquivo)}`,
+        bytes,
+        input.mimeType,
+      );
+      return db.createAnexoFinanceiro({
+        tituloId: input.tituloId,
+        nomeArquivo: input.nomeArquivo,
+        mimeType: input.mimeType,
+        tamanhoBytes: input.tamanhoBytes,
+        tipo: input.tipo,
+        storageKey: armazenado.key,
+        url: armazenado.url,
+        criadoPor: ctx.user.id,
+      });
+    }),
+    remove: protectedProcedure.input(z.object({ id: z.number().int().positive(), tituloId: z.number().int().positive() }))
+      .mutation(({ input }) => db.removerAnexoFinanceiro(input)),
+    atualizarBoleto: protectedProcedure.input(z.object({
+      tituloId: z.number().int().positive(),
+      codigo: z.string().trim().max(200).nullable(),
+    })).mutation(({ input }) => {
+      const dados = input.codigo ? normalizarDadosBoleto(input.codigo) : { codigoBarras: null, linhaDigitavel: null };
+      if (!dados) throw new Error("Informe um código de barras com 44 dígitos ou uma linha digitável com 47 ou 48 dígitos.");
+      return db.atualizarDadosBoleto({
+        tituloId: input.tituloId,
+        codigoBarrasBoleto: dados.codigoBarras,
+        linhaDigitavelBoleto: dados.linhaDigitavel,
+      });
+    }),
   }),
 
   recorrencias: router({
