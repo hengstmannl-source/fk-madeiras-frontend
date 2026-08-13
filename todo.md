@@ -236,3 +236,7 @@
 - [x] Permitir editar vencimento e dados financeiros da conta a pagar vinculada a romaneio de carga
 - [x] Sincronizar a alteração de vencimento entre o título financeiro e o romaneio sem criar duplicidade
 - [x] Cobrir a edição de agendamentos vinculados com testes e validação visual
+- [x] Separar operacionalmente contas a pagar, contas a receber, contas pagas e contas recebidas
+- [x] Adicionar filtros financeiros por descrição, faixa de valor e período de vencimento ou recebimento
+- [x] Destacar títulos a pagar ou receber no dia da consulta
+- [x] Cobrir a reorganização financeira com testes e validação visual

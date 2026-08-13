@@ -64,6 +64,16 @@ const estadoLabels: Record<string, string> = {
 
 type EntidadeContextual = "cliente" | "fornecedor" | "categoria" | "conta";
 type DestinoContextual = "lancamento" | "recorrencia" | "baixa";
+type VisaoFinanceira = "pagar" | "receber" | "pagas" | "recebidas";
+
+const opcoesVisaoFinanceira: Array<{ id: VisaoFinanceira; label: string; descricao: string }> = [
+  { id: "pagar", label: "Contas a pagar", descricao: "Compromissos em aberto e em atraso" },
+  { id: "receber", label: "Contas a receber", descricao: "Recebimentos previstos e em atraso" },
+  { id: "pagas", label: "Contas pagas", descricao: "Histórico de pagamentos concluídos" },
+  { id: "recebidas", label: "Contas recebidas", descricao: "Histórico de recebimentos concluídos" },
+];
+
+const valorInicialFiltrosFinanceiros = () => ({ descricao: "", valorMinimo: "", valorMaximo: "", dataInicio: "", dataFim: "" });
 
 function saldoTitulo(titulo: any): number {
   return Math.max(0,
@@ -73,6 +83,14 @@ function saldoTitulo(titulo: any): number {
 
 function formatarDataFinanceira(value: string | Date): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(value));
+}
+
+function dataChaveFinanceira(value: string | Date): string {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function valorTotalTitulo(titulo: any): number {
+  return Number(titulo.valorOriginal || 0) - Number(titulo.desconto || 0) + Number(titulo.juros || 0);
 }
 
 function baixarCsv(conteudo: string, nomeArquivo: string) {
@@ -108,6 +126,11 @@ export default function FinanceiroPage() {
   const [contaAberta, setContaAberta] = useState(false);
   const [clienteAberto, setClienteAberto] = useState(false);
   const [contextoCriacao, setContextoCriacao] = useState<{ entidade: EntidadeContextual; destino: DestinoContextual } | null>(null);
+  const [visaoFinanceira, setVisaoFinanceira] = useState<VisaoFinanceira>(() => {
+    const tipo = new URLSearchParams(search).get("tipo");
+    return tipo === "receber" ? "receber" : "pagar";
+  });
+  const [filtrosFinanceiros, setFiltrosFinanceiros] = useState(valorInicialFiltrosFinanceiros);
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false);
   const [tituloSelecionado, setTituloSelecionado] = useState<any>(null);
   const [tituloParaEditar, setTituloParaEditar] = useState<any>(null);
@@ -133,6 +156,10 @@ export default function FinanceiroPage() {
   const [recorrencia, setRecorrencia] = useState(valorInicialRecorrencia);
   const tipoAtalho = new URLSearchParams(search).get("tipo") === "pagar" ? "pagar" : new URLSearchParams(search).get("tipo") === "receber" ? "receber" : null;
 
+  useEffect(() => {
+    if (tipoAtalho) setVisaoFinanceira(tipoAtalho);
+  }, [tipoAtalho]);
+
   const titulos = trpc.financeiro.titulos.list.useQuery();
   const categorias = trpc.financeiro.categorias.list.useQuery();
   const fornecedores = trpc.financeiro.fornecedores.list.useQuery();
@@ -141,7 +168,10 @@ export default function FinanceiroPage() {
   const alertas = trpc.financeiro.alertas.list.useQuery();
   const fluxoCaixa = trpc.financeiro.relatorios.fluxoCaixa.useQuery(periodoFluxo);
   const modeloImportacao = trpc.financeiro.intercambios.modeloLancamentosCsv.useQuery(undefined, { enabled: false });
-  const exportacaoLancamentos = trpc.financeiro.intercambios.exportarLancamentosCsv.useQuery(tipoAtalho ? { tipo: tipoAtalho } : undefined, { enabled: false });
+  const exportacaoLancamentos = trpc.financeiro.intercambios.exportarLancamentosCsv.useQuery(
+    visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? { tipo: "pagar" } : { tipo: "receber" },
+    { enabled: false },
+  );
   const baixasTitulo = trpc.financeiro.titulos.baixas.useQuery(
     { tituloId: tituloBaixas?.id ?? 0 },
     { enabled: Boolean(tituloBaixas) },
@@ -188,8 +218,27 @@ export default function FinanceiroPage() {
     };
   }, [titulos.data]);
 
-  const titulosExibidos = useMemo(() => (titulos.data ?? []).filter((titulo: any) => !tipoAtalho || titulo.tipo === tipoAtalho), [titulos.data, tipoAtalho]);
-  const tituloLancamentos = tipoAtalho === "pagar" ? "Contas a pagar" : tipoAtalho === "receber" ? "Contas a receber" : "Contas a pagar e receber";
+  const titulosExibidos = useMemo(() => {
+    const descricao = filtrosFinanceiros.descricao.trim().toLocaleLowerCase("pt-BR");
+    const valorMinimo = filtrosFinanceiros.valorMinimo ? Number(filtrosFinanceiros.valorMinimo.replace(",", ".")) : null;
+    const valorMaximo = filtrosFinanceiros.valorMaximo ? Number(filtrosFinanceiros.valorMaximo.replace(",", ".")) : null;
+    const tipo = visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? "pagar" : "receber";
+    const quitado = visaoFinanceira === "pagas" || visaoFinanceira === "recebidas";
+    return (titulos.data ?? []).filter((titulo: any) => {
+      if (titulo.tipo !== tipo || titulo.estado === "cancelado") return false;
+      if (quitado ? titulo.estado !== "quitado" : ["quitado", "cancelado"].includes(titulo.estado)) return false;
+      if (descricao && !`${titulo.descricao} ${titulo.contraparteNome ?? ""}`.toLocaleLowerCase("pt-BR").includes(descricao)) return false;
+      const valor = valorTotalTitulo(titulo);
+      if (valorMinimo !== null && valor < valorMinimo) return false;
+      if (valorMaximo !== null && valor > valorMaximo) return false;
+      const data = dataChaveFinanceira(titulo.dataVencimento);
+      if (filtrosFinanceiros.dataInicio && data < filtrosFinanceiros.dataInicio) return false;
+      if (filtrosFinanceiros.dataFim && data > filtrosFinanceiros.dataFim) return false;
+      return true;
+    });
+  }, [titulos.data, visaoFinanceira, filtrosFinanceiros]);
+  const tituloLancamentos = opcoesVisaoFinanceira.find((item) => item.id === visaoFinanceira)!;
+  const titulosHoje = useMemo(() => titulosExibidos.filter((titulo: any) => dataChaveFinanceira(titulo.dataVencimento) === hoje()), [titulosExibidos]);
 
   const invalidarFinanceiro = () => {
     utils.financeiro.titulos.list.invalidate();
@@ -438,17 +487,10 @@ export default function FinanceiroPage() {
 
       {aba === "lancamentos" && (
         <section className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden">
-          <div className="flex flex-col gap-3 px-5 py-4 border-b bg-muted/20 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">{tituloLancamentos}</h2><p className="text-xs text-muted-foreground mt-0.5">A exportação CSV inclui somente lançamentos avulsos, preservando as vendas vinculadas.</p></div><div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />Modelo CSV</Button><Button size="sm" variant="outline" onClick={exportarLancamentos} disabled={exportacaoLancamentos.isFetching}><Download className="mr-1.5 h-3.5 w-3.5" />Exportar CSV</Button><Badge variant="outline">{titulosExibidos.length} títulos</Badge></div></div>
-          {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : titulosExibidos.length ? (
-            <Table>
-              <TableHeader><TableRow className="bg-muted/40"><TableHead>Descrição</TableHead><TableHead>Tipo</TableHead><TableHead>Vencimento</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Saldo</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader>
-              <TableBody>{titulosExibidos.map((titulo: any) => {
-                const possuiBaixas = Number(titulo.valorBaixado || 0) > 0.005;
-                const podeCancelar = !["quitado", "cancelado"].includes(titulo.estado) && !possuiBaixas;
-                return <TableRow key={titulo.id} className="hover:bg-muted/20"><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{formatReceivableSaleReference(titulo.origem, titulo.descricao)}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell><span className={`inline-flex items-center gap-1 text-sm ${titulo.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{titulo.tipo === "receber" ? <ArrowDownToLine className="h-3.5 w-3.5" /> : <ArrowUpFromLine className="h-3.5 w-3.5" />}{titulo.tipo === "receber" ? "Receber" : "Pagar"}</span></TableCell><TableCell className="text-sm">{formatarDataFinanceira(titulo.dataVencimento)}</TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{possuiBaixas && <Button size="sm" variant="ghost" onClick={() => setTituloBaixas(titulo)}>Baixas</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirEdicaoAgendamento(titulo)}><Pencil className="h-3.5 w-3.5 mr-1.5" />Editar</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" onClick={() => abrirBaixa(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />Baixar</Button>}{!["quitado", "cancelado"].includes(titulo.estado) && <Button size="sm" variant="outline" className="text-destructive hover:text-destructive" title={possuiBaixas ? "Estorne as baixas antes de cancelar" : "Cancelar título"} disabled={!podeCancelar} onClick={() => setTituloParaCancelar(titulo)}>Cancelar</Button>}</div></TableCell></TableRow>;
-              })}</TableBody>
-            </Table>
-          ) : <EstadoVazio icon={<CalendarClock className="h-9 w-9" />} texto="Nenhum lançamento financeiro encontrado" acao={() => setLancamentoAberto(true)} labelAcao="Criar lançamento avulso" />}
+          <div className="border-b bg-muted/20 px-5 py-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Gestão de títulos</h2><p className="text-xs text-muted-foreground mt-0.5">Organize compromissos, recebimentos e históricos em listas operacionais.</p></div><div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />Modelo CSV</Button><Button size="sm" variant="outline" onClick={exportarLancamentos} disabled={exportacaoLancamentos.isFetching}><Download className="mr-1.5 h-3.5 w-3.5" />Exportar CSV</Button></div></div><div className="mt-4 flex gap-2 overflow-x-auto pb-1">{opcoesVisaoFinanceira.map((item) => <button key={item.id} onClick={() => setVisaoFinanceira(item.id)} className={`min-w-max rounded-lg border px-3 py-2 text-left transition-colors ${visaoFinanceira === item.id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}><span className="block text-sm font-semibold">{item.label}</span><span className={`block text-[11px] ${visaoFinanceira === item.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{item.descricao}</span></button>)}</div></div>
+          <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-2 lg:grid-cols-5"><div className="space-y-1 lg:col-span-2"><Label htmlFor="filtro-descricao" className="text-xs">Descrição ou contraparte</Label><Input id="filtro-descricao" value={filtrosFinanceiros.descricao} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, descricao: event.target.value })} placeholder="Pesquisar por descrição" /></div><div className="space-y-1"><Label htmlFor="filtro-valor-minimo" className="text-xs">Valor mínimo</Label><Input id="filtro-valor-minimo" inputMode="decimal" value={filtrosFinanceiros.valorMinimo} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, valorMinimo: event.target.value })} placeholder="R$ 0,00" /></div><div className="space-y-1"><Label htmlFor="filtro-valor-maximo" className="text-xs">Valor máximo</Label><Input id="filtro-valor-maximo" inputMode="decimal" value={filtrosFinanceiros.valorMaximo} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, valorMaximo: event.target.value })} placeholder="Sem limite" /></div><div className="flex items-end"><Button variant="ghost" className="w-full" onClick={() => setFiltrosFinanceiros(valorInicialFiltrosFinanceiros())}>Limpar filtros</Button></div><div className="space-y-1"><Label htmlFor="filtro-data-inicio" className="text-xs">Data inicial</Label><Input id="filtro-data-inicio" type="date" value={filtrosFinanceiros.dataInicio} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, dataInicio: event.target.value })} /></div><div className="space-y-1"><Label htmlFor="filtro-data-fim" className="text-xs">Data final</Label><Input id="filtro-data-fim" type="date" value={filtrosFinanceiros.dataFim} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, dataFim: event.target.value })} /></div><div className="flex items-end lg:col-span-3"><p className="text-xs text-muted-foreground">O período considera o vencimento dos títulos. Nos históricos, use-o para consultar as contas liquidadas por vencimento.</p></div></div>
+          <div className="flex items-center justify-between gap-3 border-b bg-muted/10 px-5 py-3"><div><p className="font-semibold text-sm">{tituloLancamentos.label}</p><p className="text-xs text-muted-foreground">{titulosExibidos.length} títulos encontrados</p></div>{titulosHoje.length > 0 && <Badge className={visaoFinanceira === "pagar" ? "bg-amber-100 text-amber-900 hover:bg-amber-100" : "bg-emerald-100 text-emerald-900 hover:bg-emerald-100"}>{titulosHoje.length} {visaoFinanceira === "pagar" ? "vencem" : "recebem"} hoje</Badge>}</div>
+          {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : <TabelaTitulosFinanceiros titulos={titulosExibidos} historico={visaoFinanceira === "pagas" || visaoFinanceira === "recebidas"} tipo={visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? "pagar" : "receber"} onBaixas={setTituloBaixas} onEditar={abrirEdicaoAgendamento} onBaixar={abrirBaixa} onCancelar={setTituloParaCancelar} />}
         </section>
       )}
 
@@ -582,6 +624,17 @@ function CadastroTabela({ titulo, descricao, icone, botao, aoCriar, colunas, lin
   return <section className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden"><div className="flex items-center justify-between px-5 py-4 border-b bg-muted/20"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary">{icone}</div><div><h2 className="font-semibold">{titulo}</h2><p className="text-xs text-muted-foreground mt-0.5">{descricao}</p></div></div><Button size="sm" onClick={aoCriar}><Plus className="h-3.5 w-3.5 mr-1.5" />{botao}</Button></div>{linhas.length ? <Table><TableHeader><TableRow className="bg-muted/40">{colunas.map((coluna) => <TableHead key={coluna}>{coluna}</TableHead>)}</TableRow></TableHeader><TableBody>{linhas.map((linha, indice) => <TableRow key={`${linha[0]}-${indice}`}>{linha.map((celula, celulaIndice) => <TableCell key={`${celula}-${celulaIndice}`} className={celulaIndice === 0 ? "font-medium" : "text-muted-foreground"}>{celula}</TableCell>)}</TableRow>)}</TableBody></Table> : <EstadoVazio icon={<CircleAlert className="h-8 w-8" />} texto={vazio} acao={aoCriar} labelAcao={botao} />}</section>;
 }
 
-function EstadoVazio({ icon, texto, acao, labelAcao }: { icon: React.ReactNode; texto: string; acao: () => void; labelAcao: string }) {
-  return <div className="p-12 text-center text-muted-foreground"><div className="mx-auto mb-3 w-fit opacity-40">{icon}</div><p className="text-sm">{texto}</p><Button variant="outline" size="sm" className="mt-4" onClick={acao}><Plus className="h-3.5 w-3.5 mr-1.5" />{labelAcao}</Button></div>;
+function TabelaTitulosFinanceiros({ titulos, historico, tipo, onBaixas, onEditar, onBaixar, onCancelar }: { titulos: any[]; historico: boolean; tipo: "pagar" | "receber"; onBaixas: (titulo: any) => void; onEditar: (titulo: any) => void; onBaixar: (titulo: any) => void; onCancelar: (titulo: any) => void }) {
+  if (!titulos.length) return <EstadoVazio icon={<CalendarClock className="h-9 w-9" />} texto={historico ? `Nenhuma conta ${tipo === "pagar" ? "paga" : "recebida"} encontrada` : `Nenhuma conta a ${tipo === "pagar" ? "pagar" : "receber"} encontrada`} />;
+  const hojeLocal = hoje();
+  return <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Descrição</TableHead><TableHead>Vencimento</TableHead><TableHead>Status</TableHead><TableHead className="text-right">{historico ? "Valor liquidado" : "Saldo"}</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{titulos.map((titulo: any) => {
+    const possuiBaixas = Number(titulo.valorBaixado || 0) > 0.005;
+    const podeCancelar = !["quitado", "cancelado"].includes(titulo.estado) && !possuiBaixas;
+    const venceHoje = !historico && dataChaveFinanceira(titulo.dataVencimento) === hojeLocal;
+    return <TableRow key={titulo.id} className={venceHoje ? (tipo === "pagar" ? "bg-amber-50 hover:bg-amber-100/70" : "bg-emerald-50 hover:bg-emerald-100/70") : "hover:bg-muted/20"}><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{formatReceivableSaleReference(titulo.origem, titulo.descricao)}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell className="text-sm"><div className="flex items-center gap-2">{formatarDataFinanceira(titulo.dataVencimento)}{venceHoje && <Badge variant="outline" className={tipo === "pagar" ? "border-amber-300 bg-amber-100 text-amber-900" : "border-emerald-300 bg-emerald-100 text-emerald-900"}>{tipo === "pagar" ? "Vence hoje" : "Recebe hoje"}</Badge>}</div></TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(historico ? Number(titulo.valorBaixado || 0) : saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{possuiBaixas && <Button size="sm" variant="ghost" onClick={() => onBaixas(titulo)}>Baixas</Button>}{!historico && <><Button size="sm" variant="outline" onClick={() => onEditar(titulo)}><Pencil className="h-3.5 w-3.5 mr-1.5" />Editar</Button><Button size="sm" variant="outline" onClick={() => onBaixar(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />{tipo === "pagar" ? "Pagar" : "Receber"}</Button><Button size="sm" variant="outline" className="text-destructive hover:text-destructive" title={possuiBaixas ? "Estorne as baixas antes de cancelar" : "Cancelar título"} disabled={!podeCancelar} onClick={() => onCancelar(titulo)}>Cancelar</Button></>}</div></TableCell></TableRow>;
+  })}</TableBody></Table></div>;
+}
+
+function EstadoVazio({ icon, texto, acao, labelAcao }: { icon: React.ReactNode; texto: string; acao?: () => void; labelAcao?: string }) {
+  return <div className="p-12 text-center text-muted-foreground"><div className="mx-auto mb-3 w-fit opacity-40">{icon}</div><p className="text-sm">{texto}</p>{acao && labelAcao && <Button variant="outline" size="sm" className="mt-4" onClick={acao}><Plus className="h-3.5 w-3.5 mr-1.5" />{labelAcao}</Button>}</div>;
 }

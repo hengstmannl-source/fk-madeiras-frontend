@@ -177,6 +177,8 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
 
+    await user.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+
     const linha = screen.getByText("Recebimento para cancelar").closest("tr");
     expect(linha).not.toBeNull();
     await user.click(within(linha!).getByRole("button", { name: "Cancelar" }));
@@ -212,6 +214,37 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(abaFinanceiraDaUrl("?tipo=receber")).toBe("lancamentos");
   });
 
+  it("separa as quatro listas financeiras, filtra títulos e destaca os compromissos do dia", async () => {
+    const user = userEvent.setup();
+    const hoje = new Date().toISOString();
+    state.titulos.push(
+      { id: 14, descricao: "Fornecedor vence hoje", tipo: "pagar", estado: "aberto", valorOriginal: "850.00", valorBaixado: "0.00", desconto: "0.00", juros: "0.00", dataVencimento: hoje },
+      { id: 15, descricao: "Conta paga arquivada", tipo: "pagar", estado: "quitado", valorOriginal: "200.00", valorBaixado: "200.00", desconto: "0.00", juros: "0.00", dataVencimento: hoje },
+      { id: 16, descricao: "Receita recebida arquivada", tipo: "receber", estado: "quitado", valorOriginal: "300.00", valorBaixado: "300.00", desconto: "0.00", juros: "0.00", dataVencimento: hoje },
+    );
+    render(<FinanceiroPage />);
+
+    expect(screen.getByText("Fornecedor vence hoje")).toBeInTheDocument();
+    expect(screen.getByText(/1 vencem hoje/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Descrição ou contraparte")).toBeInTheDocument();
+    expect(screen.getByLabelText("Valor mínimo")).toHaveAttribute("inputmode", "decimal");
+    expect(screen.getAllByLabelText("Data inicial")[0]).toHaveAttribute("type", "date");
+    expect(screen.getAllByLabelText("Data final")[0]).toHaveAttribute("type", "date");
+
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "fornecedor vence");
+    expect(screen.getAllByText("Fornecedor vence hoje").length).toBeGreaterThan(0);
+    const tabelaPagar = screen.getAllByRole("table").find((tabela) => within(tabela).queryByText("Fornecedor vence hoje"));
+    expect(tabelaPagar).toBeDefined();
+    expect(within(tabelaPagar!).queryByText("Carga de toras RC-001")).not.toBeInTheDocument();
+    await user.click(screen.getAllByRole("button", { name: "Limpar filtros" })[0]);
+
+    await user.click(screen.getAllByRole("button", { name: /contas pagas/i }).at(-1)!);
+    expect(screen.getByText("Conta paga arquivada")).toBeInTheDocument();
+
+    await user.click(screen.getAllByRole("button", { name: /contas recebidas/i }).at(-1)!);
+    expect(screen.getByText("Receita recebida arquivada")).toBeInTheDocument();
+  });
+
   it("permite reagendar o vencimento de uma conta vinculada ao romaneio de carga", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
@@ -237,6 +270,8 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
 
+    await user.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+
     const linha = screen.getAllByText("Recebimento com baixa").map((elemento) => elemento.closest("tr")).find(Boolean);
     expect(linha).not.toBeNull();
     await user.click(within(linha!).getByRole("button", { name: "Baixas" }));
@@ -256,9 +291,9 @@ describe("FinanceiroPage — cancelamento manual", () => {
   it("oferece modelo, exportação e importação CSV com orientação de validação", async () => {
     render(<FinanceiroPage />);
 
-    expect(screen.getByRole("button", { name: "Modelo CSV" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Exportar CSV" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Importar CSV" }));
+    expect(screen.getAllByRole("button", { name: "Modelo CSV" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Exportar CSV" }).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getAllByRole("button", { name: "Importar CSV" }).at(-1)!);
     expect(screen.getByRole("heading", { name: "Importar lançamentos financeiros" })).toBeInTheDocument();
     expect(screen.getByText(/se houver alguma linha inválida/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Arquivo CSV para importação")).toHaveAttribute("accept", ".csv,text/csv");
