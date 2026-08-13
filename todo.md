@@ -258,3 +258,8 @@
 - [x] Disponibilizar modelo de planilha para importar fornecedores
 - [x] Validar dados, identificar duplicidades e importar fornecedores com pré-visualização
 - [x] Cobrir a importação de fornecedores com testes e validação visual
+- [x] Reestruturar a inclusão de itens de venda por bitola e largura compartilhadas
+- [x] Permitir lançar vários comprimentos e quantidades em uma única grelha de venda
+- [x] Preservar cálculo, resumo, validações e baixa de estoque dos itens individuais gerados
+- [x] Cobrir o lançamento agrupado de itens de venda com testes e validação visual
+- [x] Ajustar a grelha de comprimentos para manter todos os campos e ações acessíveis no celular

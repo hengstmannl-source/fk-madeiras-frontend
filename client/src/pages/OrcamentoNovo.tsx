@@ -12,16 +12,11 @@ import { Plus, Trash2, Save, Send, Loader2, ArrowLeft, Calculator, UserPlus, Che
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import {
-  calculatePrecoLinear,
-  calculateValorPeca,
-  calculateValorTotal,
   calculateVolume,
-  centimetersToMillimeters,
   formatCurrency,
-  formatDimensionCm,
   formatMeasurement,
-  parseDecimalInput,
 } from "@/lib/utils";
+import { criarItensVendaPorMedida, criarLinhasComprimentoVazias, type LinhaComprimentoVenda } from "@/lib/vendaItemGroup";
 import {
   Dialog,
   DialogContent,
@@ -65,6 +60,8 @@ export default function OrcamentoNovo() {
   const [dataVencimento, setDataVencimento] = useState(() => dataLocalParaInput());
   const [competencia, setCompetencia] = useState(() => dataLocalParaInput());
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
+  const [grupoItem, setGrupoItem] = useState({ madeiraNome: "", precoM3: "", espessuraCm: "", larguraCm: "" });
+  const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(() => criarLinhasComprimentoVazias());
 
   const clienteSelecionado = clientes.data?.find((cliente) => cliente.id === Number(clienteId));
 
@@ -90,57 +87,25 @@ export default function OrcamentoNovo() {
     return { subtotal, totalPecas, totalMetroLinear, totalVolume, total };
   }, [itens, desconto, frete]);
 
-  const addItem = () => {
-    const madeiraNome = (document.getElementById("madeira-input") as HTMLInputElement)?.value.trim();
-    const precoM3Input = (document.getElementById("preco-m3-input") as HTMLInputElement)?.value;
-    const espValue = (document.getElementById("esp-input") as HTMLInputElement)?.value;
-    const largValue = (document.getElementById("larg-input") as HTMLInputElement)?.value;
-    const compValue = (document.getElementById("comp-input") as HTMLInputElement)?.value;
-    const qtdValue = (document.getElementById("qtd-input") as HTMLInputElement)?.value;
+  const atualizarLinhaComprimento = (id: number, campo: "comprimento" | "quantidade", valor: string) => {
+    setLinhasComprimento((linhas) => linhas.map((linha) => linha.id === id ? { ...linha, [campo]: valor } : linha));
+  };
 
-    if (!madeiraNome) { toast.error("Informe o nome da madeira"); return; }
-    const precoM3 = parseDecimalInput(precoM3Input);
-    if (!Number.isFinite(precoM3) || precoM3 <= 0) { toast.error("Informe um preço por m³ válido"); return; }
-    if (!espValue || !largValue) { toast.error("Preencha espessura e largura"); return; }
-    const espCm = parseDecimalInput(espValue);
-    const largCm = parseDecimalInput(largValue);
-    const comp = parseDecimalInput(compValue) || 3;
-    const qtd = parseInt(qtdValue) || 1;
-    if (!Number.isFinite(espCm) || espCm <= 0 || !Number.isFinite(largCm) || largCm <= 0) {
-      toast.error("Introduza dimensões válidas em centímetros");
-      return;
-    }
-    if (!Number.isFinite(comp) || comp <= 0 || !Number.isInteger(qtd) || qtd <= 0) {
-      toast.error("Introduza comprimento e quantidade válidos");
-      return;
-    }
+  const adicionarLinhaComprimento = () => {
+    setLinhasComprimento((linhas) => [...linhas, { id: Math.max(0, ...linhas.map((linha) => linha.id)) + 1, comprimento: "", quantidade: "" }]);
+  };
 
-    // A venda conserva milímetros; a integração de entrega converte para centímetros ao consultar o estoque.
-    const esp = centimetersToMillimeters(espCm);
-    const larg = centimetersToMillimeters(largCm);
-    const precoLinear = calculatePrecoLinear(esp, larg, precoM3);
-    const valorPeca = calculateValorPeca(precoLinear, comp);
-    const valorTotal = calculateValorTotal(valorPeca, qtd);
+  const removerLinhaComprimento = (id: number) => {
+    setLinhasComprimento((linhas) => linhas.length === 1 ? linhas : linhas.filter((linha) => linha.id !== id));
+  };
 
-    setItens([...itens, {
-      madeiraId: null,
-      bitolaId: null,
-      madeiraNome,
-      bitolaDescricao: `${formatDimensionCm(esp)}×${formatDimensionCm(larg)} cm`,
-      espessura: String(esp),
-      largura: String(larg),
-      comprimento: String(comp),
-      quantidade: qtd,
-      precoM3: String(precoM3),
-      precoLinear: String(parseFloat(precoLinear.toFixed(4))),
-      valorPeca: String(parseFloat(valorPeca.toFixed(2))),
-      valorTotal: String(parseFloat(valorTotal.toFixed(2))),
-    }]);
-    ["madeira-input", "preco-m3-input", "esp-input", "larg-input", "comp-input", "qtd-input"].forEach((id) => {
-      const input = document.getElementById(id) as HTMLInputElement | null;
-      if (input) input.value = "";
-    });
-    toast.success("Item adicionado");
+  const adicionarGrupoItens = () => {
+    const resultado = criarItensVendaPorMedida({ ...grupoItem, linhas: linhasComprimento });
+    if (resultado.erro) { toast.error(resultado.erro); return; }
+    setItens((itensAtuais) => [...itensAtuais, ...resultado.itens]);
+    setGrupoItem((grupo) => ({ ...grupo, espessuraCm: "", larguraCm: "" }));
+    setLinhasComprimento(criarLinhasComprimentoVazias());
+    toast.success(`${resultado.itens.length} comprimento(s) adicionado(s) à venda`);
   };
 
   const removeItem = (index: number) => setItens(itens.filter((_, i) => i !== index));
@@ -292,44 +257,38 @@ export default function OrcamentoNovo() {
             </CardContent>
           </Card>
 
-          {/* Adicionar Item */}
+          {/* Adicionar itens por medida */}
           <Card className="border border-border/50 shadow-sm">
             <CardContent className="p-5">
-              <h3 className="font-semibold text-sm mb-4 flex items-center gap-2"><Calculator className="h-4 w-4" />Adicionar Item</h3>
+              <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-sm flex items-center gap-2"><Calculator className="h-4 w-4" />Romaneio de itens</h3><p className="mt-1 text-xs text-muted-foreground">Defina a medida uma vez e preencha todos os comprimentos e quantidades abaixo.</p></div><span className="text-xs font-medium text-primary">Medida em centímetros</span></div>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2 space-y-2">
                     <Label>Madeira *</Label>
-                    <Input id="madeira-input" placeholder="Ex.: Guarandi" className="bg-white" />
+                    <Input value={grupoItem.madeiraNome} onChange={(e) => setGrupoItem({ ...grupoItem, madeiraNome: e.target.value })} placeholder="Ex.: Guarandi" className="bg-white" />
                   </div>
                   <div className="space-y-2">
                     <Label>Preço por m³ (R$) *</Label>
-                    <Input id="preco-m3-input" type="text" inputMode="decimal" placeholder="2400,00" className="bg-white" />
+                    <Input value={grupoItem.precoM3} onChange={(e) => setGrupoItem({ ...grupoItem, precoM3: e.target.value })} type="text" inputMode="decimal" placeholder="2400,00" className="bg-white" />
                   </div>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Dimensões (preencha livremente)</Label>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-primary/15 bg-primary/[0.03] p-3">
                   <div className="space-y-2">
-                    <Label>Espessura (cm) *</Label>
-                    <Input id="esp-input" type="text" inputMode="decimal" placeholder="2,5" className="bg-white" />
+                    <Label>Bitola / espessura (cm) *</Label>
+                    <Input value={grupoItem.espessuraCm} onChange={(e) => setGrupoItem({ ...grupoItem, espessuraCm: e.target.value })} type="text" inputMode="decimal" placeholder="2" className="bg-white" />
                   </div>
                   <div className="space-y-2">
                     <Label>Largura (cm) *</Label>
-                    <Input id="larg-input" type="text" inputMode="decimal" placeholder="15" className="bg-white" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Comprimento (m)</Label>
-                    <Input id="comp-input" type="text" inputMode="decimal" placeholder="3" className="bg-white" />
+                    <Input value={grupoItem.larguraCm} onChange={(e) => setGrupoItem({ ...grupoItem, larguraCm: e.target.value })} type="text" inputMode="decimal" placeholder="5" className="bg-white" />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Quantidade *</Label>
-                  <Input id="qtd-input" type="number" placeholder="1" min="1" className="bg-white" />
+                <div className="overflow-hidden rounded-lg border border-border/70">
+                  <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2"><div><p className="text-sm font-medium">Comprimentos do romaneio</p><p className="text-xs text-muted-foreground">Preencha cada comprimento e a quantidade de peças correspondente.</p></div><span className="text-xs text-muted-foreground">m / peças</span></div>
+                  <div className="venda-comprimentos"><table className="w-full table-fixed text-sm"><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th className="w-[45%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[42%] px-3 py-2 text-left font-medium">Quantidade</th><th className="w-[13%] px-2 py-2 text-right font-medium">Ação</th></tr></thead><tbody>{linhasComprimento.map((linha, indice) => <tr key={linha.id} className="border-t border-border/50"><td className="p-2"><Input aria-label={`Comprimento da linha ${indice + 1}`} value={linha.comprimento} onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)} inputMode="decimal" placeholder="Ex.: 3,00" className="h-9 bg-white" /></td><td className="p-2"><Input aria-label={`Quantidade da linha ${indice + 1}`} value={linha.quantidade} onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)} type="number" min="1" placeholder="Ex.: 20" className="h-9 bg-white" /></td><td className="p-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Remover comprimento ${indice + 1}`} disabled={linhasComprimento.length === 1} onClick={() => removerLinhaComprimento(linha.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>)}</tbody></table></div>
+                  <div className="border-t bg-muted/10 px-3 py-2"><Button type="button" size="sm" variant="outline" onClick={adicionarLinhaComprimento}><Plus className="mr-1.5 h-3.5 w-3.5" />Adicionar comprimento</Button></div>
                 </div>
-                <Button onClick={addItem} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <Plus className="h-4 w-4 mr-2" />Adicionar Item
+                <Button onClick={adicionarGrupoItens} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                  <Plus className="h-4 w-4 mr-2" />Adicionar comprimentos à venda
                 </Button>
               </div>
             </CardContent>
