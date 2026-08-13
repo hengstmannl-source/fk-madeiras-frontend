@@ -267,3 +267,8 @@
 - [x] Transformar Madeira em lista pesquisável, padronizada e com ação Criar novo
 - [x] Permitir guardar, selecionar e excluir modelos reutilizáveis de medidas frequentes
 - [x] Cobrir disponibilidade, modelos e cadastro de madeira com testes e validação visual
+- [x] Corrigir a conversão e a exibição dos valores nos cartões do Dashboard financeiro
+- [x] Fazer próximos compromissos exibirem o saldo financeiro real de cada título
+- [x] Criar testes de consistência entre Dashboard e alertas financeiros
+- [x] Calcular títulos em atraso também pela data de vencimento quando o estado ainda não foi atualizado
+- [x] Ocultar e resolver alertas que não correspondem mais a títulos financeiros pendentes

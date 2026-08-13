@@ -10,6 +10,7 @@ import {
   podeEstornarBaixa,
   proximoVencimento,
   saldoAbertoTitulo,
+  tipoAlertaAtualDoTitulo,
 } from "./financeiro.logic";
 
 describe("regras financeiras", () => {
@@ -115,6 +116,26 @@ describe("regras financeiras", () => {
     expect(classificarAlertaVencimento({ estado: "aberto", dataVencimento: new Date(2026, 7, 16), diasAntecedencia: 7, agora: hoje })).toBe("vence_em_breve");
     expect(classificarAlertaVencimento({ estado: "aberto", dataVencimento: new Date(2026, 7, 20), diasAntecedencia: 7, agora: hoje })).toBeNull();
     expect(classificarAlertaVencimento({ estado: "quitado", dataVencimento: new Date(2026, 7, 11), diasAntecedencia: 7, agora: hoje })).toBeNull();
+  });
+
+  it("não mantém alerta vencido após reagendamento para uma data fora da antecedência", () => {
+    const hoje = new Date(2026, 7, 13, 12);
+    expect(tipoAlertaAtualDoTitulo({
+      valorOriginal: "750.00",
+      valorBaixado: "0",
+      dataVencimento: new Date(2026, 6, 28, 12),
+      estadoPersistido: "aberto",
+      diasAntecedencia: 7,
+      agora: hoje,
+    })).toBe("vencido");
+    expect(tipoAlertaAtualDoTitulo({
+      valorOriginal: "750.00",
+      valorBaixado: "0",
+      dataVencimento: new Date(2026, 8, 1, 12),
+      estadoPersistido: "aberto",
+      diasAntecedencia: 7,
+      agora: hoje,
+    })).toBeNull();
   });
 
   it("planeja alertas idempotentes e resolve alertas que deixaram de valer", () => {

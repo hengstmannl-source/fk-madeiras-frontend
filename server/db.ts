@@ -12,7 +12,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
@@ -1114,7 +1114,10 @@ export async function configurarProcessamentoFinanceiro(taskUid: string) {
 export async function listAlertasFinanceiros() {
   const db = await getDb();
   if (!db) return [];
-  return db.select({
+  const agora = new Date();
+  const configuracao = (await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.id, 1)).limit(1))[0];
+  const diasAntecedencia = configuracao?.alertaDiasAntecedencia ?? 7;
+  const alertasAtivos = await db.select({
     id: alertasFinanceiros.id,
     tituloId: alertasFinanceiros.tituloId,
     tipo: alertasFinanceiros.tipo,
@@ -1122,12 +1125,40 @@ export async function listAlertasFinanceiros() {
     criadoEm: alertasFinanceiros.criadoEm,
     descricao: titulosFinanceiros.descricao,
     valorOriginal: titulosFinanceiros.valorOriginal,
+    desconto: titulosFinanceiros.desconto,
+    juros: titulosFinanceiros.juros,
+    valorBaixado: titulosFinanceiros.valorBaixado,
     dataVencimento: titulosFinanceiros.dataVencimento,
+    estadoTitulo: titulosFinanceiros.estado,
     tipoTitulo: titulosFinanceiros.tipo,
   }).from(alertasFinanceiros)
     .innerJoin(titulosFinanceiros, eq(alertasFinanceiros.tituloId, titulosFinanceiros.id))
     .where(eq(alertasFinanceiros.estado, "ativo"))
     .orderBy(desc(alertasFinanceiros.createdAt));
+
+  const alertasAtuais = [] as typeof alertasAtivos;
+  for (const alerta of alertasAtivos) {
+    const tipoAtual = tipoAlertaAtualDoTitulo({
+      valorOriginal: alerta.valorOriginal,
+      desconto: alerta.desconto,
+      juros: alerta.juros,
+      valorBaixado: alerta.valorBaixado,
+      dataVencimento: alerta.dataVencimento,
+      estadoPersistido: alerta.estadoTitulo,
+      diasAntecedencia,
+      agora,
+    });
+
+    if (tipoAtual === alerta.tipo) {
+      alertasAtuais.push(alerta);
+      continue;
+    }
+
+    await db.update(alertasFinanceiros)
+      .set({ estado: "resolvido", resolvidoEm: agora })
+      .where(and(eq(alertasFinanceiros.id, alerta.id), eq(alertasFinanceiros.estado, "ativo")));
+  }
+  return alertasAtuais;
 }
 
 export async function processarAlertasFinanceiros(agora = new Date(), database?: any) {
@@ -1152,7 +1183,16 @@ export async function processarAlertasFinanceiros(agora = new Date(), database?:
     if (estado !== titulo.estado) {
       await db.update(titulosFinanceiros).set({ estado }).where(eq(titulosFinanceiros.id, titulo.id));
     }
-    const tipoAtual = classificarAlertaVencimento({ estado, dataVencimento: titulo.dataVencimento, diasAntecedencia, agora });
+    const tipoAtual = tipoAlertaAtualDoTitulo({
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      valorBaixado: titulo.valorBaixado,
+      dataVencimento: titulo.dataVencimento,
+      estadoPersistido: titulo.estado,
+      diasAntecedencia,
+      agora,
+    });
     const ativos = await db.select().from(alertasFinanceiros).where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.estado, "ativo")));
     const plano = planejarAtualizacaoAlertas(tipoAtual, ativos.map((alerta: { tipo: "vence_em_breve" | "vencido" }) => alerta.tipo));
 

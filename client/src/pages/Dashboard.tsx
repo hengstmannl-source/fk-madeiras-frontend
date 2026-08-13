@@ -8,20 +8,14 @@ import { formatCurrency } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { useMemo } from "react";
+import { saldoAbertoDashboard, resumirDashboardFinanceiro } from "@/lib/dashboardFinanceiro";
 
 export default function Dashboard() {
   const [, setLocation] = useLocation();
   const titulos = trpc.financeiro.titulos.list.useQuery();
   const alertas = trpc.financeiro.alertas.list.useQuery();
   const isLoading = titulos.isLoading || alertas.isLoading;
-  const resumo = useMemo(() => (titulos.data ?? []).reduce((acumulado, titulo: any) => {
-    if (["quitado", "cancelado"].includes(titulo.estado)) return acumulado;
-    const saldo = Number(titulo.valor) - Number(titulo.valorBaixado || 0);
-    if (titulo.tipo === "receber") { acumulado.receber += saldo; acumulado.quantidadeReceber += 1; }
-    if (titulo.tipo === "pagar") { acumulado.pagar += saldo; acumulado.quantidadePagar += 1; }
-    if (titulo.estado === "vencido") acumulado.vencido += saldo;
-    return acumulado;
-  }, { receber: 0, pagar: 0, vencido: 0, quantidadeReceber: 0, quantidadePagar: 0 }), [titulos.data]);
+  const resumo = useMemo(() => resumirDashboardFinanceiro(titulos.data ?? []), [titulos.data]);
 
   if (isLoading) {
     return (
@@ -101,7 +95,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-3">
                     <Badge variant="outline" className={`text-xs ${titulo.tipo === "receber" ? "border-emerald-200 text-emerald-700" : "border-rose-200 text-rose-700"}`}>{titulo.tipo === "receber" ? "Receber" : "Pagar"}</Badge>
-                    <span className="text-sm font-semibold text-foreground">{formatCurrency(Number(titulo.valor) - Number(titulo.valorBaixado || 0))}</span>
+                    <span className="text-sm font-semibold text-foreground">{formatCurrency(saldoAbertoDashboard(titulo))}</span>
                   </div>
                 </div>
               ))}

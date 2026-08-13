@@ -58,8 +58,12 @@ describe("processarAlertasFinanceiros", () => {
     await expect(processarAlertasFinanceiros(agora, banco)).resolves.toMatchObject({ alertasCriados: 1, alertasResolvidos: 1 });
     expect(alertas.filter((alerta) => alerta.estado === "ativo")).toMatchObject([{ tipo: "vencido" }]);
 
-    titulo.valorBaixado = "100.00";
+    titulo.dataVencimento = new Date(2026, 8, 1, 12);
     await expect(processarAlertasFinanceiros(agora, banco)).resolves.toMatchObject({ alertasCriados: 0, alertasResolvidos: 1 });
+    expect(alertas.every((alerta) => alerta.estado === "resolvido")).toBe(true);
+
+    titulo.valorBaixado = "100.00";
+    await expect(processarAlertasFinanceiros(agora, banco)).resolves.toMatchObject({ alertasCriados: 0, alertasResolvidos: 0 });
     expect(alertas.every((alerta) => alerta.estado === "resolvido")).toBe(true);
   });
 

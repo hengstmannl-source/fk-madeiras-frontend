@@ -272,6 +272,38 @@ export function classificarAlertaVencimento(input: {
   return diasRestantes >= 0 && diasRestantes <= input.diasAntecedencia ? "vence_em_breve" : null;
 }
 
+/**
+ * Recalcula o alerta aplicável a partir dos dados atuais do título. Assim, um
+ * alerta persistido antes de um reagendamento não continua visível como se o
+ * vencimento antigo ainda estivesse vigente.
+ */
+export function tipoAlertaAtualDoTitulo(input: {
+  valorOriginal: string | number;
+  desconto?: string | number | null;
+  juros?: string | number | null;
+  valorBaixado?: string | number | null;
+  dataVencimento: Date;
+  estadoPersistido?: EstadoTituloFinanceiro | null;
+  diasAntecedencia: number;
+  agora?: Date;
+}): TipoAlertaFinanceiro | null {
+  const estado = calcularEstadoTitulo({
+    valorOriginal: input.valorOriginal,
+    desconto: input.desconto ?? 0,
+    juros: input.juros ?? 0,
+    valorBaixado: input.valorBaixado ?? 0,
+    dataVencimento: input.dataVencimento,
+    cancelado: input.estadoPersistido === "cancelado",
+    agora: input.agora,
+  });
+  return classificarAlertaVencimento({
+    estado,
+    dataVencimento: input.dataVencimento,
+    diasAntecedencia: input.diasAntecedencia,
+    agora: input.agora,
+  });
+}
+
 export function planejarAtualizacaoAlertas(tipoAtual: TipoAlertaFinanceiro | null, alertasAtivos: TipoAlertaFinanceiro[]) {
   return {
     criar: tipoAtual !== null && !alertasAtivos.includes(tipoAtual) ? tipoAtual : null,
