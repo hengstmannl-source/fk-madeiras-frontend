@@ -8,7 +8,7 @@ describe("navegação principal", () => {
   });
 
   it("organiza financeiro e vendas com as opções prioritárias", () => {
-    expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber", "Contas pagas", "Contas recebidas"]);
+    expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber", "Contas pagas", "Contas recebidas", "Conciliação bancária"]);
     expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados"]);
     expect(dashboardNavigation.producao.map((item) => item.label)).toEqual(["Produção", "Estoque", "Inventário"]);
     expect(dashboardNavigation.producao.every((item) => !item.disabled)).toBe(true);

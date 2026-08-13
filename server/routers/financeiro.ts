@@ -8,6 +8,8 @@ export const FormaPagamentoFinanceiraSchema = z.enum([
   "pix", "dinheiro", "cartao_credito", "cartao_debito", "transferencia", "boleto", "outro",
 ]);
 export const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
+const FormatoExtratoBancarioSchema = z.enum(["csv", "ofx"]);
+const EstadoMovimentoBancarioSchema = z.enum(["pendente", "conciliado", "ignorado", "divergente"]);
 
 function dataLocal(data: string): Date {
   const [ano, mes, dia] = data.split("-").map(Number);
@@ -156,6 +158,41 @@ export const financeiroRouter = router({
     importarLancamentosCsv: protectedProcedure.input(z.object({
       conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
     })).mutation(({ ctx, input }) => db.importarLancamentosFinanceirosCsv(input.conteudo, ctx.user.id)),
+  }),
+
+  conciliacao: router({
+    modeloCsv: protectedProcedure.query(() => db.getModeloImportacaoExtratoBancarioCsv()),
+    prepararImportacao: protectedProcedure.input(z.object({
+      conteudo: z.string().min(1, "Selecione um extrato").max(1_000_000, "O arquivo excede o limite de 1 MB"),
+      formato: FormatoExtratoBancarioSchema,
+    })).mutation(({ input }) => db.prepararImportacaoExtratoBancario(input.conteudo, input.formato)),
+    importar: protectedProcedure.input(z.object({
+      contaFinanceiraId: z.number().int().positive(),
+      nomeArquivo: z.string().trim().min(1).max(300),
+      formato: FormatoExtratoBancarioSchema,
+      conteudo: z.string().min(1, "Selecione um extrato").max(1_000_000, "O arquivo excede o limite de 1 MB"),
+    })).mutation(({ ctx, input }) => db.importarExtratoBancario(input, ctx.user.id)),
+    list: protectedProcedure.input(z.object({
+      contaFinanceiraId: z.number().int().positive().optional(),
+      estado: EstadoMovimentoBancarioSchema.optional(),
+    }).optional()).query(({ input }) => db.listConciliacaoBancaria(input)),
+    confirmar: protectedProcedure.input(z.object({
+      movimentoId: z.number().int().positive(),
+      baixaFinanceiraId: z.number().int().positive(),
+    })).mutation(({ ctx, input }) => db.confirmarConciliacaoBancaria(input, ctx.user.id)),
+    desfazer: protectedProcedure.input(z.object({ movimentoId: z.number().int().positive() }))
+      .mutation(({ input }) => db.desfazerConciliacaoBancaria(input.movimentoId)),
+    criarLancamento: protectedProcedure.input(z.object({
+      movimentoId: z.number().int().positive(),
+      categoriaId: z.number().int().positive(),
+      descricao: z.string().trim().min(2).max(300),
+      observacoes: z.string().trim().max(4000).nullable().optional(),
+    })).mutation(({ ctx, input }) => db.criarLancamentoDaConciliacao(input, ctx.user.id)),
+    definirEstado: protectedProcedure.input(z.object({
+      movimentoId: z.number().int().positive(),
+      estado: z.enum(["ignorado", "divergente"]),
+      observacoes: z.string().trim().max(4000).nullable().optional(),
+    })).mutation(({ input }) => db.definirEstadoMovimentoBancario(input)),
   }),
 
   titulos: router({

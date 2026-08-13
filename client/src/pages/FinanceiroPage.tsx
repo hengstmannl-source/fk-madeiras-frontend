@@ -25,8 +25,9 @@ const primeiroDiaDoMes = () => {
   return data.toISOString().slice(0, 10);
 };
 
-export function abaFinanceiraDaUrl(search: string): "fluxo" | "lancamentos" {
-  return new URLSearchParams(search).get("aba") === "fluxo" ? "fluxo" : "lancamentos";
+export function abaFinanceiraDaUrl(search: string): "fluxo" | "lancamentos" | "recorrencias" | "fornecedores" | "categorias" | "contas" {
+  const aba = new URLSearchParams(search).get("aba");
+  return ["fluxo", "recorrencias", "fornecedores", "categorias", "contas"].includes(aba ?? "") ? aba as "fluxo" | "recorrencias" | "fornecedores" | "categorias" | "contas" : "lancamentos";
 }
 const valorInicialLancamento = () => ({
   tipo: "receber" as "receber" | "pagar",

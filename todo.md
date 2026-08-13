@@ -272,3 +272,9 @@
 - [x] Criar testes de consistência entre Dashboard e alertas financeiros
 - [x] Calcular títulos em atraso também pela data de vencimento quando o estado ainda não foi atualizado
 - [x] Ocultar e resolver alertas que não correspondem mais a títulos financeiros pendentes
+- [x] Modelar extratos bancários, suas linhas e os vínculos auditáveis de conciliação por conta financeira
+- [x] Importar e validar extratos bancários em CSV e OFX, com prevenção de linhas duplicadas
+- [x] Sugerir títulos financeiros compatíveis por tipo, valor, data e descrição do extrato
+- [x] Permitir confirmar, desfazer e sinalizar divergências de conciliação sem duplicar baixas
+- [x] Criar a tela de Conciliação Bancária com filtros, totais, pré-visualização e navegação financeira
+- [x] Cobrir regras de importação e conciliação com testes, validar a interface e publicar o módulo

@@ -14,6 +14,7 @@ import OrcamentoEdit from "./pages/OrcamentoEdit";
 import EmpresaPage from "./pages/EmpresaPage";
 import OrcamentosAprovadosPage from "./pages/OrcamentosAprovadosPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
+import ConciliacaoBancariaPage from "./pages/ConciliacaoBancariaPage";
 import ProducaoPage from "./pages/ProducaoPage";
 import EstoquePage from "./pages/EstoquePage";
 import InventarioPage from "./pages/InventarioPage";
@@ -32,6 +33,7 @@ function Router() {
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />
         <Route path="/orcamentos/:id" component={OrcamentoEdit} />
         <Route path="/financeiro" component={FinanceiroPage} />
+        <Route path="/conciliacao-bancaria" component={ConciliacaoBancariaPage} />
         <Route path="/producao" component={ProducaoPage} />
         <Route path="/estoque" component={EstoquePage} />
         <Route path="/inventario" component={InventarioPage} />

@@ -458,6 +458,43 @@ export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
 export type BaixaFinanceira = typeof baixasFinanceiras.$inferSelect;
 export type InsertBaixaFinanceira = typeof baixasFinanceiras.$inferInsert;
 
+export const extratosBancarios = mysqlTable("extratosBancarios", {
+  id: int("id").autoincrement().primaryKey(),
+  contaFinanceiraId: int("contaFinanceiraId").notNull(),
+  nomeArquivo: varchar("nomeArquivo", { length: 300 }).notNull(),
+  formato: mysqlEnum("formato", ["csv", "ofx"]).notNull(),
+  periodoInicial: timestamp("periodoInicial"),
+  periodoFinal: timestamp("periodoFinal"),
+  totalLinhas: int("totalLinhas").notNull().default(0),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ExtratoBancario = typeof extratosBancarios.$inferSelect;
+export type InsertExtratoBancario = typeof extratosBancarios.$inferInsert;
+
+export const movimentosExtratoBancario = mysqlTable("movimentosExtratoBancario", {
+  id: int("id").autoincrement().primaryKey(),
+  extratoId: int("extratoId").notNull(),
+  contaFinanceiraId: int("contaFinanceiraId").notNull(),
+  dataMovimento: timestamp("dataMovimento").notNull(),
+  descricao: varchar("descricao", { length: 500 }).notNull(),
+  tipo: mysqlEnum("tipo", ["entrada", "saida"]).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  identificadorExterno: varchar("identificadorExterno", { length: 300 }),
+  chaveUnica: varchar("chaveUnica", { length: 180 }).notNull().unique(),
+  estado: mysqlEnum("estado", ["pendente", "conciliado", "ignorado", "divergente"]).notNull().default("pendente"),
+  baixaFinanceiraId: int("baixaFinanceiraId").unique(),
+  conciliadoEm: timestamp("conciliadoEm"),
+  conciliadoPor: int("conciliadoPor"),
+  observacoes: text("observacoes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type MovimentoExtratoBancario = typeof movimentosExtratoBancario.$inferSelect;
+export type InsertMovimentoExtratoBancario = typeof movimentosExtratoBancario.$inferInsert;
+
 export const recorrenciasFinanceiras = mysqlTable("recorrenciasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
