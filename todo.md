@@ -240,3 +240,9 @@
 - [x] Adicionar filtros financeiros por descrição, faixa de valor e período de vencimento ou recebimento
 - [x] Destacar títulos a pagar ou receber no dia da consulta
 - [x] Cobrir a reorganização financeira com testes e validação visual
+- [x] Criar painel de previsão semanal de fluxo de caixa com entradas, saídas e saldo acumulado
+- [x] Exportar em PDF a lista financeira filtrada, incluindo filtros, totais e títulos exibidos
+- [x] Cobrir a previsão semanal e a exportação PDF com testes e validação visual
+- [x] Implementar cálculo e consulta da previsão semanal de fluxo de caixa com títulos em aberto
+- [x] Exibir painel semanal de entradas, saídas, resultado e saldo projetado no Fluxo de Caixa
+- [x] Exportar em PDF as listas financeiras visíveis, respeitando filtros e totais

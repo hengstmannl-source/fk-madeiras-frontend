@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
   estornar: vi.fn(),
   importar: vi.fn(),
   invalidar: vi.fn(),
+  exportarPdf: vi.fn().mockResolvedValue(undefined),
   fluxo: {
     saldoAbertura: 100,
     entradas: 50,
@@ -23,10 +24,12 @@ const state = vi.hoisted(() => ({
     dias: [{ data: "2026-08-11", entradas: 50, saidas: 20, saldoLiquido: 30, saldoAcumulado: 130 }],
     movimentos: [{ id: 1, tipo: "receber", descricao: "Recebimento demonstrativo", valor: "50.00", dataBaixa: "2026-08-11T12:00:00.000Z", formaPagamento: "pix", contaNome: "Caixa geral" }],
   },
+  previsao: [{ inicioSemana: "2026-08-10", fimSemana: "2026-08-16", entradas: 300, saidas: 120, saldoLiquido: 180, saldoProjetado: -20, quantidadeTitulos: 2 }],
 }));
 
 vi.mock("wouter", () => ({ useSearch: () => state.search }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("@/lib/financeiroPdf", () => ({ exportarListaFinanceiraPdf: state.exportarPdf }));
 
 vi.mock("@/lib/trpc", () => {
   const mutationInerte = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
@@ -43,7 +46,7 @@ vi.mock("@/lib/trpc", () => {
           contas: { list: invalidar },
           recorrencias: { list: invalidar },
           alertas: { list: invalidar },
-          relatorios: { fluxoCaixa: invalidar },
+          relatorios: { fluxoCaixa: invalidar, previsaoSemanal: invalidar },
           intercambios: { modeloLancamentosCsv: invalidar, exportarLancamentosCsv: invalidar },
         },
       }),
@@ -93,7 +96,10 @@ vi.mock("@/lib/trpc", () => {
         contas: { list: queryVazia, create: mutationInerte },
         recorrencias: { list: queryVazia, create: mutationInerte },
         alertas: { list: queryVazia },
-        relatorios: { fluxoCaixa: { useQuery: () => ({ data: state.fluxo, isLoading: false, isFetching: false, refetch: vi.fn() }) } },
+        relatorios: {
+          fluxoCaixa: { useQuery: () => ({ data: state.fluxo, isLoading: false, isFetching: false, refetch: vi.fn() }) },
+          previsaoSemanal: { useQuery: () => ({ data: state.previsao, isLoading: false }) },
+        },
         intercambios: {
           modeloLancamentosCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "referencia;tipo" }) }) },
           exportarLancamentosCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "referencia;tipo" }) }) },
@@ -114,6 +120,8 @@ describe("FinanceiroPage — cancelamento manual", () => {
     state.estornar.mockReset();
     state.importar.mockReset();
     state.invalidar.mockReset();
+    state.exportarPdf.mockReset();
+    state.exportarPdf.mockResolvedValue(undefined);
     state.baixas = [{
       id: 40,
       tituloId: 12,
@@ -207,6 +215,9 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(screen.getByLabelText("Data final do fluxo de caixa")).toHaveAttribute("type", "date");
     expect(screen.getByText("Saldo final")).toBeInTheDocument();
     expect(screen.getByText("Recebimento demonstrativo")).toBeInTheDocument();
+    expect(screen.getByText("Previsão semanal de caixa")).toBeInTheDocument();
+    expect(screen.getByText("Títulos projetados")).toBeInTheDocument();
+    expect(screen.getByText("Previsão semanal de caixa").closest("section")).toHaveTextContent(/-R\$\s*20,00/);
   });
 
   it("identifica a abertura direta do relatório pelo parâmetro de URL", () => {
@@ -293,9 +304,25 @@ describe("FinanceiroPage — cancelamento manual", () => {
 
     expect(screen.getAllByRole("button", { name: "Modelo CSV" }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("button", { name: "Exportar CSV" }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Exportar PDF" }).length).toBeGreaterThan(0);
     fireEvent.click(screen.getAllByRole("button", { name: "Importar CSV" }).at(-1)!);
     expect(screen.getByRole("heading", { name: "Importar lançamentos financeiros" })).toBeInTheDocument();
     expect(screen.getByText(/se houver alguma linha inválida/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Arquivo CSV para importação")).toHaveAttribute("accept", ".csv,text/csv");
+  });
+
+  it("exporta somente os títulos visíveis após aplicar os filtros", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    fireEvent.change(screen.getAllByLabelText("Descrição ou contraparte").at(-1)!, { target: { value: "carga de toras" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Exportar PDF" }).at(-1)!);
+
+    await waitFor(() => {
+      expect(state.exportarPdf).toHaveBeenCalledWith(expect.objectContaining({
+        titulo: "Contas a pagar",
+        titulos: [expect.objectContaining({ descricao: "Carga de toras RC-001" })],
+      }));
+    });
   });
 });

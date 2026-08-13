@@ -136,6 +136,9 @@ export const financeiroRouter = router({
       dataInicio: dataLocal(input.dataInicio),
       dataFim: fimDoDiaLocal(input.dataFim),
     })),
+    previsaoSemanal: protectedProcedure.input(z.object({
+      semanas: z.number().int().min(1).max(26).default(8),
+    }).default({ semanas: 8 })).query(({ input }) => db.getPrevisaoSemanalCaixa(input.semanas)),
   }),
 
   intercambios: router({

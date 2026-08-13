@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calcularEstadoTitulo,
+  calcularPrevisaoSemanal,
   calcularRelatorioFluxoCaixa,
   calcularParcelas,
   classificarAlertaVencimento,
@@ -75,6 +76,37 @@ describe("regras financeiras", () => {
       { data: "2026-08-02", entradas: 0, saidas: 0, saldoLiquido: 0, saldoAcumulado: 160 },
       { data: "2026-08-03", entradas: 0, saidas: 30, saldoLiquido: -30, saldoAcumulado: 130 },
     ]);
+  });
+
+  it("projeta o saldo por semana com títulos abertos, parciais e vencidos", () => {
+    const previsao = calcularPrevisaoSemanal({
+      saldoAtual: "100.00",
+      semanas: 2,
+      agora: new Date(2026, 7, 12, 12),
+      titulos: [
+        { tipo: "receber", valorOriginal: "200", valorBaixado: "0", dataVencimento: new Date(2026, 7, 13, 12), estado: "aberto" },
+        { tipo: "pagar", valorOriginal: "80", valorBaixado: "20", dataVencimento: new Date(2026, 7, 14, 12), estado: "parcial" },
+        { tipo: "pagar", valorOriginal: "50", valorBaixado: "0", dataVencimento: new Date(2026, 7, 1, 12), estado: "vencido" },
+        { tipo: "receber", valorOriginal: "300", valorBaixado: "0", dataVencimento: new Date(2026, 7, 18, 12), estado: "aberto" },
+        { tipo: "receber", valorOriginal: "999", valorBaixado: "0", dataVencimento: new Date(2026, 7, 14, 12), estado: "quitado" },
+      ],
+    });
+
+    expect(previsao).toHaveLength(2);
+    expect(previsao[0]).toMatchObject({
+      inicioSemana: "2026-08-10",
+      fimSemana: "2026-08-16",
+      entradas: 200,
+      saidas: 110,
+      saldoLiquido: 90,
+      saldoProjetado: 190,
+      quantidadeTitulos: 3,
+    });
+    expect(previsao[1]).toMatchObject({
+      entradas: 300,
+      saidas: 0,
+      saldoProjetado: 490,
+    });
   });
 
   it("classifica alertas de vencimento sem alertar títulos quitados", () => {

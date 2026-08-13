@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gte, lte, ne, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne, inArray, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -12,7 +12,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaVencimento, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
@@ -858,6 +858,45 @@ export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFi
   ]);
   const saldoInicialContas = contas.reduce((total, conta) => total + decimalParaNumero(conta.saldoInicial), 0);
   return calcularRelatorioFluxoCaixa({ ...periodo, saldoInicialContas, movimentos });
+}
+
+export async function getPrevisaoSemanalCaixa(semanas = 8) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const fimHoje = new Date(hoje);
+  fimHoje.setHours(23, 59, 59, 999);
+  const [contas, baixasRealizadas, titulos] = await Promise.all([
+    db.select({ saldoInicial: contasFinanceiras.saldoInicial }).from(contasFinanceiras),
+    db.select({
+      tipo: titulosFinanceiros.tipo,
+      valor: baixasFinanceiras.valor,
+      dataBaixa: baixasFinanceiras.dataBaixa,
+    }).from(baixasFinanceiras)
+      .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
+      .where(and(eq(baixasFinanceiras.estornada, false), lte(baixasFinanceiras.dataBaixa, fimHoje))),
+    db.select({
+      tipo: titulosFinanceiros.tipo,
+      valorOriginal: titulosFinanceiros.valorOriginal,
+      valorBaixado: titulosFinanceiros.valorBaixado,
+      desconto: titulosFinanceiros.desconto,
+      juros: titulosFinanceiros.juros,
+      dataVencimento: titulosFinanceiros.dataVencimento,
+      estado: titulosFinanceiros.estado,
+    }).from(titulosFinanceiros)
+      .where(inArray(titulosFinanceiros.estado, ["aberto", "parcial", "vencido"])),
+  ]);
+  const saldoDasContas = contas.reduce((total, conta) => total + decimalParaNumero(conta.saldoInicial), 0);
+  const saldoRealizado = baixasRealizadas.reduce((total, baixa) => (
+    total + (baixa.tipo === "receber" ? decimalParaNumero(baixa.valor) : -decimalParaNumero(baixa.valor))
+  ), 0);
+  return calcularPrevisaoSemanal({
+    saldoAtual: saldoDasContas + saldoRealizado,
+    titulos,
+    semanas,
+    agora: hoje,
+  });
 }
 
 export async function estornarBaixaFinanceira(

@@ -168,6 +168,90 @@ export function calcularRelatorioFluxoCaixa(input: {
   };
 }
 
+export type TituloPrevisaoSemanal = {
+  tipo: "receber" | "pagar";
+  valorOriginal: string | number;
+  valorBaixado: string | number;
+  desconto?: string | number | null;
+  juros?: string | number | null;
+  dataVencimento: Date;
+  estado: EstadoTituloFinanceiro;
+};
+
+function inicioDaSemana(data: Date): Date {
+  const inicio = inicioDoDia(data);
+  const deslocamento = (inicio.getDay() + 6) % 7;
+  inicio.setDate(inicio.getDate() - deslocamento);
+  return inicio;
+}
+
+/**
+ * Projeta o caixa a partir do saldo efetivamente realizado e dos títulos ainda em aberto.
+ * Títulos vencidos são concentrados na primeira semana exibida para evidenciar o impacto imediato.
+ */
+export function calcularPrevisaoSemanal(input: {
+  saldoAtual: string | number;
+  titulos: TituloPrevisaoSemanal[];
+  semanas?: number;
+  agora?: Date;
+}) {
+  const semanas = input.semanas ?? 8;
+  if (!Number.isInteger(semanas) || semanas < 1) {
+    throw new Error("Informe pelo menos uma semana para a previsão");
+  }
+
+  const hoje = inicioDoDia(input.agora ?? new Date());
+  const semanaAtual = inicioDaSemana(hoje);
+  const titulosPendentes = input.titulos.filter((titulo) => (
+    ["aberto", "parcial", "vencido"].includes(titulo.estado)
+  ));
+  let saldoProjetado = decimalParaNumero(input.saldoAtual);
+
+  return Array.from({ length: semanas }, (_, indice) => {
+    const inicio = new Date(semanaAtual);
+    inicio.setDate(inicio.getDate() + (indice * 7));
+    const fim = new Date(inicio);
+    fim.setDate(fim.getDate() + 6);
+    fim.setHours(23, 59, 59, 999);
+
+    const titulosDaSemana = titulosPendentes.filter((titulo) => {
+      const vencimento = inicioDoDia(new Date(titulo.dataVencimento));
+      if (vencimento > fim) return false;
+      return indice === 0 || vencimento >= inicio;
+    });
+
+    const entradas = titulosDaSemana
+      .filter((titulo) => titulo.tipo === "receber")
+      .reduce((total, titulo) => total + saldoAbertoTitulo(
+        titulo.valorOriginal,
+        titulo.desconto ?? 0,
+        titulo.juros ?? 0,
+        titulo.valorBaixado,
+      ), 0);
+    const saidas = titulosDaSemana
+      .filter((titulo) => titulo.tipo === "pagar")
+      .reduce((total, titulo) => total + saldoAbertoTitulo(
+        titulo.valorOriginal,
+        titulo.desconto ?? 0,
+        titulo.juros ?? 0,
+        titulo.valorBaixado,
+      ), 0);
+    const saldoLiquido = entradas - saidas;
+    saldoProjetado += saldoLiquido;
+
+    return {
+      semana: `Semana de ${chaveData(inicio)}`,
+      inicioSemana: chaveData(inicio),
+      fimSemana: chaveData(fim),
+      entradas,
+      saidas,
+      saldoLiquido,
+      saldoProjetado,
+      quantidadeTitulos: titulosDaSemana.length,
+    };
+  });
+}
+
 export function classificarAlertaVencimento(input: {
   estado: EstadoTituloFinanceiro;
   dataVencimento: Date;
