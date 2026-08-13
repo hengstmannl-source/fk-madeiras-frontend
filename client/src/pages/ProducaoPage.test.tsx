@@ -77,7 +77,8 @@ describe("ProducaoPage", () => {
 
     expect(await screen.findByDisplayValue("Ajuste de produção")).toBeInTheDocument();
     expect(screen.getByText(/Cedrinho · 3 × 5 cm · 2 m/)).toBeInTheDocument();
-    expect(screen.getByLabelText("Essência da bitola")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("");
   });
 
   it("permite preparar uma nova plaqueta digitada para entrada e consumo imediato", async () => {
@@ -118,7 +119,7 @@ describe("ProducaoPage", () => {
     expect(screen.getByLabelText("Planilha CSV de produção")).toBeInTheDocument();
   });
 
-  it("adiciona bitolas por uma ficha única e mantém a última medida para o próximo lançamento", async () => {
+  it("adiciona múltiplos comprimentos em uma grade e mantém a medida para o próximo lançamento", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 
@@ -127,20 +128,25 @@ describe("ProducaoPage", () => {
     await user.keyboard("{Enter}");
     await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
 
-    expect(screen.getByText(/Nenhuma bitola adicionada/i)).toBeInTheDocument();
-    expect(screen.getByLabelText("Essência da bitola")).toHaveValue("Cedrinho");
+    expect(screen.getByText(/Nenhum comprimento adicionado/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
 
-    await user.type(screen.getByLabelText("Espessura da bitola"), "3");
-    await user.type(screen.getByLabelText("Largura da bitola"), "5");
-    await user.type(screen.getByLabelText("Comprimento da bitola"), "2");
-    await user.type(screen.getByLabelText("Quantidade da bitola"), "11");
-    await user.click(screen.getByRole("button", { name: "Adicionar bitola" }));
+    await user.type(screen.getByLabelText("Espessura da medida"), "3");
+    await user.type(screen.getByLabelText("Largura da medida"), "5");
+    await user.type(screen.getByLabelText("Comprimento da linha 1"), "2");
+    await user.type(screen.getByLabelText("Quantidade da linha 1"), "11");
+    await user.type(screen.getByLabelText("Comprimento da linha 2"), "3");
+    await user.type(screen.getByLabelText("Quantidade da linha 2"), "7");
+    await user.click(screen.getByRole("button", { name: "Adicionar comprimentos ao romaneio" }));
 
     expect(screen.getByText(/Cedrinho · 3 × 5 cm · 2 m/)).toBeInTheDocument();
     expect(screen.getByText(/11 peças/i)).toBeInTheDocument();
-    expect(screen.getByLabelText("Essência da bitola")).toHaveValue("Cedrinho");
-    expect(screen.getByLabelText("Espessura da bitola")).toHaveValue("3");
-    expect(screen.getByLabelText("Largura da bitola")).toHaveValue("5");
+    expect(screen.getByText(/Cedrinho · 3 × 5 cm · 3 m/)).toBeInTheDocument();
+    expect(screen.getByText(/7 peças/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Espessura da medida")).toHaveValue("3");
+    expect(screen.getByLabelText("Largura da medida")).toHaveValue("5");
+    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("");
   });
 
   it("oferece a importação de peças serradas por planilha na etapa de bitolas", async () => {

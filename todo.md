@@ -296,3 +296,7 @@
 - [x] Adicionar cópia em um clique do código de barras ou linha digitável do boleto com confirmação visual
 - [x] Criar modal de pré-visualização segura para imagens e PDFs anexados aos lançamentos
 - [x] Cobrir cópia e pré-visualização com testes, validação visual e publicação
+- [x] Reformular o lançamento de madeira serrada na Produção Diária em grade por medida, com bitola e largura compartilhadas
+- [x] Permitir informar vários comprimentos e quantidades na mesma grade de produção serrada
+- [x] Preservar cálculos de volume, aproveitamento, importação e edição de romaneios com a nova grade
+- [x] Cobrir a grade de produção serrada com testes, validação visual responsiva e publicação
