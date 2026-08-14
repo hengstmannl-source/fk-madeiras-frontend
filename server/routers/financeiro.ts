@@ -154,8 +154,19 @@ export const financeiroRouter = router({
     resumo: protectedProcedure.query(({ ctx }) => db.getResumoCaixaCheque(ctx.empresaAtiva!.empresa.id)),
     list: protectedProcedure.input(z.object({
       contaFinanceiraId: z.number().int().positive().optional(),
-      estado: z.enum(["disponivel", "utilizado", "estornado"]).optional(),
+      estado: z.enum(["disponivel", "utilizado", "estornado", "depositado"]).optional(),
     }).optional()).query(({ ctx, input }) => db.listChequesFinanceiros(input, ctx.empresaAtiva!.empresa.id)),
+    depositar: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      contaDestinoId: z.number().int().positive(),
+      dataDeposito: DataFinanceiraSchema,
+    })).mutation(({ ctx, input }) => db.depositarChequeFinanceiro({
+      ...input,
+      dataDeposito: dataLocal(input.dataDeposito),
+    }, ctx.empresaAtiva!.empresa.id)),
+    historicoDepositos: protectedProcedure.input(z.object({
+      contaFinanceiraId: z.number().int().positive().optional(),
+    }).optional()).query(({ ctx, input }) => db.listHistoricoDepositosPorConta(input?.contaFinanceiraId, ctx.empresaAtiva!.empresa.id)),
   }),
 
   alertas: router({

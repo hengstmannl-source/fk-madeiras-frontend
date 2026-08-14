@@ -600,7 +600,9 @@ export const chequesFinanceiros = mysqlTable("chequesFinanceiros", {
   dataRecebimento: timestamp("dataRecebimento").notNull(),
   dataCompensacao: timestamp("dataCompensacao"),
   utilizadoEm: timestamp("utilizadoEm"),
-  estado: mysqlEnum("estado", ["disponivel", "utilizado", "estornado"]).notNull().default("disponivel"),
+  depositadoEm: timestamp("depositadoEm"),
+  contaDestinoId: int("contaDestinoId"),
+  estado: mysqlEnum("estado", ["disponivel", "utilizado", "estornado", "depositado"]).notNull().default("disponivel"),
   estornadoEm: timestamp("estornadoEm"),
   motivoEstorno: text("motivoEstorno"),
   criadoPor: int("criadoPor").notNull(),
@@ -613,6 +615,7 @@ export const chequesFinanceiros = mysqlTable("chequesFinanceiros", {
   clienteIndice: index("cheques_financeiros_cliente_indice").on(table.empresaId, table.clienteId),
   entradaIndice: index("cheques_financeiros_entrada_indice").on(table.baixaEntradaId),
   saidaIndice: index("cheques_financeiros_saida_indice").on(table.baixaSaidaId),
+  destinoIndice: index("cheques_financeiros_destino_indice").on(table.empresaId, table.contaDestinoId, table.depositadoEm),
 }));
 
 export type ChequeFinanceiro = typeof chequesFinanceiros.$inferSelect;

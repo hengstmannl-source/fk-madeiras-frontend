@@ -104,14 +104,28 @@ export function validarValorDosCheques(valorBaixa: string | number, valoresChequ
 
 /** Um cheque só pode ser devolvido enquanto ainda estiver em carteira e sem conciliação bancária. */
 export function validarDevolucaoCheque(input: {
-  estado: "disponivel" | "utilizado" | "estornado";
+  estado: "disponivel" | "utilizado" | "estornado" | "depositado";
   baixaConciliada: boolean;
   motivo: string;
 }) {
   if (input.estado === "utilizado") throw new Error("Este cheque já foi utilizado em um pagamento e não pode ser devolvido");
   if (input.estado === "estornado") throw new Error("Este cheque já foi devolvido");
+  if (input.estado === "depositado") throw new Error("Este cheque já foi depositado em uma conta bancária e não pode ser devolvido");
   if (input.baixaConciliada) throw new Error("Desconcilie o recebimento bancário antes de registrar a devolução deste cheque");
   if (input.motivo.trim().length < 3) throw new Error("Informe o motivo da devolução do cheque");
+}
+
+/** Um cheque em carteira só pode ser depositado uma vez, exclusivamente em uma conta bancária ativa. */
+export function validarDepositoCheque(input: {
+  estado: "disponivel" | "utilizado" | "estornado" | "depositado";
+  contaDestinoTipo: "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro";
+  contaDestinoAtiva: boolean;
+}) {
+  if (input.estado === "depositado") throw new Error("Este cheque já foi depositado em uma conta bancária");
+  if (input.estado === "utilizado") throw new Error("Este cheque já foi utilizado em um pagamento e não pode ser depositado");
+  if (input.estado === "estornado") throw new Error("Este cheque foi devolvido e não pode ser depositado");
+  if (input.contaDestinoTipo !== "banco") throw new Error("Selecione uma conta bancária como destino do depósito");
+  if (!input.contaDestinoAtiva) throw new Error("A conta bancária de destino está inativa");
 }
 
 /** Impede alterações que comprometam uma baixa já conciliada ou o saldo realizado do título. */

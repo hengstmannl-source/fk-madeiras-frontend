@@ -12,6 +12,7 @@ import {
   proximoVencimento,
   saldoAbertoTitulo,
   tipoAlertaAtualDoTitulo,
+  validarDepositoCheque,
   validarEdicaoTituloFinanceiro,
   validarDevolucaoCheque,
   validarExclusaoTituloFinanceiro,
@@ -67,6 +68,15 @@ describe("regras financeiras", () => {
     expect(() => validarDevolucaoCheque({ estado: "estornado", baixaConciliada: false, motivo: "Devolvido" })).toThrow("já foi devolvido");
     expect(() => validarDevolucaoCheque({ estado: "disponivel", baixaConciliada: true, motivo: "Devolvido" })).toThrow("Desconcilie");
     expect(() => validarDevolucaoCheque({ estado: "disponivel", baixaConciliada: false, motivo: "x" })).toThrow("Informe o motivo");
+  });
+
+  it("permite depositar apenas cheque disponível em conta bancária ativa e bloqueia duplicidade", () => {
+    expect(() => validarDepositoCheque({ estado: "disponivel", contaDestinoTipo: "banco", contaDestinoAtiva: true })).not.toThrow();
+    expect(() => validarDepositoCheque({ estado: "depositado", contaDestinoTipo: "banco", contaDestinoAtiva: true })).toThrow("já foi depositado");
+    expect(() => validarDepositoCheque({ estado: "utilizado", contaDestinoTipo: "banco", contaDestinoAtiva: true })).toThrow("já foi utilizado");
+    expect(() => validarDepositoCheque({ estado: "estornado", contaDestinoTipo: "banco", contaDestinoAtiva: true })).toThrow("foi devolvido");
+    expect(() => validarDepositoCheque({ estado: "disponivel", contaDestinoTipo: "caixa", contaDestinoAtiva: true })).toThrow("conta bancária");
+    expect(() => validarDepositoCheque({ estado: "disponivel", contaDestinoTipo: "banco", contaDestinoAtiva: false })).toThrow("inativa");
   });
 
   it("permite editar lançamento não conciliado sem reduzir o valor já baixado", () => {
@@ -140,6 +150,23 @@ describe("regras financeiras", () => {
       { data: "2026-08-02", entradas: 0, saidas: 0, saldoLiquido: 0, saldoAcumulado: 160 },
       { data: "2026-08-03", entradas: 0, saidas: 30, saldoLiquido: -30, saldoAcumulado: 130 },
     ]);
+  });
+
+  it("mantém o fluxo de caixa neutro quando não há baixa para uma transferência interna de cheque", () => {
+    const relatorio = calcularRelatorioFluxoCaixa({
+      dataInicio: new Date(2026, 7, 1, 12),
+      dataFim: new Date(2026, 7, 1, 12),
+      saldoInicialContas: "100.00",
+      movimentos: [],
+    });
+
+    expect(relatorio).toMatchObject({
+      entradas: 0,
+      saidas: 0,
+      saldoLiquido: 0,
+      saldoFinal: 100,
+      quantidadeMovimentos: 0,
+    });
   });
 
   it("projeta o saldo por semana com títulos abertos, parciais e vencidos", () => {

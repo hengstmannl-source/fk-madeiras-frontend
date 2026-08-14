@@ -13,7 +13,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
@@ -848,14 +848,15 @@ export async function excluirContaFinanceira(id: number, empresaId = 1) {
   const conta = (await db.select({ id: contasFinanceiras.id }).from(contasFinanceiras)
     .where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId))).limit(1))[0];
   if (!conta) throw new Error("Conta financeira não encontrada");
-  const [baixa, cheque, extrato, movimentoExtrato, recorrencia] = await Promise.all([
+  const [baixa, cheque, chequeDestino, extrato, movimentoExtrato, recorrencia] = await Promise.all([
     db.select({ id: baixasFinanceiras.id }).from(baixasFinanceiras).where(and(eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.contaFinanceiraId, id))).limit(1),
     db.select({ id: chequesFinanceiros.id }).from(chequesFinanceiros).where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.contaFinanceiraId, id))).limit(1),
+    db.select({ id: chequesFinanceiros.id }).from(chequesFinanceiros).where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.contaDestinoId, id))).limit(1),
     db.select({ id: extratosBancarios.id }).from(extratosBancarios).where(and(eq(extratosBancarios.empresaId, empresaId), eq(extratosBancarios.contaFinanceiraId, id))).limit(1),
     db.select({ id: movimentosExtratoBancario.id }).from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.contaFinanceiraId, id))).limit(1),
     db.select({ id: recorrenciasFinanceiras.id }).from(recorrenciasFinanceiras).where(and(eq(recorrenciasFinanceiras.empresaId, empresaId), eq(recorrenciasFinanceiras.contaFinanceiraId, id))).limit(1),
   ]);
-  if (baixa.length || cheque.length || extrato.length || movimentoExtrato.length || recorrencia.length) {
+  if (baixa.length || cheque.length || chequeDestino.length || extrato.length || movimentoExtrato.length || recorrencia.length) {
     throw new Error("Esta conta não pode ser excluída porque possui movimentações, cheques, extratos ou recorrências vinculados");
   }
   await db.delete(contasFinanceiras).where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId)));
@@ -871,7 +872,7 @@ export async function listCaixasCheque(empresaId = 1) {
 }
 
 export async function listChequesFinanceiros(
-  filters: { contaFinanceiraId?: number; estado?: "disponivel" | "utilizado" | "estornado" } = {},
+  filters: { contaFinanceiraId?: number; estado?: "disponivel" | "utilizado" | "estornado" | "depositado" } = {},
   empresaId = 1,
 ) {
   const db = await getDb();
@@ -890,6 +891,8 @@ export async function listChequesFinanceiros(
     dataRecebimento: chequesFinanceiros.dataRecebimento,
     dataCompensacao: chequesFinanceiros.dataCompensacao,
     utilizadoEm: chequesFinanceiros.utilizadoEm,
+    depositadoEm: chequesFinanceiros.depositadoEm,
+    contaDestinoId: chequesFinanceiros.contaDestinoId,
     estado: chequesFinanceiros.estado,
     estornadoEm: chequesFinanceiros.estornadoEm,
     contaNome: contasFinanceiras.nome,
@@ -899,10 +902,66 @@ export async function listChequesFinanceiros(
     .innerJoin(clientes, eq(chequesFinanceiros.clienteId, clientes.id))
     .where(and(...conditions))
     .orderBy(desc(chequesFinanceiros.dataRecebimento), desc(chequesFinanceiros.createdAt));
+  const destinoIds = Array.from(new Set(cheques.map((cheque) => cheque.contaDestinoId).filter((id): id is number => id !== null)));
+  const destinos = destinoIds.length
+    ? await db.select({ id: contasFinanceiras.id, nome: contasFinanceiras.nome }).from(contasFinanceiras)
+      .where(and(eq(contasFinanceiras.empresaId, empresaId), inArray(contasFinanceiras.id, destinoIds)))
+    : [];
+  const destinoPorId = new Map(destinos.map((conta) => [conta.id, conta.nome]));
   return cheques.map((cheque) => ({
     ...cheque,
+    contaDestinoNome: cheque.contaDestinoId ? destinoPorId.get(cheque.contaDestinoId) ?? "Conta bancária removida" : null,
     alertaCompensacao: cheque.estado === "disponivel" ? classificarAlertaCompensacaoCheque(cheque.dataCompensacao) : null,
   }));
+}
+
+/** Histórico auditável de cheques transferidos do Caixa Cheque para contas bancárias. */
+export async function listHistoricoDepositosPorConta(contaFinanceiraId?: number, empresaId = 1) {
+  const cheques = await listChequesFinanceiros({ estado: "depositado" }, empresaId);
+  return cheques
+    .filter((cheque) => !contaFinanceiraId || cheque.contaDestinoId === contaFinanceiraId)
+    .sort((a, b) => new Date(b.depositadoEm ?? 0).getTime() - new Date(a.depositadoEm ?? 0).getTime() || b.id - a.id);
+}
+
+/**
+ * Registra a transferência interna de um cheque em carteira para uma conta bancária.
+ * Não cria baixa financeira: a entrada já ocorreu no recebimento e o fluxo de caixa permanece neutro.
+ */
+export async function depositarChequeFinanceiro(input: {
+  id: number;
+  contaDestinoId: number;
+  dataDeposito: Date;
+}, empresaId = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+
+  const [cheque, contaDestino] = await Promise.all([
+    db.select().from(chequesFinanceiros)
+      .where(and(eq(chequesFinanceiros.id, input.id), eq(chequesFinanceiros.empresaId, empresaId))).limit(1),
+    db.select().from(contasFinanceiras)
+      .where(and(eq(contasFinanceiras.id, input.contaDestinoId), eq(contasFinanceiras.empresaId, empresaId))).limit(1),
+  ]);
+  if (!cheque[0]) throw new Error("Cheque não encontrado");
+  if (!contaDestino[0]) throw new Error("Conta bancária de destino não encontrada");
+  validarDepositoCheque({
+    estado: cheque[0].estado,
+    contaDestinoTipo: contaDestino[0].tipo,
+    contaDestinoAtiva: Boolean(contaDestino[0].ativa),
+  });
+
+  const [resultado] = await db.update(chequesFinanceiros).set({
+    estado: "depositado",
+    depositadoEm: input.dataDeposito,
+    contaDestinoId: contaDestino[0].id,
+  }).where(and(
+    eq(chequesFinanceiros.id, cheque[0].id),
+    eq(chequesFinanceiros.empresaId, empresaId),
+    eq(chequesFinanceiros.estado, "disponivel"),
+  ));
+  if (resultado.affectedRows !== 1) {
+    throw new Error("Este cheque não está mais disponível para depósito");
+  }
+  return { success: true, chequeId: cheque[0].id, contaDestinoId: contaDestino[0].id };
 }
 
 export async function getResumoCaixaCheque(empresaId = 1) {
@@ -913,6 +972,8 @@ export async function getResumoCaixaCheque(empresaId = 1) {
   const totalDisponivel = cheques.filter((cheque) => cheque.estado === "disponivel")
     .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
   const totalUtilizado = cheques.filter((cheque) => cheque.estado === "utilizado")
+    .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
+  const totalDepositado = cheques.filter((cheque) => cheque.estado === "depositado")
     .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
   const alertasCompensacao = cheques.filter((cheque) => cheque.estado === "disponivel")
     .reduce((acumulado, cheque) => {
@@ -926,8 +987,10 @@ export async function getResumoCaixaCheque(empresaId = 1) {
     contas,
     totalDisponivel,
     totalUtilizado,
+    totalDepositado,
     quantidadeDisponivel: cheques.filter((cheque) => cheque.estado === "disponivel").length,
     quantidadeUtilizada: cheques.filter((cheque) => cheque.estado === "utilizado").length,
+    quantidadeDepositada: cheques.filter((cheque) => cheque.estado === "depositado").length,
     alertasCompensacao,
   };
 }

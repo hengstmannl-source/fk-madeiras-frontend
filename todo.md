@@ -348,3 +348,9 @@
 - [x] Permitir registrar cheque devolvido com motivo, data e rastreabilidade do impacto financeiro
 - [x] Exibir cheques devolvidos separadamente no Caixa Cheque, sem incluí-los no saldo disponível
 - [x] Cobrir exclusão de recebimento, devolução de cheque e reflexos de saldo com testes e validação visual
+- [x] Modelar o depósito de cheque compensado como transferência interna do Caixa Cheque para conta bancária
+- [x] Permitir selecionar conta bancária de destino e registrar data de depósito, sem duplicação
+- [x] Registrar histórico de cheques compensados e depositados por conta financeira
+- [x] Exibir no Caixa Cheque os estados compensado, depositado e a conta bancária de destino
+- [x] Manter transferências de cheque fora das entradas e saídas do relatório de fluxo de caixa
+- [x] Cobrir depósitos, bloqueio de duplicidade, histórico por conta e neutralidade do fluxo de caixa com testes e validação visual
