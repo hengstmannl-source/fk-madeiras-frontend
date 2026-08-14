@@ -602,6 +602,7 @@ export const chequesFinanceiros = mysqlTable("chequesFinanceiros", {
   utilizadoEm: timestamp("utilizadoEm"),
   estado: mysqlEnum("estado", ["disponivel", "utilizado", "estornado"]).notNull().default("disponivel"),
   estornadoEm: timestamp("estornadoEm"),
+  motivoEstorno: text("motivoEstorno"),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),

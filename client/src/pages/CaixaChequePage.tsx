@@ -1,20 +1,23 @@
-import { useMemo, useState } from "react";
+import { FormEvent, useMemo, useState } from "react";
 import { useLocation } from "wouter";
-import { CheckCircle2, CircleDollarSign, Clock3, ReceiptText, TriangleAlert } from "lucide-react";
+import { CheckCircle2, CircleDollarSign, Clock3, ReceiptText, RotateCcw, TriangleAlert } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { formatCurrency } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 
 type EstadoCheque = "todos" | "disponivel" | "utilizado" | "estornado";
 
 const estadoCheque = {
   disponivel: { label: "Disponível", className: "border-emerald-200 bg-emerald-50 text-emerald-700" },
   utilizado: { label: "Utilizado", className: "border-violet-200 bg-violet-50 text-violet-700" },
-  estornado: { label: "Estornado", className: "border-slate-300 bg-slate-100 text-slate-600" },
+  estornado: { label: "Devolvido", className: "border-rose-300 bg-rose-50 text-rose-700" },
 } as const;
 
 const alertaCompensacao = {
@@ -31,11 +34,38 @@ function formatarData(data: Date | string | null) {
 export default function CaixaChequePage() {
   const [, setLocation] = useLocation();
   const [estado, setEstado] = useState<EstadoCheque>("todos");
+  const [chequeEmDevolucao, setChequeEmDevolucao] = useState<any>(null);
+  const [motivoDevolucao, setMotivoDevolucao] = useState("");
+  const [dataDevolucao, setDataDevolucao] = useState(() => new Date().toISOString().slice(0, 10));
   const filtro = useMemo(() => estado === "todos" ? undefined : { estado }, [estado]);
+  const utils = trpc.useUtils();
   const resumo = trpc.financeiro.cheques.resumo.useQuery();
   const cheques = trpc.financeiro.cheques.list.useQuery(filtro);
   const chequesDisponiveis = trpc.financeiro.cheques.list.useQuery({ estado: "disponivel" });
   const alertas = useMemo(() => (chequesDisponiveis.data ?? []).filter((cheque: any) => cheque.alertaCompensacao), [chequesDisponiveis.data]);
+  const devolverCheque = trpc.financeiro.titulos.devolverCheque.useMutation({
+    onSuccess: async () => {
+      await Promise.all([
+        utils.financeiro.cheques.list.invalidate(),
+        utils.financeiro.cheques.resumo.invalidate(),
+        utils.financeiro.titulos.list.invalidate(),
+      ]);
+      setChequeEmDevolucao(null);
+      setMotivoDevolucao("");
+    },
+  });
+
+  const abrirDevolucao = (cheque: any) => {
+    setChequeEmDevolucao(cheque);
+    setMotivoDevolucao("");
+    setDataDevolucao(new Date().toISOString().slice(0, 10));
+  };
+
+  const confirmarDevolucao = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!chequeEmDevolucao) return;
+    devolverCheque.mutate({ id: chequeEmDevolucao.id, motivo: motivoDevolucao, dataDevolucao });
+  };
 
   return (
     <main className="container py-6 sm:py-8">
@@ -62,9 +92,23 @@ export default function CaixaChequePage() {
       <Card className="mt-6">
         <CardHeader className="gap-4 sm:flex-row sm:items-center sm:justify-between"><div><CardTitle>Cheques individuais</CardTitle><CardDescription className="mt-1">Referência, cliente, entrada, compensação e eventual utilização em pagamento.</CardDescription></div><Select value={estado} onValueChange={(valor) => setEstado(valor as EstadoCheque)}><SelectTrigger className="w-full sm:w-48"><SelectValue placeholder="Filtrar situação" /></SelectTrigger><SelectContent><SelectItem value="todos">Todos os cheques</SelectItem><SelectItem value="disponivel">Disponíveis</SelectItem><SelectItem value="utilizado">Utilizados</SelectItem><SelectItem value="estornado">Estornados</SelectItem></SelectContent></Select></CardHeader>
         <CardContent>
-          {cheques.isLoading ? <div className="py-12 text-center text-sm text-muted-foreground">Carregando cheques...</div> : cheques.data?.length ? <><p className="mb-2 text-xs text-muted-foreground sm:hidden">Deslize a tabela lateralmente para consultar todos os dados.</p><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Referência</TableHead><TableHead>Cliente</TableHead><TableHead>Conta</TableHead><TableHead>Recebido em</TableHead><TableHead>Compensação</TableHead><TableHead>Utilizado em</TableHead><TableHead>Situação</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{cheques.data.map((cheque: any) => { const dadosEstado = estadoCheque[cheque.estado as keyof typeof estadoCheque]; const alerta = cheque.alertaCompensacao ? alertaCompensacao[cheque.alertaCompensacao as keyof typeof alertaCompensacao] : null; return <TableRow key={cheque.id} className={alerta?.row}><TableCell className="font-medium">{cheque.referencia}</TableCell><TableCell>{cheque.clienteNome}</TableCell><TableCell>{cheque.contaNome}</TableCell><TableCell>{formatarData(cheque.dataRecebimento)}</TableCell><TableCell><div className="flex flex-col items-start gap-1"><span>{formatarData(cheque.dataCompensacao)}</span>{alerta && <Badge variant="outline" className={alerta.className}>{alerta.label}</Badge>}</div></TableCell><TableCell>{formatarData(cheque.utilizadoEm)}</TableCell><TableCell><Badge variant="outline" className={dadosEstado.className}>{dadosEstado.label}</Badge></TableCell><TableCell className="text-right font-medium">{formatCurrency(cheque.valor)}</TableCell></TableRow>; })}</TableBody></Table></div></> : <div className="rounded-lg border border-dashed py-14 text-center"><ReceiptText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="font-medium">Nenhum cheque encontrado</p><p className="mt-1 text-sm text-muted-foreground">Registre um recebimento com a conta Caixa Cheque para inserir o primeiro item.</p></div>}
+          {cheques.isLoading ? <div className="py-12 text-center text-sm text-muted-foreground">Carregando cheques...</div> : cheques.data?.length ? <><p className="mb-2 text-xs text-muted-foreground sm:hidden">Deslize a tabela lateralmente para consultar todos os dados.</p><div className="overflow-x-auto"><Table><TableHeader><TableRow><TableHead>Referência</TableHead><TableHead>Cliente</TableHead><TableHead>Conta</TableHead><TableHead>Recebido em</TableHead><TableHead>Compensação</TableHead><TableHead>Utilizado em</TableHead><TableHead>Situação</TableHead><TableHead className="text-right">Valor</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{cheques.data.map((cheque: any) => { const dadosEstado = estadoCheque[cheque.estado as keyof typeof estadoCheque]; const alerta = cheque.alertaCompensacao ? alertaCompensacao[cheque.alertaCompensacao as keyof typeof alertaCompensacao] : null; return <TableRow key={cheque.id} className={alerta?.row}><TableCell className="font-medium">{cheque.referencia}</TableCell><TableCell>{cheque.clienteNome}</TableCell><TableCell>{cheque.contaNome}</TableCell><TableCell>{formatarData(cheque.dataRecebimento)}</TableCell><TableCell><div className="flex flex-col items-start gap-1"><span>{formatarData(cheque.dataCompensacao)}</span>{alerta && <Badge variant="outline" className={alerta.className}>{alerta.label}</Badge>}</div></TableCell><TableCell>{formatarData(cheque.utilizadoEm)}</TableCell><TableCell><div className="flex flex-col items-start gap-1"><Badge variant="outline" className={dadosEstado.className}>{dadosEstado.label}</Badge>{cheque.estado === "estornado" && <span className="max-w-48 text-xs text-muted-foreground">{formatarData(cheque.estornadoEm)} · {cheque.motivoEstorno || "Sem motivo informado"}</span>}</div></TableCell><TableCell className="text-right font-medium">{formatCurrency(cheque.valor)}</TableCell><TableCell className="text-right">{cheque.estado === "disponivel" ? <Button type="button" variant="outline" size="sm" className="border-rose-200 text-rose-700 hover:bg-rose-50 hover:text-rose-800" onClick={() => abrirDevolucao(cheque)}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Devolver</Button> : <span className="text-xs text-muted-foreground">—</span>}</TableCell></TableRow>; })}</TableBody></Table></div></> : <div className="rounded-lg border border-dashed py-14 text-center"><ReceiptText className="mx-auto mb-3 h-8 w-8 text-muted-foreground" /><p className="font-medium">Nenhum cheque encontrado</p><p className="mt-1 text-sm text-muted-foreground">Registre um recebimento com a conta Caixa Cheque para inserir o primeiro item.</p></div>}
         </CardContent>
       </Card>
+
+      <Dialog open={Boolean(chequeEmDevolucao)} onOpenChange={(aberto) => { if (!aberto && !devolverCheque.isPending) setChequeEmDevolucao(null); }}>
+        <DialogContent>
+          <form onSubmit={confirmarDevolucao}>
+            <DialogHeader><DialogTitle>Registrar cheque devolvido</DialogTitle><DialogDescription>O cheque <strong>{chequeEmDevolucao?.referencia}</strong> será removido do saldo disponível e o recebimento será revertido no valor de {formatCurrency(chequeEmDevolucao?.valor ?? 0)}.</DialogDescription></DialogHeader>
+            <div className="mt-5 grid gap-4">
+              <div className="grid gap-2"><Label htmlFor="data-devolucao">Data da devolução</Label><input id="data-devolucao" type="date" value={dataDevolucao} onChange={(event) => setDataDevolucao(event.target.value)} required className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm" /></div>
+              <div className="grid gap-2"><Label htmlFor="motivo-devolucao">Motivo da devolução</Label><Textarea id="motivo-devolucao" value={motivoDevolucao} onChange={(event) => setMotivoDevolucao(event.target.value)} placeholder="Ex.: cheque devolvido por insuficiência de fundos" required minLength={3} /></div>
+              {devolverCheque.error && <p className="text-sm text-destructive">{devolverCheque.error.message}</p>}
+            </div>
+            <DialogFooter className="mt-6"><Button type="button" variant="outline" onClick={() => setChequeEmDevolucao(null)} disabled={devolverCheque.isPending}>Cancelar</Button><Button type="submit" variant="destructive" disabled={devolverCheque.isPending}>{devolverCheque.isPending ? "Registrando..." : "Confirmar devolução"}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

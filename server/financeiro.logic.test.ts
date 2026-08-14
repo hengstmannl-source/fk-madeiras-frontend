@@ -13,6 +13,7 @@ import {
   saldoAbertoTitulo,
   tipoAlertaAtualDoTitulo,
   validarEdicaoTituloFinanceiro,
+  validarDevolucaoCheque,
   validarExclusaoTituloFinanceiro,
   validarValorDosCheques,
 } from "./financeiro.logic";
@@ -58,6 +59,14 @@ describe("regras financeiras", () => {
     expect(validarValorDosCheques("250,00", ["100,15", "149,85"])).toBe(250);
     expect(() => validarValorDosCheques("250,00", ["100,15", "149,84"])).toThrow("A soma dos cheques deve ser exatamente igual ao valor da baixa");
     expect(() => validarValorDosCheques("0", ["0"])).toThrow("O valor da baixa deve ser maior que zero");
+  });
+
+  it("permite devolver somente cheque disponível, não conciliado e com motivo", () => {
+    expect(() => validarDevolucaoCheque({ estado: "disponivel", baixaConciliada: false, motivo: "Insuficiência de fundos" })).not.toThrow();
+    expect(() => validarDevolucaoCheque({ estado: "utilizado", baixaConciliada: false, motivo: "Devolvido" })).toThrow("já foi utilizado");
+    expect(() => validarDevolucaoCheque({ estado: "estornado", baixaConciliada: false, motivo: "Devolvido" })).toThrow("já foi devolvido");
+    expect(() => validarDevolucaoCheque({ estado: "disponivel", baixaConciliada: true, motivo: "Devolvido" })).toThrow("Desconcilie");
+    expect(() => validarDevolucaoCheque({ estado: "disponivel", baixaConciliada: false, motivo: "x" })).toThrow("Informe o motivo");
   });
 
   it("permite editar lançamento não conciliado sem reduzir o valor já baixado", () => {

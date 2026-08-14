@@ -13,7 +13,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
@@ -1686,8 +1686,8 @@ export async function estornarBaixaFinanceira(
         .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaSaidaId, baixa.id), eq(chequesFinanceiros.estado, "utilizado")));
     }
     if (chequesDaEntrada.length) {
-      await db.update(chequesFinanceiros).set({ estado: "estornado", estornadoEm: estornadaEm })
-        .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaEntradaId, baixa.id), eq(chequesFinanceiros.estado, "disponivel")));
+      await db.delete(chequesFinanceiros)
+        .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaEntradaId, baixa.id)));
     }
   }
 
@@ -1701,6 +1701,65 @@ export async function estornarBaixaFinanceira(
   }).where(and(eq(baixasFinanceiras.id, id), eq(baixasFinanceiras.empresaId, empresaId)));
   await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(and(eq(titulosFinanceiros.id, titulo.id), eq(titulosFinanceiros.empresaId, empresaId)));
   return { success: true, tituloId: titulo.id, estado: novoEstado, valorBaixado: novoValorBaixado };
+}
+
+export async function devolverChequeFinanceiro(input: {
+  id: number;
+  motivo: string;
+  dataDevolucao: Date;
+  userId: number;
+}, empresaId = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const cheque = (await db.select().from(chequesFinanceiros)
+    .where(and(eq(chequesFinanceiros.id, input.id), eq(chequesFinanceiros.empresaId, empresaId))).limit(1))[0];
+  if (!cheque) throw new Error("Cheque não encontrado");
+  const baixa = (await db.select().from(baixasFinanceiras)
+    .where(and(eq(baixasFinanceiras.id, cheque.baixaEntradaId), eq(baixasFinanceiras.empresaId, empresaId))).limit(1))[0];
+  if (!baixa) throw new Error("Recebimento de origem do cheque não encontrado");
+  validarDevolucaoCheque({ estado: cheque.estado, baixaConciliada: Boolean(baixa.conciliada), motivo: input.motivo });
+  const titulo = await getTituloFinanceiroById(baixa.tituloId, empresaId);
+  if (!titulo) throw new Error("Título financeiro de origem do cheque não encontrado");
+
+  const valorCheque = decimalParaNumero(cheque.valor);
+  const valorBaixa = decimalParaNumero(baixa.valor);
+  const valorBaixado = decimalParaNumero(titulo.valorBaixado);
+  if (valorCheque > valorBaixa + 0.005 || valorCheque > valorBaixado + 0.005) {
+    throw new Error("O valor do cheque não é compatível com o recebimento de origem");
+  }
+  const valorRestanteBaixa = Math.max(0, valorBaixa - valorCheque);
+  const novoValorBaixado = Math.max(0, valorBaixado - valorCheque).toFixed(2);
+  const novoEstado = calcularEstadoTitulo({
+    valorOriginal: titulo.valorOriginal,
+    desconto: titulo.desconto,
+    juros: titulo.juros,
+    valorBaixado: novoValorBaixado,
+    dataVencimento: titulo.dataVencimento,
+  });
+  const motivo = input.motivo.trim();
+
+  await db.update(chequesFinanceiros).set({
+    estado: "estornado",
+    estornadoEm: input.dataDevolucao,
+    motivoEstorno: motivo,
+  }).where(and(eq(chequesFinanceiros.id, cheque.id), eq(chequesFinanceiros.empresaId, empresaId)));
+
+  if (valorRestanteBaixa <= 0.005) {
+    await db.update(baixasFinanceiras).set({
+      estornada: true,
+      estornadaEm: input.dataDevolucao,
+      estornadaPor: input.userId,
+      motivoEstorno: `Cheque devolvido: ${motivo}`,
+      conciliada: false,
+      conciliadaEm: null,
+    }).where(and(eq(baixasFinanceiras.id, baixa.id), eq(baixasFinanceiras.empresaId, empresaId)));
+  } else {
+    await db.update(baixasFinanceiras).set({ valor: valorRestanteBaixa.toFixed(2) })
+      .where(and(eq(baixasFinanceiras.id, baixa.id), eq(baixasFinanceiras.empresaId, empresaId)));
+  }
+  await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado })
+    .where(and(eq(titulosFinanceiros.id, titulo.id), eq(titulosFinanceiros.empresaId, empresaId)));
+  return { success: true, tituloId: titulo.id, estadoTitulo: novoEstado, valorDevolvido: valorCheque };
 }
 
 export async function atualizarTituloFinanceiro(

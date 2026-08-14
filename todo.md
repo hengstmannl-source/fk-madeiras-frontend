@@ -343,3 +343,8 @@
 - [x] Exibir instrução clara para desconciliar antes de editar ou excluir itens vinculados ao extrato
 - [x] Atualizar listas de pagar, receber, pagos e recebidos com ações e diálogos de edição e exclusão
 - [x] Cobrir alterações, exclusões, bloqueios por conciliação e validação visual com testes automatizados
+- [x] Excluir cheques de entrada quando o recebimento de origem for excluído, sem convertê-los em estorno
+- [x] Reservar o estado estornado exclusivamente para cheques devolvidos
+- [x] Permitir registrar cheque devolvido com motivo, data e rastreabilidade do impacto financeiro
+- [x] Exibir cheques devolvidos separadamente no Caixa Cheque, sem incluí-los no saldo disponível
+- [x] Cobrir exclusão de recebimento, devolução de cheque e reflexos de saldo com testes e validação visual

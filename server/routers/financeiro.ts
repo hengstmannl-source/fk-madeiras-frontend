@@ -322,6 +322,15 @@ export const financeiroRouter = router({
       id: z.number().int().positive(),
       motivo: z.string().trim().min(3, "Informe o motivo do estorno").max(2000),
     })).mutation(({ ctx, input }) => db.estornarBaixaFinanceira(input.id, ctx.user.id, input.motivo, undefined, ctx.empresaAtiva!.empresa.id)),
+    devolverCheque: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      motivo: z.string().trim().min(3, "Informe o motivo da devolução").max(2000),
+      dataDevolucao: DataFinanceiraSchema,
+    })).mutation(({ ctx, input }) => db.devolverChequeFinanceiro({
+      ...input,
+      dataDevolucao: dataLocal(input.dataDevolucao),
+      userId: ctx.user.id,
+    }, ctx.empresaAtiva!.empresa.id)),
     cancelar: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => db.cancelarTituloFinanceiro(input.id, ctx.user.id, undefined, ctx.empresaAtiva!.empresa.id)),
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
