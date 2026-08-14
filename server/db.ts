@@ -454,13 +454,26 @@ export async function deleteModeloMedidaVenda(id: number, userId: number, empres
   await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId), eq(modelosMedidaVenda.empresaId, empresaId)));
 }
 
-export async function listOrcamentos(filters?: { estado?: string; clienteId?: number }, empresaId = 1) {
+export type CategoriaOperacionalVenda = "aprovadas" | "pagas" | "entregues" | "concluidas";
+
+export function classificarCategoriaOperacionalVenda(pago: boolean, entregue: boolean): CategoriaOperacionalVenda {
+  if (pago && entregue) return "concluidas";
+  if (pago) return "pagas";
+  if (entregue) return "entregues";
+  return "aprovadas";
+}
+
+export async function listOrcamentos(filters?: { estado?: string; clienteId?: number; categoria?: CategoriaOperacionalVenda }, empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
   conditions.push(eq(orcamentos.empresaId, empresaId));
   if (filters?.estado) conditions.push(eq(orcamentos.estado, filters.estado as any));
   if (filters?.clienteId) conditions.push(eq(orcamentos.clienteId, filters.clienteId));
+  if (filters?.categoria === "aprovadas") conditions.push(eq(orcamentos.pago, false), eq(orcamentos.entregue, false));
+  if (filters?.categoria === "pagas") conditions.push(eq(orcamentos.pago, true), eq(orcamentos.entregue, false));
+  if (filters?.categoria === "entregues") conditions.push(eq(orcamentos.pago, false), eq(orcamentos.entregue, true));
+  if (filters?.categoria === "concluidas") conditions.push(eq(orcamentos.pago, true), eq(orcamentos.entregue, true));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   return db.select().from(orcamentos).where(where).orderBy(desc(orcamentos.createdAt));
 }
@@ -2686,14 +2699,20 @@ export async function ajustarEstoqueSerrado(data: {
   });
 }
 
-export async function entregarVendaFisicamente(vendaId: number, userId: number, dependencias?: { database?: any }) {
+export type DadosEntregaFisica = {
+  entregueEm: Date;
+  modalidadeEntrega: "retirada" | "entrega";
+  observacoesEntrega?: string | null;
+  responsavelEntrega: string;
+};
+
+export async function entregarVendaFisicamente(vendaId: number, userId: number, dadosEntrega: DadosEntregaFisica, dependencias?: { database?: any }) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {
     const venda = (await tx.select().from(orcamentos).where(eq(orcamentos.id, vendaId)).limit(1))[0];
     if (!venda) throw new Error("Venda não encontrada");
     if (venda.estado !== "aprovado") throw new Error("Somente vendas aprovadas podem ser entregues");
-    if (!venda.pago) throw new Error("Confirme o recebimento antes de registrar a entrega física");
     if (venda.entregue) throw new Error("Esta venda já possui entrega física registrada");
 
     const [itens, lotes] = await Promise.all([
@@ -2752,13 +2771,30 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       });
       movimentacoes.push({ itemVendaId: deficit.itemVendaId, loteId, quantidade: deficit.quantidade });
     }
-    const entregueEm = new Date();
-    await tx.update(orcamentos).set({ entregue: true, entregueEm, entreguePor: userId }).where(eq(orcamentos.id, vendaId));
+    const entregueEm = dadosEntrega.entregueEm;
+    const observacoesEntrega = dadosEntrega.observacoesEntrega?.trim() || null;
+    const responsavelEntrega = dadosEntrega.responsavelEntrega.trim();
+    await tx.update(orcamentos).set({
+      entregue: true,
+      entregueEm,
+      entreguePor: userId,
+      modalidadeEntrega: dadosEntrega.modalidadeEntrega,
+      observacoesEntrega,
+      responsavelEntrega,
+    }).where(eq(orcamentos.id, vendaId));
     await tx.insert(historicoAlteracoes).values({
+      empresaId: venda.empresaId,
       orcamentoId: vendaId,
       usuarioId: userId,
       tipo: "alteracao" as any,
-      detalhes: JSON.stringify({ acao: "entrega_fisica_confirmada", entregueEm: entregueEm.toISOString(), alocacoes: movimentacoes }),
+      detalhes: JSON.stringify({
+        acao: "entrega_fisica_confirmada",
+        entregueEm: entregueEm.toISOString(),
+        modalidadeEntrega: dadosEntrega.modalidadeEntrega,
+        responsavelEntrega,
+        observacoesEntrega,
+        alocacoes: movimentacoes,
+      }),
     });
     return { success: true, entregueEm, pecasEntregues: movimentacoes.reduce((total, alocacao) => total + alocacao.quantidade, 0), pecasSemEstoque: deficits.reduce((total, deficit) => total + deficit.quantidade, 0) };
   });
@@ -2784,8 +2820,15 @@ export async function estornarEntregaVenda(vendaId: number, userId: number, moti
       await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: saldo === 0 ? "esgotado" : saldo < 0 ? "negativo" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
       await tx.insert(movimentacoesEstoqueSerrado).values({ loteId: lote.id, itemVendaId: saida.itemVendaId, tipo: "estorno_entrega", quantidade: saida.quantidade, motivo: motivo.trim(), criadoPor: userId });
     }
-    await tx.update(orcamentos).set({ entregue: false, entregueEm: null, entreguePor: null }).where(eq(orcamentos.id, vendaId));
-    await tx.insert(historicoAlteracoes).values({ orcamentoId: vendaId, usuarioId: userId, tipo: "alteracao" as any, detalhes: JSON.stringify({ acao: "entrega_fisica_estornada", motivo: motivo.trim() }) });
+    await tx.update(orcamentos).set({
+      entregue: false,
+      entregueEm: null,
+      entreguePor: null,
+      modalidadeEntrega: null,
+      observacoesEntrega: null,
+      responsavelEntrega: null,
+    }).where(eq(orcamentos.id, vendaId));
+    await tx.insert(historicoAlteracoes).values({ empresaId: venda.empresaId, orcamentoId: vendaId, usuarioId: userId, tipo: "alteracao" as any, detalhes: JSON.stringify({ acao: "entrega_fisica_estornada", motivo: motivo.trim() }) });
     return { success: true, pecasDevolvidas: saidas.reduce((total: number, saida: any) => total + saida.quantidade, 0) };
   });
 }

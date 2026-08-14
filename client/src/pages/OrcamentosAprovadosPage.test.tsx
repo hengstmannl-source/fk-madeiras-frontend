@@ -1,6 +1,6 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -23,7 +23,7 @@ vi.mock("@/lib/trpc", () => ({
     orcamento: {
       list: { useQuery: () => ({ data: [state.venda], isLoading: false }) },
       registrarPagamento: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
-      entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2 }); } }) },
+      entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; entregueEm: string; modalidadeEntrega: "retirada" | "entrega"; responsavelEntrega: string; observacoesEntrega?: string }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2 }); } }) },
       estornarEntrega: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; motivo: string }, callbacks: { onSuccess?: (resultado: { pecasDevolvidas: number }) => void }) => { state.estornar(input); callbacks.onSuccess?.({ pecasDevolvidas: 4 }); } }) },
     },
   },
@@ -31,8 +31,9 @@ vi.mock("@/lib/trpc", () => ({
 
 import OrcamentosAprovadosPage from "./OrcamentosAprovadosPage";
 
-describe("OrcamentosAprovadosPage — entrega física", () => {
+describe("OrcamentosAprovadosPage — entrega física independente", () => {
   beforeEach(() => {
+    cleanup();
     state.entregar.mockReset();
     state.estornar.mockReset();
     state.invalidar.mockReset();
@@ -50,18 +51,33 @@ describe("OrcamentosAprovadosPage — entrega física", () => {
     };
   });
 
-  it("oferece a entrega somente para venda paga e confirma a baixa física do estoque", async () => {
+  it("registra a baixa física de uma venda paga com os dados operacionais da entrega", async () => {
     const user = userEvent.setup();
     render(<OrcamentosAprovadosPage />);
 
-    expect(screen.getByText("Aguardando entrega")).toBeInTheDocument();
+    expect(screen.getByText("Aguardando baixa física")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Registrar entrega" }));
-    expect(screen.getByRole("heading", { name: "Confirmar entrega física" })).toBeInTheDocument();
-    expect(screen.getByText(/recebimento da venda já foi confirmado/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Registrar entrega física" })).toBeInTheDocument();
+    expect(screen.getByText(/mesmo que o pagamento ainda esteja em aberto/i)).toBeInTheDocument();
     expect(screen.getByText(/saldo negativo para regularização/i)).toBeInTheDocument();
 
+    await user.type(screen.getByLabelText("Responsável pela entrega *"), "João da Silva");
+
     await user.click(screen.getByRole("button", { name: "Confirmar entrega e baixa" }));
-    expect(state.entregar).toHaveBeenCalledWith({ id: 25 });
+    expect(state.entregar).toHaveBeenCalledWith(expect.objectContaining({
+      id: 25,
+      modalidadeEntrega: "retirada",
+      responsavelEntrega: "João da Silva",
+    }));
     expect(state.invalidar).toHaveBeenCalled();
+  });
+
+  it("oferece a entrega antes do pagamento para venda a prazo", () => {
+    state.venda = { ...state.venda, pago: false, pagoEm: null, formaPagamento: null };
+    render(<OrcamentosAprovadosPage />);
+
+    expect(screen.getByText("Em aberto")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar entrega" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar pagamento" })).toBeInTheDocument();
   });
 });

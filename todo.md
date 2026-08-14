@@ -317,3 +317,12 @@
 - [x] Adiar o envio de links de redefinição de senha para uma próxima etapa, conforme solicitado
 - [x] Adiar a cobertura de recuperação por e-mail até a ativação futura do remetente transacional
 - [x] Registrar a recuperação automática de senha por e-mail como melhoria futura a retomar após configurar remetente válido
+- [x] Criar as categorias Pagos e Entregues abaixo de Aprovados no menu de Vendas
+- [x] Separar o controlo de pagamento do controlo de entrega em cada venda aprovada
+- [x] Permitir registrar entrega antes ou depois do pagamento, preservando datas e rastreabilidade
+- [x] Definir regras para retirada após pagamento e entrega a prazo sem bloquear o fluxo comercial
+- [x] Cobrir as novas categorias e os dois fluxos de venda com testes e validação visual
+- [x] Criar a categoria automática Concluídas para vendas pagas e entregues
+- [x] Remover a dependência entre pagamento e entrega, preservando a baixa física no estoque
+- [x] Registrar data, responsável, modalidade e observação em cada entrega
+- [x] Manter a conta a receber em aberto após entrega a prazo e quitá-la quando o pagamento for registrado

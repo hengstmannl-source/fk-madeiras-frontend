@@ -28,7 +28,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
-  ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning,
+  ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning, Truck, CircleCheckBig,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { Redirect, useLocation, useSearch } from "wouter";
@@ -59,6 +59,9 @@ export const dashboardNavigation = {
   vendas: [
     { icon: FileText, label: "Vendas", path: "/orcamentos" },
     { icon: BadgeCheck, label: "Aprovados", path: "/orcamentos/aprovados" },
+    { icon: CircleDollarSign, label: "Pagas", path: "/orcamentos/pagas" },
+    { icon: Truck, label: "Entregues", path: "/orcamentos/entregues" },
+    { icon: CircleCheckBig, label: "Concluídas", path: "/orcamentos/concluidas" },
   ],
   gestao: [
     { icon: Users, label: "Clientes", path: "/clientes" },
@@ -286,7 +289,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
 
 export function isItemActive(item: NavigationItem, location: string, search = "") {
   if (item.path === "/") return location === "/";
-  if (item.path === "/orcamentos") return location === "/orcamentos" || (location.startsWith("/orcamentos/") && !location.startsWith("/orcamentos/aprovados"));
+  if (item.path === "/orcamentos") return location === "/orcamentos" || (location.startsWith("/orcamentos/") && !["/orcamentos/aprovados", "/orcamentos/pagas", "/orcamentos/entregues", "/orcamentos/concluidas"].some((rota) => location.startsWith(rota)));
   if (item.path.startsWith("/financeiro?")) {
     const [, itemSearch = ""] = item.path.split("?");
     return location === "/financeiro" && new URLSearchParams(search).get("tipo") === new URLSearchParams(itemSearch).get("tipo");

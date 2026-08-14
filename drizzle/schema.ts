@@ -171,6 +171,9 @@ export const orcamentos = mysqlTable("orcamentos", {
   entregue: boolean("entregue").notNull().default(false),
   entregueEm: timestamp("entregueEm"),
   entreguePor: int("entreguePor"),
+  modalidadeEntrega: varchar("modalidadeEntrega", { length: 50 }),
+  observacoesEntrega: text("observacoesEntrega"),
+  responsavelEntrega: varchar("responsavelEntrega", { length: 200 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });

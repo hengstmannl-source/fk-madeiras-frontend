@@ -36,7 +36,13 @@ function Router() {
         <Route path="/madeiras" component={MadeirasPage} />
         <Route path="/clientes" component={ClientesPage} />
         <Route path="/vendas/aprovadas" component={OrcamentosAprovadosPage} />
+        <Route path="/vendas/pagas" component={OrcamentosAprovadosPage} />
+        <Route path="/vendas/entregues" component={OrcamentosAprovadosPage} />
+        <Route path="/vendas/concluidas" component={OrcamentosAprovadosPage} />
         <Route path="/orcamentos/aprovados" component={OrcamentosAprovadosPage} />
+        <Route path="/orcamentos/pagas" component={OrcamentosAprovadosPage} />
+        <Route path="/orcamentos/entregues" component={OrcamentosAprovadosPage} />
+        <Route path="/orcamentos/concluidas" component={OrcamentosAprovadosPage} />
         <Route path="/orcamentos" component={OrcamentosPage} />
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />
         <Route path="/orcamentos/:id" component={OrcamentoEdit} />

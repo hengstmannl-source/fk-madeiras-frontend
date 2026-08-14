@@ -34,6 +34,14 @@ export const RegistroPagamentoSchema = z.object({
   pagoEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data de pagamento válida").default(() => new Date().toISOString().slice(0, 10)),
 });
 
+export const RegistroEntregaFisicaSchema = z.object({
+  id: z.number().int().positive(),
+  entregueEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida"),
+  modalidadeEntrega: z.enum(["retirada", "entrega"]),
+  responsavelEntrega: z.string().trim().min(2, "Informe o responsável pela entrega").max(200),
+  observacoesEntrega: z.string().trim().max(4000).optional(),
+});
+
 const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
 const LinhaModeloSchema = z.object({ comprimento: z.string().trim().min(1), quantidade: z.string().trim().min(1) });
 
@@ -53,6 +61,7 @@ export const orcamentoRouter = router({
     .input(z.object({
       estado: z.string().optional(),
       clienteId: z.number().optional(),
+      categoria: z.enum(["aprovadas", "pagas", "entregues", "concluidas"]).optional(),
     }).optional())
     .query(async ({ ctx, input }) => {
       return db.listOrcamentos(input, ctx.empresaAtiva!.empresa.id);
@@ -158,10 +167,15 @@ export const orcamentoRouter = router({
     }),
 
   entregarFisicamente: protectedProcedure
-    .input(z.object({ id: z.number().int().positive() }))
+    .input(RegistroEntregaFisicaSchema)
     .mutation(async ({ ctx, input }) => {
       await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
-      return db.entregarVendaFisicamente(input.id, ctx.user.id);
+      return db.entregarVendaFisicamente(input.id, ctx.user.id, {
+        entregueEm: parseDataFinanceira(input.entregueEm),
+        modalidadeEntrega: input.modalidadeEntrega,
+        responsavelEntrega: input.responsavelEntrega,
+        observacoesEntrega: input.observacoesEntrega,
+      });
     }),
 
   estornarEntrega: protectedProcedure
