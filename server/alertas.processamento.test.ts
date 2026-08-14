@@ -2,15 +2,15 @@ import { describe, expect, it } from "vitest";
 import { alertasFinanceiros, configuracoesFinanceiras, titulosFinanceiros } from "../drizzle/schema";
 import { processarAlertasFinanceiros, processarRecorrenciasFinanceiras } from "./db";
 
-function criarBancoFinanceiroFalso(titulo: any, alertas: any[]) {
+function criarBancoFinanceiroFalso(titulo: any, alertas: any[], configuracoes = [{ id: 1, empresaId: 1, alertaDiasAntecedencia: 7 }]) {
   let proximoId = 1;
   return {
     select: () => ({
       from: (tabela: unknown) => {
         if (tabela === titulosFinanceiros) return Promise.resolve([titulo]);
+        if (tabela === configuracoesFinanceiras) return Promise.resolve(configuracoes);
         return {
           where: () => {
-            if (tabela === configuracoesFinanceiras) return { limit: () => Promise.resolve([{ id: 1, alertaDiasAntecedencia: 7 }]) };
             if (tabela === alertasFinanceiros) return Promise.resolve(alertas.filter((alerta) => alerta.estado === "ativo"));
             return Promise.resolve([]);
           },
@@ -47,6 +47,7 @@ describe("processarAlertasFinanceiros", () => {
       valorBaixado: "0",
       dataVencimento: new Date(2026, 7, 15, 12),
       estado: "aberto",
+      empresaId: 1,
     };
     const alertas: any[] = [];
     const banco = criarBancoFinanceiroFalso(titulo, alertas);
@@ -78,11 +79,35 @@ describe("processarAlertasFinanceiros", () => {
       valorBaixado: "0",
       dataVencimento: new Date(2026, 7, 14, 12),
       estado: "aberto",
+      empresaId: 1,
     };
     const alertas: any[] = [];
     const resultado = await processarRecorrenciasFinanceiras(agora, criarBancoFinanceiroFalso(titulo, alertas));
 
     expect(resultado).toMatchObject({ recorrenciasAnalisadas: 0, titulosGerados: 0, alertasCriados: 1, alertasResolvidos: 0 });
     expect(alertas).toMatchObject([{ tituloId: 11, tipo: "vence_em_breve", estado: "ativo" }]);
+  });
+
+  it("usa o prazo de alerta e grava a ocorrência somente na empresa do título", async () => {
+    const agora = new Date(2026, 7, 11, 12);
+    const titulo: any = {
+      id: 25,
+      descricao: "Conta exclusiva da empresa dois",
+      valorOriginal: "250.00",
+      desconto: "0",
+      juros: "0",
+      valorBaixado: "0",
+      dataVencimento: new Date(2026, 7, 21, 12),
+      estado: "aberto",
+      empresaId: 2,
+    };
+    const alertas: any[] = [];
+    const banco = criarBancoFinanceiroFalso(titulo, alertas, [
+      { id: 1, empresaId: 1, alertaDiasAntecedencia: 2 },
+      { id: 2, empresaId: 2, alertaDiasAntecedencia: 15 },
+    ]);
+
+    await expect(processarAlertasFinanceiros(agora, banco)).resolves.toMatchObject({ alertasCriados: 1 });
+    expect(alertas).toMatchObject([{ tituloId: 25, empresaId: 2, tipo: "vence_em_breve", estado: "ativo" }]);
   });
 });

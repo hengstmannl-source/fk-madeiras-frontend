@@ -148,7 +148,7 @@ export const financeiroRouter = router({
   }),
 
   alertas: router({
-    list: protectedProcedure.query(() => db.listAlertasFinanceiros()),
+    list: protectedProcedure.query(({ ctx }) => db.listAlertasFinanceiros(ctx.empresaAtiva!.empresa.id)),
   }),
 
   relatorios: router({
@@ -351,6 +351,7 @@ export const financeiroRouter = router({
         dataFim: input.dataFim ? dataLocal(input.dataFim) : null,
         ativa: true,
         criadoPor: ctx.user.id,
+        empresaId: ctx.empresaAtiva!.empresa.id,
       })
     )),
     update: protectedProcedure.input(RecorrenciaSchema.partial().extend({ id: z.number().int().positive(), ativa: z.boolean().optional() })).mutation(({ input }) => {

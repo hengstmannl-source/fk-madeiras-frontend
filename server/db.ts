@@ -504,6 +504,7 @@ export async function createOrcamento(data: InsertOrcamento, itens: Partial<Inse
   const orcId = result[0].insertId;
   if (itens.length > 0) {
     const itensWithOrcId: InsertItemOrcamento[] = itens.map((i): InsertItemOrcamento => ({
+      empresaId: data.empresaId,
       orcamentoId: orcId,
       madeiraId: i.madeiraId ?? null,
       bitolaId: i.bitolaId!,
@@ -522,6 +523,7 @@ export async function createOrcamento(data: InsertOrcamento, itens: Partial<Inse
   }
   if (data.criadoPor) {
     await db.insert(historicoAlteracoes).values({
+      empresaId: data.empresaId,
       orcamentoId: orcId,
       usuarioId: data.criadoPor,
       tipo: "criacao" as any,
@@ -588,13 +590,14 @@ export async function updateOrcamentoEstado(
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  await validarAlteracaoOrcamento(id, confirmacaoDupla, db);
+  const orcamento = await validarAlteracaoOrcamento(id, confirmacaoDupla, db);
   const numeroAprovado = novoEstado === "aprovado"
     ? await (dependencias?.atribuirNumero ?? ((orcamentoId: number) => atribuirNumeroVendaAprovada(orcamentoId, db)))(id)
     : undefined;
   await db.update(orcamentos).set({ estado: novoEstado }).where(eq(orcamentos.id, id));
   if (userId) {
     await db.insert(historicoAlteracoes).values({
+      empresaId: orcamento.empresaId,
       orcamentoId: id,
       usuarioId: userId,
       tipo: "estado" as any,
@@ -617,7 +620,7 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
 
   const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm);
   if (titulo) {
-    const contaFinanceiraId = await getOrCreateContaFinanceiraPadrao(userId);
+    const contaFinanceiraId = await getOrCreateContaFinanceiraPadrao(userId, orcamento.empresaId);
     await registrarBaixaFinanceira({
       tituloId: titulo.id,
       contaFinanceiraId,
@@ -629,6 +632,7 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
   }
   await db.update(orcamentos).set({ pago: true, pagoEm, formaPagamento, pagoPor: userId }).where(eq(orcamentos.id, id));
   await db.insert(historicoAlteracoes).values({
+    empresaId: orcamento.empresaId,
     orcamentoId: id,
     usuarioId: userId,
     tipo: "alteracao" as any,
@@ -644,6 +648,7 @@ export async function duplicateOrcamento(id: number) {
   if (!data) throw new Error("Orçamento não encontrado");
   const { orcamento, itens } = data;
   const novoOrc: InsertOrcamento = {
+    empresaId: orcamento.empresaId,
     numero: null,
     clienteId: orcamento.clienteId,
     estado: "rascunho",
@@ -665,6 +670,7 @@ export async function duplicateOrcamento(id: number) {
     pagoPor: null,
   };
   const novosItens: Omit<InsertItemOrcamento, "id">[] = itens.map(i => ({
+    empresaId: orcamento.empresaId,
     orcamentoId: 0, // will be replaced by createOrcamento
     madeiraId: i.madeiraId,
     bitolaId: i.bitolaId,
@@ -697,7 +703,7 @@ export type CriarTituloFinanceiroInput = {
   dataVencimento: Date;
   competencia?: Date | null;
   criadoPor: number;
-  empresaId?: number;
+  empresaId: number;
   clienteId?: number | null;
   fornecedorId?: number | null;
   contraparteNome?: string | null;
@@ -822,47 +828,50 @@ export async function updateContaFinanceira(id: number, data: Partial<InsertCont
   return { success: true };
 }
 
-export async function getOrCreateCategoriaReceitaVendas(userId: number): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const existente = await db.select().from(categoriasFinanceiras)
-    .where(and(eq(categoriasFinanceiras.nome, "Receitas de vendas"), eq(categoriasFinanceiras.ativo, true))).limit(1);
+export async function getOrCreateCategoriaReceitaVendas(userId: number, empresaId: number): Promise<number> {
+const db = await getDb();
+if (!db) throw new Error("Database not available");
+const existente = await db.select().from(categoriasFinanceiras)
+    .where(and(eq(categoriasFinanceiras.nome, "Receitas de vendas"), eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).limit(1);
   if (existente[0]) return existente[0].id;
-  const result = await db.insert(categoriasFinanceiras).values({
-    nome: "Receitas de vendas",
-    tipo: "receita",
-    ativo: true,
-    criadoPor: userId,
-  });
+const result = await db.insert(categoriasFinanceiras).values({
+nome: "Receitas de vendas",
+tipo: "receita",
+ativo: true,
+criadoPor: userId,
+    empresaId,
+});
   return getInsertedId(result as MysqlInsertResult);
 }
 
-async function getOrCreateCategoriaCustoMateriaPrima(tx: any, userId: number): Promise<number> {
-  const existente = await tx.select().from(categoriasFinanceiras)
-    .where(and(eq(categoriasFinanceiras.nome, "Custo de matéria-prima"), eq(categoriasFinanceiras.ativo, true))).limit(1);
+async function getOrCreateCategoriaCustoMateriaPrima(tx: any, userId: number, empresaId: number): Promise<number> {
+const existente = await tx.select().from(categoriasFinanceiras)
+    .where(and(eq(categoriasFinanceiras.nome, "Custo de matéria-prima"), eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).limit(1);
   if (existente[0]) return existente[0].id;
-  const result = await tx.insert(categoriasFinanceiras).values({
-    nome: "Custo de matéria-prima",
-    tipo: "despesa",
-    ativo: true,
-    criadoPor: userId,
-  });
+const result = await tx.insert(categoriasFinanceiras).values({
+nome: "Custo de matéria-prima",
+tipo: "despesa",
+ativo: true,
+criadoPor: userId,
+    empresaId,
+});
   return getInsertedId(result as MysqlInsertResult);
 }
 
-export async function getOrCreateContaFinanceiraPadrao(userId: number): Promise<number> {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const existente = await db.select().from(contasFinanceiras)
-    .where(and(eq(contasFinanceiras.nome, "Caixa geral"), eq(contasFinanceiras.ativa, true))).limit(1);
+export async function getOrCreateContaFinanceiraPadrao(userId: number, empresaId: number): Promise<number> {
+const db = await getDb();
+if (!db) throw new Error("Database not available");
+const existente = await db.select().from(contasFinanceiras)
+    .where(and(eq(contasFinanceiras.nome, "Caixa geral"), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).limit(1);
   if (existente[0]) return existente[0].id;
-  const result = await db.insert(contasFinanceiras).values({
-    nome: "Caixa geral",
-    tipo: "caixa",
-    saldoInicial: "0",
-    ativa: true,
-    criadoPor: userId,
-  });
+const result = await db.insert(contasFinanceiras).values({
+nome: "Caixa geral",
+tipo: "caixa",
+saldoInicial: "0",
+ativa: true,
+criadoPor: userId,
+    empresaId,
+});
   return getInsertedId(result as MysqlInsertResult);
 }
 
@@ -895,7 +904,7 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
     estado: calcularEstadoTitulo({ valorOriginal: input.valorOriginal, dataVencimento: input.dataVencimento }),
     observacoes: input.observacoes ?? null,
     criadoPor: input.criadoPor,
-    empresaId: input.empresaId ?? 1,
+    empresaId: input.empresaId,
   };
   const result = await db.insert(titulosFinanceiros).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
@@ -931,10 +940,11 @@ export async function createAnexoFinanceiro(input: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId ?? 1);
+  if (!input.empresaId) throw new Error("Empresa ativa não informada");
+  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
-  const result = await db.insert(anexosFinanceiros).values(input);
-  return { id: getInsertedId(result as MysqlInsertResult), ...input };
+  const result = await db.insert(anexosFinanceiros).values({ ...input, empresaId: input.empresaId });
+  return { id: getInsertedId(result as MysqlInsertResult), ...input, empresaId: input.empresaId };
 }
 
 export async function removerAnexoFinanceiro(input: { id: number; tituloId: number; empresaId?: number }) {
@@ -1123,7 +1133,7 @@ export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira,
   const valorBaixa = decimalParaNumero(data.valor);
   const saldoAberto = saldoAbertoTitulo(titulo.valorOriginal, titulo.desconto, titulo.juros, titulo.valorBaixado);
   if (valorBaixa <= 0 || valorBaixa > saldoAberto + 0.005) throw new Error("O valor da baixa deve ser maior que zero e não pode exceder o saldo em aberto");
-  const result = await db.insert(baixasFinanceiras).values({ ...data, valor: valorBaixa.toFixed(2) });
+  const result = await db.insert(baixasFinanceiras).values({ ...data, valor: valorBaixa.toFixed(2), empresaId });
   const novoValorBaixado = (decimalParaNumero(titulo.valorBaixado) + valorBaixa).toFixed(2);
   const novoEstado = calcularEstadoTitulo({
     valorOriginal: titulo.valorOriginal,
@@ -1496,7 +1506,7 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
   const existente = await db.select().from(titulosFinanceiros)
     .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, orcamentoId))).limit(1);
   if (existente[0]) return existente[0];
-  const categoriaId = await getOrCreateCategoriaReceitaVendas(userId);
+  const categoriaId = await getOrCreateCategoriaReceitaVendas(userId, orcamento.empresaId);
   const criacao = await createTituloFinanceiro({
     tipo: "receber",
     origem: "orcamento",
@@ -1509,6 +1519,7 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
     dataVencimento: orcamento.dataVencimento ?? dataVencimento ?? new Date(),
     competencia: orcamento.competencia,
     criadoPor: userId,
+    empresaId: orcamento.empresaId,
   });
   return getTituloFinanceiroById(criacao.id);
 }
@@ -1573,23 +1584,23 @@ export async function getConfiguracaoFinanceiraByTaskUid(taskUid: string) {
   return result[0];
 }
 
-export async function configurarProcessamentoFinanceiro(taskUid: string) {
+export async function configurarProcessamentoFinanceiro(taskUid: string, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const existente = await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.id, 1)).limit(1);
+  const existente = await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.empresaId, empresaId)).limit(1);
   if (existente[0]) {
-    await db.update(configuracoesFinanceiras).set({ alertaCronTaskUid: taskUid }).where(eq(configuracoesFinanceiras.id, 1));
+    await db.update(configuracoesFinanceiras).set({ alertaCronTaskUid: taskUid }).where(eq(configuracoesFinanceiras.empresaId, empresaId));
   } else {
-    await db.insert(configuracoesFinanceiras).values({ id: 1, alertaCronTaskUid: taskUid, alertaDiasAntecedencia: 7 });
+    await db.insert(configuracoesFinanceiras).values({ id: empresaId, empresaId, alertaCronTaskUid: taskUid, alertaDiasAntecedencia: 7 });
   }
   return { success: true };
 }
 
-export async function listAlertasFinanceiros() {
+export async function listAlertasFinanceiros(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const agora = new Date();
-  const configuracao = (await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.id, 1)).limit(1))[0];
+  const configuracao = (await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.empresaId, empresaId)).limit(1))[0];
   const diasAntecedencia = configuracao?.alertaDiasAntecedencia ?? 7;
   const alertasAtivos = await db.select({
     id: alertasFinanceiros.id,
@@ -1607,7 +1618,7 @@ export async function listAlertasFinanceiros() {
     tipoTitulo: titulosFinanceiros.tipo,
   }).from(alertasFinanceiros)
     .innerJoin(titulosFinanceiros, eq(alertasFinanceiros.tituloId, titulosFinanceiros.id))
-    .where(eq(alertasFinanceiros.estado, "ativo"))
+    .where(and(eq(alertasFinanceiros.estado, "ativo"), eq(alertasFinanceiros.empresaId, empresaId)))
     .orderBy(desc(alertasFinanceiros.createdAt));
 
   const alertasAtuais = [] as typeof alertasAtivos;
@@ -1638,13 +1649,14 @@ export async function listAlertasFinanceiros() {
 export async function processarAlertasFinanceiros(agora = new Date(), database?: any) {
   const db = database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const configuracao = (await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.id, 1)).limit(1))[0];
-  const diasAntecedencia = configuracao?.alertaDiasAntecedencia ?? 7;
+  const configuracoes = await db.select().from(configuracoesFinanceiras);
+  const diasPorEmpresa = new Map<number, number>(configuracoes.map((configuracao: { empresaId: number; alertaDiasAntecedencia: number }) => [Number(configuracao.empresaId), Number(configuracao.alertaDiasAntecedencia)]));
   const titulos = await db.select().from(titulosFinanceiros);
   let alertasCriados = 0;
   let alertasResolvidos = 0;
 
   for (const titulo of titulos) {
+    const diasAntecedencia = diasPorEmpresa.get(titulo.empresaId) ?? 7;
     const estado = calcularEstadoTitulo({
       valorOriginal: titulo.valorOriginal,
       desconto: titulo.desconto,
@@ -1655,7 +1667,7 @@ export async function processarAlertasFinanceiros(agora = new Date(), database?:
       agora,
     });
     if (estado !== titulo.estado) {
-      await db.update(titulosFinanceiros).set({ estado }).where(eq(titulosFinanceiros.id, titulo.id));
+      await db.update(titulosFinanceiros).set({ estado }).where(and(eq(titulosFinanceiros.id, titulo.id), eq(titulosFinanceiros.empresaId, titulo.empresaId)));
     }
     const tipoAtual = tipoAlertaAtualDoTitulo({
       valorOriginal: titulo.valorOriginal,
@@ -1667,12 +1679,12 @@ export async function processarAlertasFinanceiros(agora = new Date(), database?:
       diasAntecedencia,
       agora,
     });
-    const ativos = await db.select().from(alertasFinanceiros).where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.estado, "ativo")));
+    const ativos = await db.select().from(alertasFinanceiros).where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.empresaId, titulo.empresaId), eq(alertasFinanceiros.estado, "ativo")));
     const plano = planejarAtualizacaoAlertas(tipoAtual, ativos.map((alerta: { tipo: "vence_em_breve" | "vencido" }) => alerta.tipo));
 
     if (plano.resolver.length) {
       await db.update(alertasFinanceiros).set({ estado: "resolvido", resolvidoEm: agora })
-        .where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.estado, "ativo")));
+        .where(and(eq(alertasFinanceiros.tituloId, titulo.id), eq(alertasFinanceiros.empresaId, titulo.empresaId), eq(alertasFinanceiros.estado, "ativo")));
       alertasResolvidos += plano.resolver.length;
     }
     if (plano.criar) {
@@ -1680,7 +1692,7 @@ export async function processarAlertasFinanceiros(agora = new Date(), database?:
       const mensagem = plano.criar === "vencido"
         ? `${titulo.descricao} está vencido desde ${vencimentoFormatado}.`
         : `${titulo.descricao} vence em ${vencimentoFormatado}.`;
-      await db.insert(alertasFinanceiros).values({ tituloId: titulo.id, tipo: plano.criar, mensagem, estado: "ativo" });
+      await db.insert(alertasFinanceiros).values({ empresaId: titulo.empresaId, tituloId: titulo.id, tipo: plano.criar, mensagem, estado: "ativo" });
       alertasCriados += 1;
     }
   }
@@ -1716,6 +1728,7 @@ export async function processarRecorrenciasFinanceiras(agora = new Date(), datab
           dataVencimento: vencimento,
           observacoes: recorrencia.observacoes,
           criadoPor: recorrencia.criadoPor,
+          empresaId: recorrencia.empresaId,
         });
         titulosGerados += 1;
       }
@@ -1863,10 +1876,11 @@ export function getModeloImportacaoPlaquetasCargaCsv() {
 export async function importarPlaquetasCargaCsv(
   input: { conteudo: string; dataCarga: Date; dataVencimento: Date; origem?: string | null; fornecedorId?: number | null; responsavel?: string | null; observacoes?: string | null; fretePorMetroCubico: string },
   criadoPor: number,
+  empresaId: number,
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const codigosExistentes = await db.select({ codigo: plaquetas.codigo }).from(plaquetas);
+  const codigosExistentes = await db.select({ codigo: plaquetas.codigo }).from(plaquetas).where(eq(plaquetas.empresaId, empresaId));
   const preparo = prepararImportacaoPlaquetasCarga({ conteudo: input.conteudo, codigosExistentes });
   if (preparo.erros.length) return { importados: 0, erros: preparo.erros, avisos: preparo.avisos, numero: null as string | null };
   const carga = await criarRomaneioCargaToras({
@@ -1879,6 +1893,7 @@ export async function importarPlaquetasCargaCsv(
     fretePorMetroCubico: input.fretePorMetroCubico,
     plaquetas: preparo.linhas.map(({ codigo, madeiraNome, diametro, comprimento, valorMetroCubico, observacoes }) => ({ codigo, madeiraNome, diametro, comprimento, valorMetroCubico, observacoes })),
     criadoPor,
+    empresaId,
   });
   return { importados: preparo.linhas.length, erros: [] as string[], avisos: preparo.avisos, numero: carga.numero };
 }
@@ -1938,6 +1953,7 @@ export async function criarRomaneioCargaToras(data: {
   fretePorMetroCubico: string;
   plaquetas: PlaquetaCargaEntrada[];
   criadoPor: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1964,6 +1980,7 @@ export async function criarRomaneioCargaToras(data: {
       frete: frete.toFixed(2),
       valorTotal: valorTotal.toFixed(2),
       criadoPor: data.criadoPor,
+      empresaId: data.empresaId,
     });
     const id = getInsertedId(insercao as MysqlInsertResult);
     const numero = `CARGA-${String(id).padStart(6, "0")}`;
@@ -1978,9 +1995,10 @@ export async function criarRomaneioCargaToras(data: {
       observacoes: data.observacoes,
       valorTotal,
       criadoPor: data.criadoPor,
+      empresaId: data.empresaId,
     });
     for (const plaqueta of plaquetasPreparadas) {
-      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico);
+      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico, data.empresaId);
       const insercaoPlaqueta = await tx.insert(plaquetas).values({
         ...identificacao,
         madeiraNome: plaqueta.madeiraNome,
@@ -1996,9 +2014,10 @@ export async function criarRomaneioCargaToras(data: {
         observacoes: plaqueta.observacoes,
         estado: "disponivel",
         criadoPor: data.criadoPor,
+        empresaId: data.empresaId,
       });
       const plaquetaId = getInsertedId(insercaoPlaqueta as MysqlInsertResult);
-      await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${numero}`, criadoPor: data.criadoPor });
+      await tx.insert(movimentacoesPlaquetas).values({ empresaId: data.empresaId, plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${numero}`, criadoPor: data.criadoPor });
     }
     return { id, numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, fretePorMetroCubico, frete, valorTotal };
   });
@@ -2032,7 +2051,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
     for (const plaqueta of existentes) await tx.delete(plaquetas).where(eq(plaquetas.id, plaqueta.id));
 
     for (const plaqueta of plaquetasPreparadas) {
-      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico);
+      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico, carga.empresaId);
       const valores = {
         ...identificacao,
         madeiraNome: plaqueta.madeiraNome,
@@ -2046,8 +2065,8 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
         origem: data.origem?.trim() || null,
         observacoes: plaqueta.observacoes,
       };
-      const plaquetaId = getInsertedId(await tx.insert(plaquetas).values({ ...valores, romaneioCargaId: id, estado: "disponivel", criadoPor: carga.criadoPor }) as MysqlInsertResult);
-      await tx.insert(movimentacoesPlaquetas).values({ plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${carga.numero}`, criadoPor: carga.criadoPor });
+      const plaquetaId = getInsertedId(await tx.insert(plaquetas).values({ ...valores, empresaId: carga.empresaId, romaneioCargaId: id, estado: "disponivel", criadoPor: carga.criadoPor }) as MysqlInsertResult);
+      await tx.insert(movimentacoesPlaquetas).values({ empresaId: carga.empresaId, plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${carga.numero}`, criadoPor: carga.criadoPor });
     }
     await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, dataVencimento: data.dataVencimento, origem: data.origem?.trim() || null, fornecedorId: data.fornecedorId ?? null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), fretePorMetroCubico: fretePorMetroCubico.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
     await sincronizarTituloMateriaPrimaCarga(tx, {
@@ -2060,6 +2079,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
       observacoes: data.observacoes,
       valorTotal,
       criadoPor: carga.criadoPor,
+      empresaId: carga.empresaId,
     });
     return { id, numero: carga.numero, totalPlaquetas: plaquetasPreparadas.length, volumeTotal, valorProdutos, fretePorMetroCubico, frete, valorTotal };
   });
@@ -2075,12 +2095,13 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
   observacoes?: string | null;
   valorTotal: number;
   criadoPor: number;
+  empresaId: number;
 }) {
   const fornecedor = data.fornecedorId
-    ? (await tx.select().from(fornecedores).where(eq(fornecedores.id, data.fornecedorId)).limit(1))[0]
+    ? (await tx.select().from(fornecedores).where(and(eq(fornecedores.id, data.fornecedorId), eq(fornecedores.empresaId, data.empresaId))).limit(1))[0]
     : null;
   if (data.fornecedorId && !fornecedor) throw new Error("Fornecedor não encontrado para a conta a pagar da carga");
-  const categoriaId = await getOrCreateCategoriaCustoMateriaPrima(tx, data.criadoPor);
+  const categoriaId = await getOrCreateCategoriaCustoMateriaPrima(tx, data.criadoPor, data.empresaId);
   const valorOriginal = data.valorTotal.toFixed(2);
   const observacoes = ["Lançamento automático vinculado ao romaneio de carga.", data.observacoes?.trim()].filter(Boolean).join("\n");
   const valores = {
@@ -2098,7 +2119,7 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
     estado: calcularEstadoTitulo({ valorOriginal, dataVencimento: data.dataVencimento }),
     observacoes: observacoes || null,
   };
-  const existente = (await tx.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.romaneioCargaId, data.romaneioId)).limit(1))[0];
+  const existente = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.romaneioCargaId, data.romaneioId), eq(titulosFinanceiros.empresaId, data.empresaId))).limit(1))[0];
   if (existente) {
     if (decimalParaNumero(existente.valorBaixado) > 0) throw new Error("A carga possui uma conta a pagar com baixa registrada e não pode ser alterada");
     await tx.update(titulosFinanceiros).set(valores).where(eq(titulosFinanceiros.id, existente.id));
@@ -2120,6 +2141,7 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
     canceladoEm: null,
     canceladoPor: null,
     criadoPor: data.criadoPor,
+    empresaId: data.empresaId,
   });
   const tituloFinanceiroId = getInsertedId(resultado as MysqlInsertResult);
   await tx.update(romaneiosCargaToras).set({ tituloFinanceiroId }).where(eq(romaneiosCargaToras.id, data.romaneioId));

@@ -124,12 +124,13 @@ export const producaoRouter = router({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
       dataVencimento: dataLocal(input.dataVencimento ?? input.dataCarga),
-    }, ctx.user.id)),
+    }, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(RomaneioCargaSchema).mutation(({ ctx, input }) => db.criarRomaneioCargaToras({
       ...input,
       dataCarga: dataLocal(input.dataCarga),
       dataVencimento: dataLocal(input.dataVencimento ?? input.dataCarga),
       criadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
     })),
     update: protectedProcedure.input(RomaneioCargaSchema.extend({ id: z.number().int().positive() })).mutation(({ input }) => db.atualizarRomaneioCargaToras(input.id, {
       ...input,

@@ -97,7 +97,7 @@ export type InsertRecuperacaoSenha = typeof recuperacoesSenha.$inferInsert;
 
 export const madeiras = mysqlTable("madeiras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 200 }).notNull(),
   descricao: text("descricao"),
   precoM3: decimal("precoM3", { precision: 12, scale: 2 }).notNull().default("0"),
@@ -113,7 +113,7 @@ export type InsertMadeira = typeof madeiras.$inferInsert;
 
 export const bitolas = mysqlTable("bitolas", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   madeiraId: int("madeiraId").notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
   largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
@@ -129,7 +129,7 @@ export type InsertBitola = typeof bitolas.$inferInsert;
 
 export const clientes = mysqlTable("clientes", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 300 }).notNull(),
   contacto: varchar("contacto", { length: 100 }),
   email: varchar("email", { length: 300 }),
@@ -147,7 +147,7 @@ export type InsertCliente = typeof clientes.$inferInsert;
 
 export const orcamentos = mysqlTable("orcamentos", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   numero: varchar("numero", { length: 20 }).unique(),
   clienteId: int("clienteId").notNull(),
   estado: mysqlEnum("estado", ["rascunho", "enviado", "aprovado", "rejeitado"]).notNull().default("rascunho"),
@@ -181,7 +181,7 @@ export type InsertOrcamento = typeof orcamentos.$inferInsert;
 /** Sequência imutável usada exclusivamente para numerar vendas aprovadas. */
 export const sequenciasVendas = mysqlTable("sequenciasVendas", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   orcamentoId: int("orcamentoId").notNull().unique(),
   numero: varchar("numero", { length: 20 }).notNull().unique(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -191,7 +191,7 @@ export type SequenciaVenda = typeof sequenciasVendas.$inferSelect;
 
 export const itensOrcamento = mysqlTable("itensOrcamento", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   orcamentoId: int("orcamentoId").notNull(),
   madeiraId: int("madeiraId"),
   bitolaId: int("bitolaId"),
@@ -212,7 +212,7 @@ export type InsertItemOrcamento = typeof itensOrcamento.$inferInsert;
 
 export const modelosMedidaVenda = mysqlTable("modelosMedidaVenda", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 120 }).notNull(),
   madeiraId: int("madeiraId"),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
@@ -230,7 +230,7 @@ export type InsertModeloMedidaVenda = typeof modelosMedidaVenda.$inferInsert;
 
 export const historicoAlteracoes = mysqlTable("historicoAlteracoes", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   orcamentoId: int("orcamentoId").notNull(),
   usuarioId: int("usuarioId").notNull(),
   tipo: mysqlEnum("tipo", ["criacao", "alteracao", "exclusao", "estado"]).notNull(),
@@ -243,7 +243,7 @@ export type HistoricoAlteracao = typeof historicoAlteracoes.$inferSelect;
 export const empresaConfiguracoes = mysqlTable("empresaConfiguracoes", {
   /** Configuração visual exclusiva da empresa. */
   id: int("id").primaryKey(),
-  empresaId: int("empresaId").notNull().default(1).unique(),
+  empresaId: int("empresaId").notNull().unique(),
   logoKey: varchar("logoKey", { length: 500 }),
   logoUrl: varchar("logoUrl", { length: 700 }),
   logoMimeType: varchar("logoMimeType", { length: 100 }),
@@ -257,7 +257,7 @@ export type InsertEmpresaConfiguracao = typeof empresaConfiguracoes.$inferInsert
 // ─── Produção e estoque de madeira serrada ───
 export const romaneiosCargaToras = mysqlTable("romaneiosCargaToras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   numero: varchar("numero", { length: 30 }).notNull().unique(),
   dataCarga: timestamp("dataCarga").notNull(),
   dataVencimento: timestamp("dataVencimento").notNull(),
@@ -281,7 +281,7 @@ export type RomaneioCargaToras = typeof romaneiosCargaToras.$inferSelect;
 
 export const plaquetas = mysqlTable("plaquetas", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   codigo: varchar("codigo", { length: 80 }).notNull().unique(),
   codigoFisico: varchar("codigoFisico", { length: 80 }),
   situacaoIdentificacao: mysqlEnum("situacaoIdentificacao", ["identificada", "sem_plaqueta", "duplicada"]).notNull().default("identificada"),
@@ -310,7 +310,7 @@ export type InsertPlaqueta = typeof plaquetas.$inferInsert;
 
 export const romaneiosProducao = mysqlTable("romaneiosProducao", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   numero: varchar("numero", { length: 30 }).notNull().unique(),
   plaquetaId: int("plaquetaId"),
   totalToras: int("totalToras").notNull().default(1),
@@ -340,7 +340,7 @@ export type InsertRomaneioProducao = typeof romaneiosProducao.$inferInsert;
 
 export const itensRomaneioToras = mysqlTable("itensRomaneioToras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   romaneioId: int("romaneioId").notNull(),
   plaquetaId: int("plaquetaId").notNull().unique(),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
@@ -355,7 +355,7 @@ export type InsertItemRomaneioTora = typeof itensRomaneioToras.$inferInsert;
 
 export const itensRomaneioProducao = mysqlTable("itensRomaneioProducao", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   romaneioId: int("romaneioId").notNull(),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
@@ -373,7 +373,7 @@ export type InsertItemRomaneioProducao = typeof itensRomaneioProducao.$inferInse
 
 export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   romaneioId: int("romaneioId"),
   itemRomaneioId: int("itemRomaneioId").unique(),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
@@ -394,7 +394,7 @@ export type InsertLotePecasSerradas = typeof lotesPecasSerradas.$inferInsert;
 
 export const movimentacoesPlaquetas = mysqlTable("movimentacoesPlaquetas", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   plaquetaId: int("plaquetaId").notNull(),
   romaneioId: int("romaneioId"),
   tipo: mysqlEnum("tipo", ["entrada", "consumo", "estorno", "ajuste"]).notNull(),
@@ -408,7 +408,7 @@ export type MovimentacaoPlaqueta = typeof movimentacoesPlaquetas.$inferSelect;
 
 export const movimentacoesEstoqueSerrado = mysqlTable("movimentacoesEstoqueSerrado", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   loteId: int("loteId").notNull(),
   itemVendaId: int("itemVendaId"),
   tipo: mysqlEnum("tipo", ["entrada_producao", "saida_entrega", "estorno_entrega", "ajuste"]).notNull(),
@@ -423,7 +423,7 @@ export type MovimentacaoEstoqueSerrado = typeof movimentacoesEstoqueSerrado.$inf
 // ─── Financeiro ───
 export const fornecedores = mysqlTable("fornecedores", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 300 }).notNull(),
   contacto: varchar("contacto", { length: 100 }),
   email: varchar("email", { length: 300 }),
@@ -441,7 +441,7 @@ export type InsertFornecedor = typeof fornecedores.$inferInsert;
 
 export const categoriasFinanceiras = mysqlTable("categoriasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 150 }).notNull(),
   tipo: mysqlEnum("tipo", ["receita", "despesa", "ambos"]).notNull().default("ambos"),
   categoriaPaiId: int("categoriaPaiId"),
@@ -456,7 +456,7 @@ export type InsertCategoriaFinanceira = typeof categoriasFinanceiras.$inferInser
 
 export const contasFinanceiras = mysqlTable("contasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 150 }).notNull(),
   tipo: mysqlEnum("tipo", ["caixa", "banco", "carteira", "outro"]).notNull().default("caixa"),
   saldoInicial: decimal("saldoInicial", { precision: 14, scale: 2 }).notNull().default("0"),
@@ -472,7 +472,7 @@ export type InsertContaFinanceira = typeof contasFinanceiras.$inferInsert;
 
 export const notasDiesel = mysqlTable("notasDiesel", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   numeroNota: varchar("numeroNota", { length: 100 }),
   fornecedorId: int("fornecedorId").notNull(),
   litros: decimal("litros", { precision: 14, scale: 3 }).notNull(),
@@ -490,7 +490,7 @@ export type InsertNotaDiesel = typeof notasDiesel.$inferInsert;
 
 export const abastecimentosDiesel = mysqlTable("abastecimentosDiesel", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   destino: varchar("destino", { length: 200 }).notNull(),
   responsavel: varchar("responsavel", { length: 200 }),
   litros: decimal("litros", { precision: 14, scale: 3 }).notNull(),
@@ -507,7 +507,7 @@ export type InsertAbastecimentoDiesel = typeof abastecimentosDiesel.$inferInsert
 
 export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
   origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "nota_diesel", "manual", "recorrencia"]).notNull().default("manual"),
   chaveImportacao: varchar("chaveImportacao", { length: 120 }).unique(),
@@ -547,7 +547,7 @@ export type InsertTituloFinanceiro = typeof titulosFinanceiros.$inferInsert;
 
 export const anexosFinanceiros = mysqlTable("anexosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   tituloId: int("tituloId").notNull(),
   nomeArquivo: varchar("nomeArquivo", { length: 300 }).notNull(),
   mimeType: varchar("mimeType", { length: 100 }).notNull(),
@@ -564,7 +564,7 @@ export type InsertAnexoFinanceiro = typeof anexosFinanceiros.$inferInsert;
 
 export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   tituloId: int("tituloId").notNull(),
   contaFinanceiraId: int("contaFinanceiraId").notNull(),
   valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
@@ -586,7 +586,7 @@ export type InsertBaixaFinanceira = typeof baixasFinanceiras.$inferInsert;
 
 export const extratosBancarios = mysqlTable("extratosBancarios", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   contaFinanceiraId: int("contaFinanceiraId").notNull(),
   nomeArquivo: varchar("nomeArquivo", { length: 300 }).notNull(),
   formato: mysqlEnum("formato", ["csv", "ofx"]).notNull(),
@@ -602,7 +602,7 @@ export type InsertExtratoBancario = typeof extratosBancarios.$inferInsert;
 
 export const movimentosExtratoBancario = mysqlTable("movimentosExtratoBancario", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   extratoId: int("extratoId").notNull(),
   contaFinanceiraId: int("contaFinanceiraId").notNull(),
   dataMovimento: timestamp("dataMovimento").notNull(),
@@ -625,7 +625,7 @@ export type InsertMovimentoExtratoBancario = typeof movimentosExtratoBancario.$i
 
 export const recorrenciasFinanceiras = mysqlTable("recorrenciasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
   descricao: varchar("descricao", { length: 300 }).notNull(),
   clienteId: int("clienteId"),
@@ -649,7 +649,7 @@ export type InsertRecorrenciaFinanceira = typeof recorrenciasFinanceiras.$inferI
 
 export const configuracoesFinanceiras = mysqlTable("configuracoesFinanceiras", {
   id: int("id").primaryKey(),
-  empresaId: int("empresaId").notNull().default(1).unique(),
+  empresaId: int("empresaId").notNull().unique(),
   alertaDiasAntecedencia: int("alertaDiasAntecedencia").notNull().default(7),
   alertaCronTaskUid: varchar("alertaCronTaskUid", { length: 65 }),
   ultimoProcessamentoEm: timestamp("ultimoProcessamentoEm"),
@@ -661,7 +661,7 @@ export type ConfiguracaoFinanceira = typeof configuracoesFinanceiras.$inferSelec
 
 export const alertasFinanceiros = mysqlTable("alertasFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
-  empresaId: int("empresaId").notNull().default(1),
+  empresaId: int("empresaId").notNull(),
   tituloId: int("tituloId").notNull(),
   tipo: mysqlEnum("tipo", ["vence_em_breve", "vencido"]).notNull(),
   mensagem: varchar("mensagem", { length: 500 }).notNull(),
