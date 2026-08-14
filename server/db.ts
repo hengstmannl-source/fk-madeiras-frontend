@@ -6,7 +6,7 @@ import {
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -17,7 +17,7 @@ import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCa
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
-import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
+import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarRetiradaSerragemTerceiros, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
@@ -2977,6 +2977,64 @@ export async function listSerragensTerceiros(empresaId = 1) {
     volumeProduzido: serragensTerceiros.volumeProduzido, aproveitamento: serragensTerceiros.aproveitamento, responsavel: serragensTerceiros.responsavel,
   }).from(serragensTerceiros).innerJoin(clientes, and(eq(serragensTerceiros.clienteId, clientes.id), eq(clientes.empresaId, empresaId)))
     .where(eq(serragensTerceiros.empresaId, empresaId)).orderBy(desc(serragensTerceiros.dataProducao), desc(serragensTerceiros.id));
+}
+
+export async function getDetalheSerragemTerceiros(id: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const servico = (await db.select({
+    id: serragensTerceiros.id, numero: serragensTerceiros.numero, dataProducao: serragensTerceiros.dataProducao, dataVencimento: serragensTerceiros.dataVencimento,
+    clienteId: serragensTerceiros.clienteId, clienteNome: clientes.nome, responsavel: serragensTerceiros.responsavel, observacoes: serragensTerceiros.observacoes,
+  }).from(serragensTerceiros).innerJoin(clientes, and(eq(serragensTerceiros.clienteId, clientes.id), eq(clientes.empresaId, empresaId)))
+    .where(and(eq(serragensTerceiros.id, id), eq(serragensTerceiros.empresaId, empresaId))).limit(1))[0];
+  if (!servico) throw new Error("Serviço de serragem não encontrado");
+  const lotes = await db.select({
+    id: lotesPecasSerradas.id, madeiraNome: lotesPecasSerradas.madeiraNome, espessura: lotesPecasSerradas.espessura, largura: lotesPecasSerradas.largura,
+    comprimento: lotesPecasSerradas.comprimento, quantidadeProduzida: lotesPecasSerradas.quantidadeProduzida, quantidadeDisponivel: lotesPecasSerradas.quantidadeDisponivel,
+    metrosLineares: lotesPecasSerradas.metrosLineares, volume: lotesPecasSerradas.volume, estado: lotesPecasSerradas.estado,
+  }).from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.empresaId, empresaId), eq(lotesPecasSerradas.serragemTerceirosId, id), eq(lotesPecasSerradas.propriedade, "terceiro"))).orderBy(asc(lotesPecasSerradas.id));
+  const retiradas = await db.select({
+    id: retiradasSerragemTerceiros.id, dataRetirada: retiradasSerragemTerceiros.dataRetirada, responsavel: retiradasSerragemTerceiros.responsavel,
+    observacoes: retiradasSerragemTerceiros.observacoes, loteId: itensRetiradaSerragemTerceiros.loteId, quantidade: itensRetiradaSerragemTerceiros.quantidade,
+    madeiraNome: lotesPecasSerradas.madeiraNome, espessura: lotesPecasSerradas.espessura, largura: lotesPecasSerradas.largura, comprimento: lotesPecasSerradas.comprimento,
+  }).from(retiradasSerragemTerceiros).innerJoin(itensRetiradaSerragemTerceiros, eq(itensRetiradaSerragemTerceiros.retiradaId, retiradasSerragemTerceiros.id))
+    .innerJoin(lotesPecasSerradas, eq(lotesPecasSerradas.id, itensRetiradaSerragemTerceiros.loteId))
+    .where(and(eq(retiradasSerragemTerceiros.empresaId, empresaId), eq(retiradasSerragemTerceiros.serragemId, id))).orderBy(desc(retiradasSerragemTerceiros.dataRetirada), desc(retiradasSerragemTerceiros.id));
+  return { servico, lotes, retiradas };
+}
+
+export async function registrarRetiradaSerragemTerceiros(data: {
+  serragemId: number;
+  dataRetirada: Date;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  itens: Array<{ loteId: number; quantidade: number }>;
+  criadoPor: number;
+  empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const itens = validarRetiradaSerragemTerceiros({ itens: data.itens });
+  return db.transaction(async (tx: any) => {
+    const servico = (await tx.select().from(serragensTerceiros).where(and(eq(serragensTerceiros.id, data.serragemId), eq(serragensTerceiros.empresaId, data.empresaId))).limit(1))[0];
+    if (!servico) throw new Error("Serviço de serragem não encontrado");
+    const lotes = [] as Array<{ lote: typeof lotesPecasSerradas.$inferSelect; quantidade: number }>;
+    for (const item of itens) {
+      const lote = (await tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.id, item.loteId), eq(lotesPecasSerradas.empresaId, data.empresaId), eq(lotesPecasSerradas.serragemTerceirosId, data.serragemId), eq(lotesPecasSerradas.propriedade, "terceiro"), eq(lotesPecasSerradas.clienteProprietarioId, servico.clienteId))).limit(1))[0];
+      if (!lote) throw new Error("Uma das peças selecionadas não pertence a este serviço de serragem");
+      if (item.quantidade > lote.quantidadeDisponivel) throw new Error(`A retirada de ${lote.madeiraNome} excede o saldo disponível de ${lote.quantidadeDisponivel} peça(s)`);
+      lotes.push({ lote, quantidade: item.quantidade });
+    }
+    const insercao = await tx.insert(retiradasSerragemTerceiros).values({ empresaId: data.empresaId, serragemId: data.serragemId, clienteId: servico.clienteId, dataRetirada: data.dataRetirada, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, criadoPor: data.criadoPor });
+    const retiradaId = getInsertedId(insercao as MysqlInsertResult);
+    for (const { lote, quantidade } of lotes) {
+      const saldo = lote.quantidadeDisponivel - quantidade;
+      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: saldo === 0 ? "esgotado" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
+      await tx.insert(itensRetiradaSerragemTerceiros).values({ empresaId: data.empresaId, retiradaId, loteId: lote.id, quantidade });
+      await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId: lote.id, tipo: "retirada_terceiro", quantidade: -quantidade, motivo: `Retirada pelo cliente — ${servico.numero}`, criadoPor: data.criadoPor });
+    }
+    return { id: retiradaId, serragemId: data.serragemId };
+  });
 }
 
 export async function atualizarRomaneioProducao(id: number, data: {

@@ -421,6 +421,32 @@ export const itensSerragemPecas = mysqlTable("itensSerragemPecas", {
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 
+export const retiradasSerragemTerceiros = mysqlTable("retiradasSerragemTerceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  serragemId: int("serragemId").notNull(),
+  clienteId: int("clienteId").notNull(),
+  dataRetirada: timestamp("dataRetirada").notNull(),
+  responsavel: varchar("responsavel", { length: 200 }),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  serragemIndice: index("retiradas_serragem_terceiros_serragem_indice").on(table.empresaId, table.serragemId),
+}));
+
+export const itensRetiradaSerragemTerceiros = mysqlTable("itensRetiradaSerragemTerceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  retiradaId: int("retiradaId").notNull(),
+  loteId: int("loteId").notNull(),
+  quantidade: int("quantidade").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  retiradaIndice: index("itens_retirada_serragem_terceiros_retirada_indice").on(table.empresaId, table.retiradaId),
+  loteIndice: index("itens_retirada_serragem_terceiros_lote_indice").on(table.empresaId, table.loteId),
+}));
+
 export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
@@ -467,7 +493,7 @@ export const movimentacoesEstoqueSerrado = mysqlTable("movimentacoesEstoqueSerra
   empresaId: int("empresaId").notNull(),
   loteId: int("loteId").notNull(),
   itemVendaId: int("itemVendaId"),
-  tipo: mysqlEnum("tipo", ["entrada_producao", "saida_entrega", "estorno_entrega", "ajuste"]).notNull(),
+  tipo: mysqlEnum("tipo", ["entrada_producao", "saida_entrega", "estorno_entrega", "retirada_terceiro", "ajuste"]).notNull(),
   quantidade: int("quantidade").notNull(),
   motivo: text("motivo"),
   criadoPor: int("criadoPor").notNull(),

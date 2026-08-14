@@ -281,6 +281,13 @@
       "when": 1786734875394,
       "tag": "0039_black_captain_stacy",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1786737294248,
+      "tag": "0040_rare_apocalypse",
+      "breakpoints": true
     }
   ]
 }

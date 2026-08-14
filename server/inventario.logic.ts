@@ -11,7 +11,7 @@ export type LoteInventarioSerrado = {
 
 export type MovimentoInventarioSerrado = {
   loteId: number;
-  tipo: "entrada_producao" | "saida_entrega" | "estorno_entrega" | "ajuste";
+  tipo: "entrada_producao" | "saida_entrega" | "estorno_entrega" | "retirada_terceiro" | "ajuste";
   quantidade: number;
   createdAt: Date | string;
 };

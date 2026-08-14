@@ -128,6 +128,14 @@ const SerragemTerceirosSchema = z.object({
   itens: z.array(ItemRomaneioSchema).min(1, "Adicione ao menos uma peça serrada").max(500),
 }).refine((valor) => valor.dataVencimento >= valor.dataProducao, "O vencimento não pode ser anterior à data do serviço");
 
+const RetiradaSerragemTerceirosSchema = z.object({
+  serragemId: z.number().int().positive(),
+  dataRetirada: DataSchema,
+  responsavel: z.string().trim().max(200).nullable().optional(),
+  observacoes: z.string().max(4000).nullable().optional(),
+  itens: z.array(z.object({ loteId: z.number().int().positive(), quantidade: z.number().int().positive() })).min(1, "Selecione ao menos uma peça para retirada"),
+});
+
 export const producaoRouter = router({
   cargas: router({
     list: protectedProcedure.input(FiltrosCargasSchema.optional()).query(({ ctx, input }) => db.listRomaneiosCargaToras({
@@ -192,10 +200,17 @@ export const producaoRouter = router({
   }),
   serragemTerceiros: router({
     list: protectedProcedure.query(({ ctx }) => db.listSerragensTerceiros(ctx.empresaAtiva!.empresa.id)),
+    detalhe: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ ctx, input }) => db.getDetalheSerragemTerceiros(input.id, ctx.empresaAtiva!.empresa.id)),
     criar: protectedProcedure.input(SerragemTerceirosSchema).mutation(({ ctx, input }) => db.criarSerragemTerceiros({
       ...input,
       dataProducao: dataLocal(input.dataProducao),
       dataVencimento: dataLocal(input.dataVencimento),
+      criadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
+    })),
+    registrarRetirada: protectedProcedure.input(RetiradaSerragemTerceirosSchema).mutation(({ ctx, input }) => db.registrarRetiradaSerragemTerceiros({
+      ...input,
+      dataRetirada: dataLocal(input.dataRetirada),
       criadoPor: ctx.user.id,
       empresaId: ctx.empresaAtiva!.empresa.id,
     })),

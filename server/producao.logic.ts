@@ -95,6 +95,18 @@ export function validarSerragemTerceiros(input: {
   return { toras, itens, volumeToras, volumeProduzido, aproveitamento: Number(((volumeProduzido / volumeToras) * 100).toFixed(2)) };
 }
 
+export function validarRetiradaSerragemTerceiros(input: { itens: Array<{ loteId: number; quantidade: number }> }) {
+  if (!input.itens.length) throw new Error("Selecione ao menos uma peça para retirada");
+  const lotes = new Set<number>();
+  return input.itens.map((item) => {
+    if (!Number.isInteger(item.loteId) || item.loteId <= 0) throw new Error("Selecione uma peça válida para retirada");
+    if (!Number.isInteger(item.quantidade) || item.quantidade <= 0) throw new Error("Informe uma quantidade inteira positiva para cada peça retirada");
+    if (lotes.has(item.loteId)) throw new Error("A mesma peça foi informada mais de uma vez na retirada");
+    lotes.add(item.loteId);
+    return item;
+  });
+}
+
 export function validarConfirmacaoRomaneio(input: {
   plaqueta?: PlaquetaParaConfirmacao | null | undefined;
   tora?: ToraParaRomaneio;

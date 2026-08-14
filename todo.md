@@ -370,3 +370,9 @@
 - [x] Registrar peças de terceiros no estoque com identificação visual de proprietário e bloqueio de venda como estoque próprio
 - [x] Permitir informar e cobrar o valor do serviço de serragem sem transferir a propriedade das peças
 - [x] Cobrir fluxo de serviço, propriedade de estoque, cobrança e interface com testes e validação visual
+- [x] Registrar retirada parcial ou total das peças de Serragem de Terceiros pelo cliente, com data e responsável
+- [x] Remover do saldo físico apenas as peças de terceiros efetivamente retiradas e manter histórico rastreável
+- [x] Bloquear retirada acima do saldo disponível e preservar a segregação entre estoque próprio e de terceiros
+- [x] Ajustar o formulário de Serragem de Terceiros para largura responsiva, sem corte horizontal e com grade de uso mais fluido
+- [x] Permitir pesquisar e criar um novo cliente diretamente no seletor do serviço de serragem
+- [x] Cobrir retirada, saldo remanescente, criação de cliente e responsividade com testes e validação visual
