@@ -169,6 +169,7 @@ export const producaoRouter = router({
       atualizadoPor: ctx.user.id,
       empresaId: ctx.empresaAtiva!.empresa.id,
     })),
+    excluir: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.excluirRomaneioProducao(input.id, ctx.empresaAtiva!.empresa.id)),
   }),
   estoque: router({
     resumo: protectedProcedure.query(({ ctx }) => db.getResumoEstoqueSerrado(ctx.empresaAtiva!.empresa.id)),

@@ -21,7 +21,7 @@ vi.mock("@/lib/trpc", () => {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar } } }),
       producao: {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 1, totalDisponiveis: 1, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
-        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
+        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
       },
     },
@@ -162,5 +162,17 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("heading", { name: "Importar peças serradas" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Baixar modelo CSV" })).toBeInTheDocument();
     expect(screen.getByLabelText("Planilha CSV de peças")).toBeInTheDocument();
+  });
+
+  it("pede confirmação antes de remover uma produção e explica a proteção do estoque", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getAllByRole("button", { name: "Excluir" })[0]);
+
+    expect(screen.getByRole("heading", { name: "Remover produção diária?" })).toBeInTheDocument();
+    expect(screen.getByText(/devolve as plaquetas ao estoque/i)).toBeInTheDocument();
+    expect(screen.getByText(/já tiver sido entregue, inventariada ou ajustada/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remover produção" })).toBeInTheDocument();
   });
 });

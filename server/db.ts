@@ -17,7 +17,7 @@ import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCa
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
-import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
+import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
@@ -2986,6 +2986,69 @@ export async function atualizarRomaneioProducao(id: number, data: {
       });
     }
     return { id, numero: romaneio.numero, ...calculo };
+  });
+}
+
+export async function excluirRomaneioProducao(id: number, empresaId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const romaneio = (await tx.select().from(romaneiosProducao)
+      .where(and(eq(romaneiosProducao.id, id), eq(romaneiosProducao.empresaId, empresaId))).limit(1))[0];
+    if (!romaneio) throw new Error("Romaneio de produção não encontrado");
+
+    const lotes = await tx.select().from(lotesPecasSerradas)
+      .where(and(eq(lotesPecasSerradas.romaneioId, id), eq(lotesPecasSerradas.empresaId, empresaId)));
+    for (const lote of lotes) {
+      const movimentoPosterior = (await tx.select({ id: movimentacoesEstoqueSerrado.id }).from(movimentacoesEstoqueSerrado)
+        .where(and(eq(movimentacoesEstoqueSerrado.loteId, lote.id), ne(movimentacoesEstoqueSerrado.tipo, "entrada_producao"))).limit(1))[0];
+      validarExclusaoRomaneioProducao({
+        possuiMovimentacoesPosteriores: Boolean(movimentoPosterior),
+        saldoDasPecasFoiAlterado: Number(lote.quantidadeDisponivel) !== Number(lote.quantidadeProduzida),
+      });
+    }
+
+    const toras = await tx.select({
+      plaquetaId: itensRomaneioToras.plaquetaId,
+      madeiraNome: itensRomaneioToras.madeiraNome,
+      diametro: itensRomaneioToras.diametro,
+      comprimento: itensRomaneioToras.comprimento,
+      volume: itensRomaneioToras.volume,
+      plaqueta: plaquetas,
+    }).from(itensRomaneioToras)
+      .innerJoin(plaquetas, and(eq(itensRomaneioToras.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId)))
+      .where(and(eq(itensRomaneioToras.romaneioId, id), eq(itensRomaneioToras.empresaId, empresaId)));
+
+    for (const tora of toras) {
+      const entradaImediata = tora.plaqueta.origem === "Produção — entrada imediata"
+        && tora.plaqueta.observacoes === "Entrada e consumo imediato no romaneio diário";
+      if (entradaImediata) {
+        await tx.delete(movimentacoesPlaquetas).where(eq(movimentacoesPlaquetas.plaquetaId, tora.plaquetaId));
+        await tx.delete(plaquetas).where(and(eq(plaquetas.id, tora.plaquetaId), eq(plaquetas.empresaId, empresaId)));
+        continue;
+      }
+      await tx.delete(movimentacoesPlaquetas).where(and(
+        eq(movimentacoesPlaquetas.plaquetaId, tora.plaquetaId),
+        eq(movimentacoesPlaquetas.romaneioId, id),
+      ));
+      await tx.update(plaquetas).set({
+        madeiraNome: tora.madeiraNome,
+        diametro: tora.diametro,
+        comprimento: tora.comprimento,
+        volumeInicial: tora.volume,
+        volumeDisponivel: tora.volume,
+        estado: "disponivel",
+      }).where(and(eq(plaquetas.id, tora.plaquetaId), eq(plaquetas.empresaId, empresaId)));
+    }
+
+    for (const lote of lotes) {
+      await tx.delete(movimentacoesEstoqueSerrado).where(eq(movimentacoesEstoqueSerrado.loteId, lote.id));
+    }
+    await tx.delete(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.romaneioId, id), eq(lotesPecasSerradas.empresaId, empresaId)));
+    await tx.delete(itensRomaneioProducao).where(and(eq(itensRomaneioProducao.romaneioId, id), eq(itensRomaneioProducao.empresaId, empresaId)));
+    await tx.delete(itensRomaneioToras).where(and(eq(itensRomaneioToras.romaneioId, id), eq(itensRomaneioToras.empresaId, empresaId)));
+    await tx.delete(romaneiosProducao).where(and(eq(romaneiosProducao.id, id), eq(romaneiosProducao.empresaId, empresaId)));
+    return { id, numero: romaneio.numero };
   });
 }
 

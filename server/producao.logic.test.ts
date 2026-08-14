@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio } from "./producao.logic";
+import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao } from "./producao.logic";
 
 describe("regras de produção", () => {
   it("converte bitolas legadas de venda de milímetros para centímetros antes da baixa", () => {
@@ -50,7 +50,13 @@ describe("regras de produção", () => {
       itens: [{ madeiraNome: "Piqui", espessura: 3, largura: 20, comprimento: 2, quantidade: 1 }],
       permitirPlaquetasConsumidas: true,
     });
-    expect(resultado).toMatchObject({ totalToras: 1, volumeTora: 1, volumeProduzido: 0.012, aproveitamento: 1.2 });
+    expect(resultado).toMatchObject({ totalPecas: 1, volumeTora: 1, volumeProduzido: 0.012, aproveitamento: 1.2 });
+  });
+
+  it("permite excluir produção sem movimentações posteriores e bloqueia peças já movimentadas", () => {
+    expect(() => validarExclusaoRomaneioProducao({ possuiMovimentacoesPosteriores: false, saldoDasPecasFoiAlterado: false })).not.toThrow();
+    expect(() => validarExclusaoRomaneioProducao({ possuiMovimentacoesPosteriores: true, saldoDasPecasFoiAlterado: false })).toThrow(/peças já movimentadas/i);
+    expect(() => validarExclusaoRomaneioProducao({ possuiMovimentacoesPosteriores: false, saldoDasPecasFoiAlterado: true })).toThrow(/peças já movimentadas/i);
   });
 
   it("calcula o volume cilíndrico da tora pelo diâmetro em centímetros e comprimento em metros", () => {

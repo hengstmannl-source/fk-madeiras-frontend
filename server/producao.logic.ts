@@ -117,6 +117,15 @@ export function validarConfirmacaoRomaneio(input: {
   };
 }
 
+export function validarExclusaoRomaneioProducao(input: {
+  possuiMovimentacoesPosteriores: boolean;
+  saldoDasPecasFoiAlterado: boolean;
+}) {
+  if (input.possuiMovimentacoesPosteriores || input.saldoDasPecasFoiAlterado) {
+    throw new Error("Esta produção diária possui peças já movimentadas no estoque e não pode ser removida. Estorne as saídas ou os ajustes vinculados antes de excluir o romaneio.");
+  }
+}
+
 export function agruparEstoquePecas(lotes: Array<{
   madeiraNome: string;
   espessura: string | number;

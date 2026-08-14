@@ -360,3 +360,7 @@
 - [x] Corrigir a exclusão de nota de diesel para reverter ou preservar de forma explícita os reflexos no tanque e no Fluxo de Caixa
 - [x] Informar claramente na interface quando uma nota não puder ser excluída por já possuir abastecimentos vinculados
 - [x] Cobrir a exclusão de nota de diesel sem abastecimentos e o bloqueio seguro quando houver movimentação de tanque vinculada
+- [x] Permitir remover uma Produção Diária quando suas peças ainda não tiverem sido movimentadas
+- [x] Reverter o consumo das plaquetas e excluir as peças geradas ao remover um romaneio de produção
+- [x] Bloquear a remoção de Produção Diária com peças já vinculadas a vendas, inventário ou outros movimentos de estoque
+- [x] Adicionar confirmação, mensagens de bloqueio e testes para a exclusão segura de Produção Diária
