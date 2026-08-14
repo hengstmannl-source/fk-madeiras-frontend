@@ -309,11 +309,11 @@
 - [x] Migrar os dados atuais para o ambiente inicial da FK Madeiras sem perda de histórico
 - [x] Associar todos os registos operacionais, financeiros e documentos à empresa ativa
 - [x] Validar todas as consultas e mutações no servidor pela associação empresa-utilizador
-- [ ] Implementar sessão própria, entrada, primeiro acesso e recuperação de senha
+- [x] Implementar sessão própria, entrada e primeiro acesso; adiar a recuperação automática de senha conforme solicitado
 - [x] Criar perfis Proprietário, Administrador, Financeiro, Vendas, Produção/Estoque e Consulta
 - [x] Criar a tela profissional de login e a área de colaboradores com convites
 - [x] Cobrir o isolamento de empresas, papéis e login com testes automatizados e validação visual
-- [ ] Configurar o serviço de e-mail transacional para links seguros de recuperação de senha
-- [ ] Enviar e validar links únicos, temporários e não reutilizáveis para redefinição de senha
-- [ ] Cobrir a recuperação por e-mail com testes e validação visual antes da publicação
-- [ ] Retomar futuramente a recuperação automática de senha por e-mail, após configurar um remetente transacional válido
+- [x] Adiar a configuração do serviço de e-mail transacional para recuperação de senha, conforme solicitado
+- [x] Adiar o envio de links de redefinição de senha para uma próxima etapa, conforme solicitado
+- [x] Adiar a cobertura de recuperação por e-mail até a ativação futura do remetente transacional
+- [x] Registrar a recuperação automática de senha por e-mail como melhoria futura a retomar após configurar remetente válido
