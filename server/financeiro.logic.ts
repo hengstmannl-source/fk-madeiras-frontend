@@ -102,6 +102,36 @@ export function validarValorDosCheques(valorBaixa: string | number, valoresChequ
   return valorChequesEmCentavos / 100;
 }
 
+/** Impede alterações que comprometam uma baixa já conciliada ou o saldo realizado do título. */
+export function validarEdicaoTituloFinanceiro(input: {
+  estado: EstadoTituloFinanceiro;
+  possuiBaixaConciliada: boolean;
+  tipoAtual: "receber" | "pagar";
+  novoTipo: "receber" | "pagar";
+  descricao: string;
+  valorOriginal: string | number;
+  desconto?: string | number;
+  juros?: string | number;
+  valorBaixado: string | number;
+}) {
+  if (input.estado === "cancelado") throw new Error("Lançamentos cancelados não podem ser editados");
+  if (input.possuiBaixaConciliada) throw new Error("Desconcilie o lançamento bancário antes de editar este título");
+  if (!input.descricao.trim()) throw new Error("Informe uma descrição para o lançamento");
+  if (decimalParaNumero(input.valorOriginal) <= 0) throw new Error("O valor do título deve ser maior que zero");
+  if (valorLiquidoTitulo(input.valorOriginal, input.desconto, input.juros) < decimalParaNumero(input.valorBaixado)) {
+    throw new Error("O valor líquido do lançamento não pode ser menor que o total já baixado");
+  }
+  if (input.tipoAtual !== input.novoTipo && decimalParaNumero(input.valorBaixado) > CENTAVOS_EPSILON) {
+    throw new Error("Não é possível alterar o tipo de um lançamento que já possui baixas");
+  }
+}
+
+/** Impede exclusões enquanto houver vínculo de conciliação bancária ativo. */
+export function validarExclusaoTituloFinanceiro(input: { estado: EstadoTituloFinanceiro; possuiBaixaConciliada: boolean }) {
+  if (input.estado === "cancelado") throw new Error("Este lançamento já foi excluído");
+  if (input.possuiBaixaConciliada) throw new Error("Desconcilie o lançamento bancário antes de excluir este título");
+}
+
 function inicioDoDia(data: Date): Date {
   const resultado = new Date(data);
   resultado.setHours(0, 0, 0, 0);

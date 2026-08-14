@@ -337,3 +337,9 @@
 - [x] Permitir excluir contas financeiras sem baixas, extratos ou demais movimentações vinculadas
 - [x] Bloquear com mensagem clara a exclusão de contas que possuam movimentações
 - [x] Cobrir data de compensação, alertas e exclusão segura de contas com testes e validação visual
+- [x] Permitir editar lançamentos em aberto, pagos e recebidos, preservando consistência de títulos e baixas
+- [x] Permitir excluir lançamentos em aberto, pagos e recebidos com confirmação explícita
+- [x] Impedir edição ou exclusão de lançamentos conciliados até a desconciliação bancária correspondente
+- [x] Exibir instrução clara para desconciliar antes de editar ou excluir itens vinculados ao extrato
+- [x] Atualizar listas de pagar, receber, pagos e recebidos com ações e diálogos de edição e exclusão
+- [x] Cobrir alterações, exclusões, bloqueios por conciliação e validação visual com testes automatizados

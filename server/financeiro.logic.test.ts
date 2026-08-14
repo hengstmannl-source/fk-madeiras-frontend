@@ -12,6 +12,8 @@ import {
   proximoVencimento,
   saldoAbertoTitulo,
   tipoAlertaAtualDoTitulo,
+  validarEdicaoTituloFinanceiro,
+  validarExclusaoTituloFinanceiro,
   validarValorDosCheques,
 } from "./financeiro.logic";
 
@@ -56,6 +58,41 @@ describe("regras financeiras", () => {
     expect(validarValorDosCheques("250,00", ["100,15", "149,85"])).toBe(250);
     expect(() => validarValorDosCheques("250,00", ["100,15", "149,84"])).toThrow("A soma dos cheques deve ser exatamente igual ao valor da baixa");
     expect(() => validarValorDosCheques("0", ["0"])).toThrow("O valor da baixa deve ser maior que zero");
+  });
+
+  it("permite editar lançamento não conciliado sem reduzir o valor já baixado", () => {
+    expect(() => validarEdicaoTituloFinanceiro({
+      estado: "parcial",
+      possuiBaixaConciliada: false,
+      tipoAtual: "receber",
+      novoTipo: "receber",
+      descricao: "Recebimento revisado",
+      valorOriginal: "150,00",
+      desconto: "0",
+      juros: "0",
+      valorBaixado: "50,00",
+    })).not.toThrow();
+  });
+
+  it("bloqueia a edição de lançamento conciliado e alterações incompatíveis com baixas", () => {
+    const base = {
+      estado: "parcial" as const,
+      possuiBaixaConciliada: false,
+      tipoAtual: "receber" as const,
+      novoTipo: "receber" as const,
+      descricao: "Recebimento",
+      valorOriginal: "100,00",
+      valorBaixado: "50,00",
+    };
+    expect(() => validarEdicaoTituloFinanceiro({ ...base, possuiBaixaConciliada: true })).toThrow("Desconcilie o lançamento bancário antes de editar este título");
+    expect(() => validarEdicaoTituloFinanceiro({ ...base, valorOriginal: "40,00" })).toThrow("O valor líquido do lançamento não pode ser menor que o total já baixado");
+    expect(() => validarEdicaoTituloFinanceiro({ ...base, novoTipo: "pagar" })).toThrow("Não é possível alterar o tipo de um lançamento que já possui baixas");
+  });
+
+  it("permite excluir lançamento não conciliado e exige desconciliação quando houver vínculo bancário", () => {
+    expect(() => validarExclusaoTituloFinanceiro({ estado: "quitado", possuiBaixaConciliada: false })).not.toThrow();
+    expect(() => validarExclusaoTituloFinanceiro({ estado: "quitado", possuiBaixaConciliada: true })).toThrow("Desconcilie o lançamento bancário antes de excluir este título");
+    expect(() => validarExclusaoTituloFinanceiro({ estado: "cancelado", possuiBaixaConciliada: false })).toThrow("Este lançamento já foi excluído");
   });
 
   it("prioriza cheques pela proximidade da data de compensação", () => {

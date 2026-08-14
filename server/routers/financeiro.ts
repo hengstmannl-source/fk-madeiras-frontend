@@ -278,6 +278,18 @@ export const financeiroRouter = router({
       })
     )),
 
+    update: protectedProcedure.input(LancamentoManualSchema.extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => {
+      const { id, ...dados } = input;
+      return db.atualizarTituloFinanceiro(id, {
+        ...dados,
+        valorOriginal: dados.valorOriginal.replace(",", "."),
+        desconto: dados.desconto?.replace(",", "."),
+        juros: dados.juros?.replace(",", "."),
+        dataEmissao: dataLocal(dados.dataEmissao),
+        dataVencimento: dataLocal(dados.dataVencimento),
+      }, ctx.empresaAtiva!.empresa.id);
+    }),
+
     baixas: protectedProcedure.input(z.object({ tituloId: z.number().int().positive() })).query(({ ctx, input }) => db.listBaixasFinanceiras(input.tituloId, ctx.empresaAtiva!.empresa.id)),
     baixar: protectedProcedure.input(z.object({
       tituloId: z.number().int().positive(),
@@ -311,7 +323,9 @@ export const financeiroRouter = router({
       motivo: z.string().trim().min(3, "Informe o motivo do estorno").max(2000),
     })).mutation(({ ctx, input }) => db.estornarBaixaFinanceira(input.id, ctx.user.id, input.motivo, undefined, ctx.empresaAtiva!.empresa.id)),
     cancelar: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
-      .mutation(({ ctx, input }) => db.cancelarTituloFinanceiro(input.id, ctx.user.id)),
+      .mutation(({ ctx, input }) => db.cancelarTituloFinanceiro(input.id, ctx.user.id, undefined, ctx.empresaAtiva!.empresa.id)),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
+      .mutation(({ ctx, input }) => db.excluirTituloFinanceiro(input.id, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
   }),
 
   anexos: router({

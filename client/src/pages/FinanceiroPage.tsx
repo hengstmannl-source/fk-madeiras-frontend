@@ -88,8 +88,10 @@ function formatarDataFinanceira(value: string | Date): string {
   return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(value));
 }
 
-function dataChaveFinanceira(value: string | Date): string {
-  return new Date(value).toISOString().slice(0, 10);
+function dataChaveFinanceira(value?: string | Date | null): string {
+  if (!value) return "";
+  const data = new Date(value);
+  return Number.isNaN(data.getTime()) ? "" : data.toISOString().slice(0, 10);
 }
 
 function valorTotalTitulo(titulo: any): number {
@@ -138,9 +140,9 @@ export default function FinanceiroPage() {
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false);
   const [tituloSelecionado, setTituloSelecionado] = useState<any>(null);
   const [tituloParaEditar, setTituloParaEditar] = useState<any>(null);
-  const [vencimentoEditado, setVencimentoEditado] = useState(hoje());
+  const [lancamentoEditado, setLancamentoEditado] = useState(valorInicialLancamento);
   const [tituloBaixas, setTituloBaixas] = useState<any>(null);
-  const [tituloParaCancelar, setTituloParaCancelar] = useState<any>(null);
+  const [tituloParaExcluir, setTituloParaExcluir] = useState<any>(null);
   const [baixaParaEstornar, setBaixaParaEstornar] = useState<any>(null);
   const [contaParaExcluir, setContaParaExcluir] = useState<any>(null);
   const [motivoEstorno, setMotivoEstorno] = useState("");
@@ -214,7 +216,7 @@ export default function FinanceiroPage() {
   const clientes = trpc.cliente.list.useQuery();
   const criarLancamento = trpc.financeiro.titulos.createManual.useMutation();
   const criarLancamentoParcelado = trpc.financeiro.titulos.createParcelado.useMutation();
-  const atualizarAgendamento = trpc.financeiro.titulos.updateAgendamento.useMutation();
+  const atualizarTitulo = trpc.financeiro.titulos.update.useMutation();
   const registrarBaixa = trpc.financeiro.titulos.baixar.useMutation();
   const criarFornecedor = trpc.financeiro.fornecedores.create.useMutation();
   const criarCategoria = trpc.financeiro.categorias.create.useMutation();
@@ -224,7 +226,7 @@ export default function FinanceiroPage() {
   const criarRecorrencia = trpc.financeiro.recorrencias.create.useMutation();
   const conciliarBaixa = trpc.financeiro.titulos.conciliarBaixa.useMutation();
   const estornarBaixa = trpc.financeiro.titulos.estornarBaixa.useMutation();
-  const cancelarTitulo = trpc.financeiro.titulos.cancelar.useMutation();
+  const excluirTitulo = trpc.financeiro.titulos.delete.useMutation();
   const importarLancamentos = trpc.financeiro.intercambios.importarLancamentosCsv.useMutation();
   const prepararImportacaoFornecedores = trpc.financeiro.fornecedores.prepararImportacaoCsv.useMutation();
   const importarFornecedores = trpc.financeiro.fornecedores.importarCsv.useMutation();
@@ -448,14 +450,46 @@ export default function FinanceiroPage() {
 
   const abrirEdicaoAgendamento = (titulo: any) => {
     setTituloParaEditar(titulo);
-    setVencimentoEditado(new Date(titulo.dataVencimento).toISOString().slice(0, 10));
+    setLancamentoEditado({
+      tipo: titulo.tipo,
+      descricao: titulo.descricao ?? "",
+      categoriaId: titulo.categoriaId ? String(titulo.categoriaId) : "",
+      valorOriginal: String(titulo.valorOriginal ?? ""),
+      dataEmissao: dataChaveFinanceira(titulo.dataEmissao),
+      dataVencimento: dataChaveFinanceira(titulo.dataVencimento),
+      clienteId: titulo.clienteId ? String(titulo.clienteId) : "",
+      fornecedorId: titulo.fornecedorId ? String(titulo.fornecedorId) : "",
+      contraparteNome: titulo.contraparteNome ?? "",
+      desconto: String(titulo.desconto ?? "0"),
+      juros: String(titulo.juros ?? "0"),
+      parcelar: false,
+      quantidadeParcelas: "2",
+      observacoes: titulo.observacoes ?? "",
+    });
   };
 
   const salvarAgendamento = () => {
-    if (!tituloParaEditar || !vencimentoEditado) return;
-    atualizarAgendamento.mutate({ id: tituloParaEditar.id, dataVencimento: vencimentoEditado }, {
+    if (!tituloParaEditar || !lancamentoEditado.categoriaId) {
+      toast.error("Selecione uma categoria financeira");
+      return;
+    }
+    atualizarTitulo.mutate({
+      id: tituloParaEditar.id,
+      tipo: lancamentoEditado.tipo,
+      descricao: lancamentoEditado.descricao,
+      categoriaId: Number(lancamentoEditado.categoriaId),
+      valorOriginal: lancamentoEditado.valorOriginal,
+      dataEmissao: lancamentoEditado.dataEmissao,
+      dataVencimento: lancamentoEditado.dataVencimento,
+      clienteId: lancamentoEditado.clienteId ? Number(lancamentoEditado.clienteId) : null,
+      fornecedorId: lancamentoEditado.fornecedorId ? Number(lancamentoEditado.fornecedorId) : null,
+      contraparteNome: lancamentoEditado.contraparteNome || null,
+      desconto: lancamentoEditado.desconto || "0",
+      juros: lancamentoEditado.juros || "0",
+      observacoes: lancamentoEditado.observacoes || null,
+    }, {
       onSuccess: () => {
-        toast.success("Vencimento atualizado com sucesso");
+        toast.success("Lançamento atualizado com sucesso");
         setTituloParaEditar(null);
         invalidarFinanceiro();
       },
@@ -485,12 +519,12 @@ export default function FinanceiroPage() {
     });
   };
 
-  const confirmarCancelamento = () => {
-    if (!tituloParaCancelar) return;
-    cancelarTitulo.mutate({ id: tituloParaCancelar.id }, {
+  const confirmarExclusaoTitulo = () => {
+    if (!tituloParaExcluir) return;
+    excluirTitulo.mutate({ id: tituloParaExcluir.id }, {
       onSuccess: () => {
-        toast.success(`${tituloParaCancelar.tipo === "receber" ? "Conta a receber" : "Conta a pagar"} cancelada com sucesso`);
-        setTituloParaCancelar(null);
+        toast.success("Lançamento excluído com sucesso");
+        setTituloParaExcluir(null);
         invalidarFinanceiro();
       },
       onError: (erro) => toast.error(erro.message),
@@ -695,7 +729,7 @@ export default function FinanceiroPage() {
           <div className="border-b bg-muted/20 px-5 py-4"><div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h2 className="font-semibold">Gestão de títulos</h2><p className="text-xs text-muted-foreground mt-0.5">Organize compromissos, recebimentos e históricos em listas operacionais.</p></div><div className="flex flex-wrap items-center gap-2"><Button size="sm" variant="outline" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><FileSpreadsheet className="mr-1.5 h-3.5 w-3.5" />Modelo CSV</Button><Button size="sm" variant="outline" onClick={exportarLancamentos} disabled={exportacaoLancamentos.isFetching}><Download className="mr-1.5 h-3.5 w-3.5" />Exportar CSV</Button><Button size="sm" variant="outline" onClick={exportarListaFiltradaPdf} disabled={!titulosExibidos.length}><Download className="mr-1.5 h-3.5 w-3.5" />Exportar PDF</Button></div></div><div className="mt-4 flex gap-2 overflow-x-auto pb-1">{opcoesVisaoFinanceira.map((item) => <button key={item.id} onClick={() => setVisaoFinanceira(item.id)} className={`min-w-max rounded-lg border px-3 py-2 text-left transition-colors ${visaoFinanceira === item.id ? "border-primary bg-primary text-primary-foreground" : "border-border bg-white text-muted-foreground hover:border-primary/40 hover:text-foreground"}`}><span className="block text-sm font-semibold">{item.label}</span><span className={`block text-[11px] ${visaoFinanceira === item.id ? "text-primary-foreground/80" : "text-muted-foreground"}`}>{item.descricao}</span></button>)}</div></div>
           <div className="grid gap-3 border-b px-5 py-4 sm:grid-cols-2 lg:grid-cols-5"><div className="space-y-1 lg:col-span-2"><Label htmlFor="filtro-descricao" className="text-xs">Descrição ou contraparte</Label><Input id="filtro-descricao" value={filtrosFinanceiros.descricao} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, descricao: event.target.value })} placeholder="Pesquisar por descrição" /></div><div className="space-y-1"><Label htmlFor="filtro-valor-minimo" className="text-xs">Valor mínimo</Label><Input id="filtro-valor-minimo" inputMode="decimal" value={filtrosFinanceiros.valorMinimo} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, valorMinimo: event.target.value })} placeholder="R$ 0,00" /></div><div className="space-y-1"><Label htmlFor="filtro-valor-maximo" className="text-xs">Valor máximo</Label><Input id="filtro-valor-maximo" inputMode="decimal" value={filtrosFinanceiros.valorMaximo} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, valorMaximo: event.target.value })} placeholder="Sem limite" /></div><div className="flex items-end"><Button variant="ghost" className="w-full" onClick={() => setFiltrosFinanceiros(valorInicialFiltrosFinanceiros())}>Limpar filtros</Button></div><div className="space-y-1"><Label htmlFor="filtro-data-inicio" className="text-xs">Data inicial</Label><Input id="filtro-data-inicio" type="date" value={filtrosFinanceiros.dataInicio} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, dataInicio: event.target.value })} /></div><div className="space-y-1"><Label htmlFor="filtro-data-fim" className="text-xs">Data final</Label><Input id="filtro-data-fim" type="date" value={filtrosFinanceiros.dataFim} onChange={(event) => setFiltrosFinanceiros({ ...filtrosFinanceiros, dataFim: event.target.value })} /></div><div className="flex items-end lg:col-span-3"><p className="text-xs text-muted-foreground">O período considera o vencimento dos títulos. Nos históricos, use-o para consultar as contas liquidadas por vencimento.</p></div></div>
           <div className="flex items-center justify-between gap-3 border-b bg-muted/10 px-5 py-3"><div><p className="font-semibold text-sm">{tituloLancamentos.label}</p><p className="text-xs text-muted-foreground">{titulosExibidos.length} títulos encontrados</p></div>{titulosHoje.length > 0 && <Badge className={visaoFinanceira === "pagar" ? "bg-amber-100 text-amber-900 hover:bg-amber-100" : "bg-emerald-100 text-emerald-900 hover:bg-emerald-100"}>{titulosHoje.length} {visaoFinanceira === "pagar" ? "vencem" : "recebem"} hoje</Badge>}</div>
-          {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : <TabelaTitulosFinanceiros titulos={titulosExibidos} historico={visaoFinanceira === "pagas" || visaoFinanceira === "recebidas"} tipo={visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? "pagar" : "receber"} onBaixas={setTituloBaixas} onEditar={abrirEdicaoAgendamento} onBaixar={abrirBaixa} onCancelar={setTituloParaCancelar} />}
+          {carregando ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />Carregando financeiro...</div> : <TabelaTitulosFinanceiros titulos={titulosExibidos} historico={visaoFinanceira === "pagas" || visaoFinanceira === "recebidas"} tipo={visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? "pagar" : "receber"} onBaixas={setTituloBaixas} onEditar={abrirEdicaoAgendamento} onBaixar={abrirBaixa} onExcluir={setTituloParaExcluir} />}
         </section>
       )}
 
@@ -723,7 +757,7 @@ export default function FinanceiroPage() {
       <Dialog open={importacaoAberta} onOpenChange={(aberto) => { setImportacaoAberta(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); } }}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Importar lançamentos financeiros</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Importação segura por CSV</p><p className="mt-1 text-sky-900">Use o modelo disponibilizado. O sistema valida todo o arquivo antes de gravar: se houver alguma linha inválida ou referência duplicada, nenhum lançamento será criado.</p></div><div className="space-y-2"><Label htmlFor="arquivo-importacao">Arquivo CSV *</Label><Input id="arquivo-importacao" aria-label="Arquivo CSV para importação" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); }} /><p className="text-xs text-muted-foreground">Limite de 1.000 lançamentos e 1 MB por arquivo.</p></div>{arquivoImportacao && <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="truncate">{arquivoImportacao.name}</span></div>}{errosImportacao.length > 0 && <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><p className="font-medium">O arquivo não foi importado:</p>{errosImportacao.map((erro, indice) => <p key={`${erro}-${indice}`} className="text-xs">• {erro}</p>)}</div>}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><Button variant="ghost" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><Download className="mr-1.5 h-4 w-4" />Baixar modelo</Button><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setImportacaoAberta(false)} disabled={importarLancamentos.isPending}>Cancelar</Button><Button onClick={importarArquivo} disabled={!arquivoImportacao || importarLancamentos.isPending}>{importarLancamentos.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Importar arquivo</Button></div></div></div></DialogContent></Dialog>
       <Dialog open={importacaoFornecedoresAberta} onOpenChange={(aberto) => { setImportacaoFornecedoresAberta(aberto); if (!aberto) limparImportacaoFornecedores(); }}><DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>Importar fornecedores por planilha</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Importação segura com pré-visualização</p><p className="mt-1 text-sky-900">Use o modelo CSV. Todos os dados e duplicidades são validados antes da confirmação.</p></div><div className="space-y-2"><Label htmlFor="arquivo-fornecedores">Arquivo CSV *</Label><Input id="arquivo-fornecedores" aria-label="Arquivo CSV de fornecedores" type="file" accept=".csv,text/csv" onChange={(evento) => selecionarArquivoFornecedores(evento.target.files?.[0] ?? null)} /><p className="text-xs text-muted-foreground">Limite de 1.000 fornecedores e 1 MB por arquivo.</p></div>{arquivoFornecedores && <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="truncate">{arquivoFornecedores.name}</span>{prepararImportacaoFornecedores.isPending && <Loader2 className="ml-auto h-4 w-4 animate-spin" />}</div>}{preparoFornecedores?.erros.length ? <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><p className="font-medium">Corrija a planilha antes de importar:</p>{preparoFornecedores.erros.map((erro, indice) => <p key={`${erro}-${indice}`} className="text-xs">• {erro}</p>)}</div> : null}{preparoFornecedores && !preparoFornecedores.erros.length ? <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3"><p className="text-sm font-medium text-emerald-900">{preparoFornecedores.linhas.length} fornecedor(es) prontos para importar</p><div className="mt-2 max-h-40 overflow-y-auto rounded border bg-background"><Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Contacto</TableHead><TableHead>E-mail</TableHead><TableHead>Documento</TableHead></TableRow></TableHeader><TableBody>{preparoFornecedores.linhas.slice(0, 20).map((linha) => <TableRow key={linha.numeroLinha}><TableCell className="font-medium">{linha.nome}</TableCell><TableCell>{linha.contacto || "—"}</TableCell><TableCell>{linha.email || "—"}</TableCell><TableCell>{linha.documento || "—"}</TableCell></TableRow>)}</TableBody></Table></div>{preparoFornecedores.linhas.length > 20 && <p className="mt-2 text-xs text-muted-foreground">A pré-visualização mostra os primeiros 20 fornecedores.</p>}</div> : null}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><Button variant="ghost" onClick={baixarModeloFornecedores} disabled={modeloFornecedores.isFetching}><Download className="mr-1.5 h-4 w-4" />Baixar modelo</Button><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setImportacaoFornecedoresAberta(false)} disabled={importarFornecedores.isPending}>Cancelar</Button><Button onClick={confirmarImportacaoFornecedores} disabled={!preparoFornecedores?.linhas.length || Boolean(preparoFornecedores.erros.length) || importarFornecedores.isPending || prepararImportacaoFornecedores.isPending}>{importarFornecedores.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar importação</Button></div></div></div></DialogContent></Dialog>
 
-      <Dialog open={Boolean(tituloParaCancelar)} onOpenChange={(aberto) => !aberto && setTituloParaCancelar(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Cancelar {tituloParaCancelar?.tipo === "receber" ? "conta a receber" : "conta a pagar"}</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-medium">{tituloParaCancelar?.descricao}</p><p className="mt-1">Este título deixará de aparecer nas listas ativas e permanecerá registrado como cancelado para auditoria.</p></div><p className="text-sm text-muted-foreground">A operação não pode ser usada em títulos com baixas financeiras. Deseja continuar?</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaCancelar(null)} disabled={cancelarTitulo.isPending}>Voltar</Button><Button variant="destructive" onClick={confirmarCancelamento} disabled={cancelarTitulo.isPending}>{cancelarTitulo.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar cancelamento</Button></div></div></DialogContent></Dialog>
+      <Dialog open={Boolean(tituloParaExcluir)} onOpenChange={(aberto) => !aberto && setTituloParaExcluir(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Excluir lançamento financeiro</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-medium">{tituloParaExcluir?.descricao}</p><p className="mt-1">O lançamento e suas baixas serão removidos somente se não houver conciliação bancária vinculada.</p></div><p className="text-sm text-muted-foreground">Se o lançamento estiver conciliado, desconcilie o movimento bancário correspondente antes de continuar.</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaExcluir(null)} disabled={excluirTitulo.isPending}>Voltar</Button><Button variant="destructive" onClick={confirmarExclusaoTitulo} disabled={excluirTitulo.isPending}>{excluirTitulo.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar exclusão</Button></div></div></DialogContent></Dialog>
 
       <Dialog open={lancamentoAberto} onOpenChange={setLancamentoAberto}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -766,17 +800,23 @@ export default function FinanceiroPage() {
 
       <Dialog open={Boolean(tituloParaEditar)} onOpenChange={(aberto) => !aberto && setTituloParaEditar(null)}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-          <DialogHeader><DialogTitle>Editar agendamento</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Editar lançamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloParaEditar?.descricao}</p><p className="mt-1 text-muted-foreground">Altere a data de vencimento conforme a negociação de pagamento.</p>{tituloParaEditar?.origem === "romaneio_carga" && <p className="mt-2 text-xs text-primary">Este vencimento também será atualizado no romaneio de carga vinculado.</p>}</div>
-            <div className="space-y-2"><Label htmlFor="vencimento-agendamento">Novo vencimento *</Label><Input id="vencimento-agendamento" aria-label="Novo vencimento" type="date" value={vencimentoEditado} onChange={(event) => setVencimentoEditado(event.target.value)} /></div>
+            <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">Corrija qualquer informação do lançamento.</p><p className="mt-1 text-muted-foreground">Itens conciliados com o banco devem ser desconciliados antes de salvar ou excluir.</p>{tituloParaEditar?.origem === "romaneio_carga" && <p className="mt-2 text-xs text-primary">Alterações de vencimento também atualizam o romaneio de carga vinculado.</p>}</div>
+            <CampoSelect label="Natureza" value={lancamentoEditado.tipo} onValueChange={(tipo) => setLancamentoEditado({ ...lancamentoEditado, tipo: tipo as "pagar" | "receber", clienteId: "", fornecedorId: "" })} opcoes={[["pagar", "Conta a pagar"], ["receber", "Conta a receber"]]} />
+            <Campo label="Descrição *" value={lancamentoEditado.descricao} onChange={(descricao) => setLancamentoEditado({ ...lancamentoEditado, descricao })} />
+            <div className="space-y-2"><Label>Categoria financeira *</Label><Select value={lancamentoEditado.categoriaId} onCreate={() => abrirCriacaoContextual("categoria", "lancamento")} createLabel="Criar nova categoria" onValueChange={(categoriaId) => setLancamentoEditado({ ...lancamentoEditado, categoriaId })}><SelectTrigger className="w-full"><SelectValue placeholder="Pesquisar categoria" /></SelectTrigger><SelectContent>{(categorias.data ?? []).filter((item: any) => item.tipo === "ambos" || item.tipo === lancamentoEditado.tipo).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Campo label="Valor original (R$) *" value={lancamentoEditado.valorOriginal} onChange={(valorOriginal) => setLancamentoEditado({ ...lancamentoEditado, valorOriginal })} /><Campo label="Data de emissão *" type="date" value={lancamentoEditado.dataEmissao} onChange={(dataEmissao) => setLancamentoEditado({ ...lancamentoEditado, dataEmissao })} /><Campo label="Vencimento *" type="date" value={lancamentoEditado.dataVencimento} onChange={(dataVencimento) => setLancamentoEditado({ ...lancamentoEditado, dataVencimento })} /><Campo label="Desconto (R$)" value={lancamentoEditado.desconto} onChange={(desconto) => setLancamentoEditado({ ...lancamentoEditado, desconto })} /><Campo label="Juros (R$)" value={lancamentoEditado.juros} onChange={(juros) => setLancamentoEditado({ ...lancamentoEditado, juros })} /></div>
+            <div className="space-y-2"><Label>{lancamentoEditado.tipo === "receber" ? "Cliente" : "Fornecedor"}</Label>{lancamentoEditado.tipo === "receber" ? <SearchableEntitySelect value={lancamentoEditado.clienteId} onValueChange={(clienteId) => setLancamentoEditado({ ...lancamentoEditado, clienteId, contraparteNome: "" })} placeholder="Pesquisar cliente" searchPlaceholder="Buscar por nome ou telefone..." options={(clientes.data ?? []).map((item: any) => ({ value: String(item.id), label: item.nome, details: item.contacto ?? undefined }))} onCreate={() => abrirCriacaoContextual("cliente", "lancamento")} createLabel="Criar novo cliente" /> : <SearchableEntitySelect value={lancamentoEditado.fornecedorId} onValueChange={(fornecedorId) => setLancamentoEditado({ ...lancamentoEditado, fornecedorId, contraparteNome: "" })} placeholder="Pesquisar fornecedor" searchPlaceholder="Buscar fornecedor..." options={(fornecedores.data ?? []).map((item: any) => ({ value: String(item.id), label: item.nome, details: item.contacto ?? undefined }))} onCreate={() => abrirCriacaoContextual("fornecedor", "lancamento")} createLabel="Criar novo fornecedor" />}</div>
+            <div className="space-y-2"><Label>Contraparte avulsa</Label><Input value={lancamentoEditado.contraparteNome} onChange={(event) => setLancamentoEditado({ ...lancamentoEditado, contraparteNome: event.target.value })} placeholder="Preencha se não selecionar cliente ou fornecedor" /></div>
+            <div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={lancamentoEditado.observacoes} onChange={(event) => setLancamentoEditado({ ...lancamentoEditado, observacoes: event.target.value })} /></div>
             {tituloParaEditar?.tipo === "pagar" && (tituloParaEditar?.linhaDigitavelBoleto || tituloParaEditar?.codigoBarrasBoleto) && <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-amber-950">Dados do boleto</p><p className="mt-1 text-xs text-amber-900">{tituloParaEditar?.linhaDigitavelBoleto ? "Linha digitável" : "Código de barras"}</p></div><Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => void copiarCodigoBoleto(tituloParaEditar.linhaDigitavelBoleto ?? tituloParaEditar.codigoBarrasBoleto ?? "")}><Copy className="mr-1.5 h-3.5 w-3.5" />Copiar</Button></div><code className="mt-2 block break-all rounded bg-background px-2 py-1.5 text-xs text-foreground">{tituloParaEditar?.linhaDigitavelBoleto ?? tituloParaEditar?.codigoBarrasBoleto}</code><p className="mt-2 text-xs text-amber-900">Confira os dígitos com o documento antes de efetuar o pagamento.</p></div>}
             <div className="space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/30 p-3">
               <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-amber-950">Documentos vinculados</p><p className="mt-0.5 text-xs text-amber-900">Notas fiscais, boletos e imagens do agendamento.</p></div><Label htmlFor="anexar-documentos-edicao" className="cursor-pointer"><span className="inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">{enviarAnexoFinanceiro.isPending ? "Enviando..." : "Anexar"}</span></Label></div>
               <Input id="anexar-documentos-edicao" className="sr-only" aria-label="Anexar documentos ao agendamento" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple disabled={enviarAnexoFinanceiro.isPending} onChange={(evento) => { void anexarDocumentosAoTitulo(evento.target.files); evento.currentTarget.value = ""; }} />
               {anexosTituloEditado.isLoading ? <p className="py-2 text-xs text-muted-foreground">Carregando documentos...</p> : anexosTituloEditado.data?.length ? <div className="space-y-1.5">{anexosTituloEditado.data.map((anexo: any) => <div key={anexo.id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate font-medium">{anexo.nomeArquivo}</span><span className="shrink-0 text-muted-foreground">{(Number(anexo.tamanhoBytes) / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2" aria-label={`Visualizar ${anexo.nomeArquivo}`} onClick={() => setAnexoParaVisualizar({ nomeArquivo: anexo.nomeArquivo, url: anexo.url, mimeType: anexo.mimeType })}><Eye className="h-3.5 w-3.5" /></Button><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" disabled={removerAnexoFinanceiro.isPending} onClick={() => removerAnexoFinanceiro.mutate({ id: anexo.id, tituloId: tituloParaEditar.id }, { onSuccess: () => { toast.success("Documento removido"); void anexosTituloEditado.refetch(); }, onError: (erro) => toast.error(erro.message) })}>Remover</Button></div>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-3 text-center text-xs text-muted-foreground">Nenhum documento anexado a este agendamento.</p>}
             </div>
-            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarAgendamento.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarAgendamento.isPending}>{atualizarAgendamento.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar vencimento</Button></div>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarTitulo.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarTitulo.isPending}>{atualizarTitulo.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar alterações</Button></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -845,7 +885,7 @@ function ListaCompromissos({ titulo, descricao, titulos, classe, vazio }: { titu
 }
 
 function Campo({ label, value, onChange, type = "text" }: { label: string; value: string; onChange: (valor: string) => void; type?: string }) {
-  return <div className="space-y-2"><Label>{label}</Label><Input type={type} value={value} onChange={(e) => onChange(e.target.value)} /></div>;
+  return <div className="space-y-2"><Label>{label}</Label><Input aria-label={label} type={type} value={value} onChange={(e) => onChange(e.target.value)} /></div>;
 }
 
 function CampoSelect({ label, value, onValueChange, opcoes }: { label: string; value: string; onValueChange: (valor: string) => void; opcoes: [string, string][] }) {
@@ -856,14 +896,13 @@ function CadastroTabela({ titulo, descricao, icone, botao, aoCriar, acaoSecundar
   return <section className="rounded-xl border border-border/60 bg-white shadow-sm overflow-hidden"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary">{icone}</div><div><h2 className="font-semibold">{titulo}</h2><p className="text-xs text-muted-foreground mt-0.5">{descricao}</p></div></div><div className="flex flex-wrap gap-2">{acaoSecundaria}<Button size="sm" onClick={aoCriar}><Plus className="mr-1.5 h-3.5 w-3.5" />{botao}</Button></div></div>{linhas.length ? <Table><TableHeader><TableRow className="bg-muted/40">{colunas.map((coluna) => <TableHead key={coluna}>{coluna}</TableHead>)}</TableRow></TableHeader><TableBody>{linhas.map((linha, indice) => <TableRow key={`${linha[0]}-${indice}`}>{linha.map((celula, celulaIndice) => <TableCell key={`${celula}-${celulaIndice}`} className={celulaIndice === 0 ? "font-medium" : "text-muted-foreground"}>{celula}</TableCell>)}</TableRow>)}</TableBody></Table> : <EstadoVazio icon={<CircleAlert className="h-8 w-8" />} texto={vazio} acao={aoCriar} labelAcao={botao} />}</section>;
 }
 
-function TabelaTitulosFinanceiros({ titulos, historico, tipo, onBaixas, onEditar, onBaixar, onCancelar }: { titulos: any[]; historico: boolean; tipo: "pagar" | "receber"; onBaixas: (titulo: any) => void; onEditar: (titulo: any) => void; onBaixar: (titulo: any) => void; onCancelar: (titulo: any) => void }) {
+function TabelaTitulosFinanceiros({ titulos, historico, tipo, onBaixas, onEditar, onBaixar, onExcluir }: { titulos: any[]; historico: boolean; tipo: "pagar" | "receber"; onBaixas: (titulo: any) => void; onEditar: (titulo: any) => void; onBaixar: (titulo: any) => void; onExcluir: (titulo: any) => void }) {
   if (!titulos.length) return <EstadoVazio icon={<CalendarClock className="h-9 w-9" />} texto={historico ? `Nenhuma conta ${tipo === "pagar" ? "paga" : "recebida"} encontrada` : `Nenhuma conta a ${tipo === "pagar" ? "pagar" : "receber"} encontrada`} />;
   const hojeLocal = hoje();
   return <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Descrição</TableHead><TableHead>Vencimento</TableHead><TableHead>Status</TableHead><TableHead className="text-right">{historico ? "Valor liquidado" : "Saldo"}</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{titulos.map((titulo: any) => {
     const possuiBaixas = Number(titulo.valorBaixado || 0) > 0.005;
-    const podeCancelar = !["quitado", "cancelado"].includes(titulo.estado) && !possuiBaixas;
     const venceHoje = !historico && dataChaveFinanceira(titulo.dataVencimento) === hojeLocal;
-    return <TableRow key={titulo.id} className={venceHoje ? (tipo === "pagar" ? "bg-amber-50 hover:bg-amber-100/70" : "bg-emerald-50 hover:bg-emerald-100/70") : "hover:bg-muted/20"}><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{formatReceivableSaleReference(titulo.origem, titulo.descricao)}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell className="text-sm"><div className="flex items-center gap-2">{formatarDataFinanceira(titulo.dataVencimento)}{venceHoje && <Badge variant="outline" className={tipo === "pagar" ? "border-amber-300 bg-amber-100 text-amber-900" : "border-emerald-300 bg-emerald-100 text-emerald-900"}>{tipo === "pagar" ? "Vence hoje" : "Recebe hoje"}</Badge>}</div></TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(historico ? Number(titulo.valorBaixado || 0) : saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{possuiBaixas && <Button size="sm" variant="ghost" onClick={() => onBaixas(titulo)}>Baixas</Button>}{!historico && <><Button size="sm" variant="outline" onClick={() => onEditar(titulo)}><Pencil className="h-3.5 w-3.5 mr-1.5" />Editar</Button><Button size="sm" variant="outline" onClick={() => onBaixar(titulo)}><CheckCircle2 className="h-3.5 w-3.5 mr-1.5" />{tipo === "pagar" ? "Pagar" : "Receber"}</Button><Button size="sm" variant="outline" className="text-destructive hover:text-destructive" title={possuiBaixas ? "Estorne as baixas antes de cancelar" : "Cancelar título"} disabled={!podeCancelar} onClick={() => onCancelar(titulo)}>Cancelar</Button></>}</div></TableCell></TableRow>;
+    return <TableRow key={titulo.id} className={venceHoje ? (tipo === "pagar" ? "bg-amber-50 hover:bg-amber-100/70" : "bg-emerald-50 hover:bg-emerald-100/70") : "hover:bg-muted/20"}><TableCell><p className="font-medium">{titulo.descricao}</p><p className="text-xs text-muted-foreground">{formatReceivableSaleReference(titulo.origem, titulo.descricao)}{titulo.numeroParcela ? ` · Parcela ${titulo.numeroParcela}/${titulo.totalParcelas}` : ""}</p></TableCell><TableCell className="text-sm"><div className="flex items-center gap-2">{formatarDataFinanceira(titulo.dataVencimento)}{venceHoje && <Badge variant="outline" className={tipo === "pagar" ? "border-amber-300 bg-amber-100 text-amber-900" : "border-emerald-300 bg-emerald-100 text-emerald-900"}>{tipo === "pagar" ? "Vence hoje" : "Recebe hoje"}</Badge>}</div></TableCell><TableCell><StatusBadge estado={titulo.estado} /></TableCell><TableCell className="text-right font-semibold">{formatCurrency(historico ? Number(titulo.valorBaixado || 0) : saldoTitulo(titulo))}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-2">{possuiBaixas && <Button size="sm" variant="ghost" onClick={() => onBaixas(titulo)}>Baixas</Button>}<Button size="sm" variant="outline" onClick={() => onEditar(titulo)}><Pencil className="mr-1.5 h-3.5 w-3.5" />Editar</Button>{!historico && <Button size="sm" variant="outline" onClick={() => onBaixar(titulo)}><CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />{tipo === "pagar" ? "Pagar" : "Receber"}</Button>}<Button size="sm" variant="outline" className="text-destructive hover:text-destructive" title="Desconcilie qualquer movimento bancário vinculado antes de excluir" onClick={() => onExcluir(titulo)}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Excluir</Button></div></TableCell></TableRow>;
   })}</TableBody></Table></div>;
 }
 

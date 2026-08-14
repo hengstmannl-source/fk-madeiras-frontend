@@ -10,6 +10,7 @@ const state = vi.hoisted(() => ({
   baixas: [] as Array<Record<string, unknown>>,
   anexos: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
+  atualizar: vi.fn(),
   atualizarAgendamento: vi.fn(),
   estornar: vi.fn(),
   importar: vi.fn(),
@@ -60,6 +61,15 @@ vi.mock("@/lib/trpc", () => {
           baixas: { useQuery: () => ({ data: state.baixas, isLoading: false, refetch: vi.fn() }) },
           createManual: mutationInerte,
           createParcelado: mutationInerte,
+          update: {
+            useMutation: () => ({
+              isPending: false,
+              mutate: (input: Record<string, unknown>, callbacks: { onSuccess?: () => void }) => {
+                state.atualizar(input);
+                callbacks.onSuccess?.();
+              },
+            }),
+          },
           updateAgendamento: {
             useMutation: () => ({
               isPending: false,
@@ -83,7 +93,7 @@ vi.mock("@/lib/trpc", () => {
               },
             }),
           },
-          cancelar: {
+          delete: {
             useMutation: () => ({
               isPending: false,
               mutate: (input: { id: number }, callbacks: { onSuccess?: () => void }) => {
@@ -192,15 +202,17 @@ describe("FinanceiroPage — cancelamento manual", () => {
         estado: "aberto",
         valorOriginal: "1200.00",
         valorBaixado: "0.00",
+        categoriaId: 1,
         desconto: "0.00",
         juros: "0.00",
+        dataEmissao: "2026-08-01T00:00:00.000Z",
         dataVencimento: "2026-08-12T00:00:00.000Z",
         linhaDigitavelBoleto: "00190500954014481606906809350314337370000000100",
       },
     ];
   });
 
-  it("pede confirmação e remove o título cancelado da listagem ativa após confirmar", async () => {
+  it("pede confirmação e remove o título da listagem após confirmar a exclusão", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
 
@@ -208,12 +220,12 @@ describe("FinanceiroPage — cancelamento manual", () => {
 
     const linha = screen.getByText("Recebimento para cancelar").closest("tr");
     expect(linha).not.toBeNull();
-    await user.click(within(linha!).getByRole("button", { name: "Cancelar" }));
+    await user.click(within(linha!).getByRole("button", { name: "Excluir" }));
 
-    expect(screen.getByRole("heading", { name: "Cancelar conta a receber" })).toBeInTheDocument();
-    expect(screen.getByText(/deixará de aparecer nas listas ativas/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Excluir lançamento financeiro" })).toBeInTheDocument();
+    expect(screen.getByText(/desconcilie o movimento bancário correspondente/i)).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Confirmar cancelamento" }));
+    await user.click(screen.getByRole("button", { name: "Confirmar exclusão" }));
 
     await waitFor(() => {
       expect(state.cancelar).toHaveBeenCalledWith({ id: 10 });
@@ -305,15 +317,16 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(linha).not.toBeNull();
     await user.click(within(linha!).getByRole("button", { name: "Editar" }));
 
-    expect(screen.getByRole("heading", { name: "Editar agendamento" })).toBeInTheDocument();
-    expect(screen.getByText(/também será atualizado no romaneio de carga vinculado/i)).toBeInTheDocument();
-    const vencimento = screen.getByLabelText("Novo vencimento");
+    expect(screen.getByRole("heading", { name: "Editar lançamento" })).toBeInTheDocument();
+    expect(screen.getByText(/alterações de vencimento também atualizam o romaneio de carga vinculado/i)).toBeInTheDocument();
+    const dialogoEdicao = screen.getByRole("dialog");
+    const vencimento = within(dialogoEdicao).getByLabelText("Vencimento *");
     await user.clear(vencimento);
     await user.type(vencimento, "2026-09-11");
-    await user.click(screen.getByRole("button", { name: "Salvar vencimento" }));
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
     await waitFor(() => {
-      expect(state.atualizarAgendamento).toHaveBeenCalledWith({ id: 13, dataVencimento: "2026-09-11" });
+      expect(state.atualizar).toHaveBeenCalledWith(expect.objectContaining({ id: 13, dataVencimento: "2026-09-11" }));
       expect(state.invalidar).toHaveBeenCalled();
     });
   });
@@ -365,7 +378,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const anexo = screen.getByLabelText("Anexar documentos do lançamento");
     expect(anexo).toHaveAttribute("accept", "application/pdf,image/jpeg,image/png,image/webp");
     fireEvent.change(anexo, { target: { files: [new File(["boleto"], "boleto-agosto.pdf", { type: "application/pdf" })] } });
-    expect(screen.getByText("boleto-agosto.pdf")).toBeInTheDocument();
+    expect(screen.getAllByText("boleto-agosto.pdf").length).toBeGreaterThan(0);
 
     const codigo = screen.getByLabelText("Código de barras ou linha digitável");
     await user.type(codigo, "00190500954014481606906809350314337370000000100");
