@@ -598,6 +598,7 @@ export const chequesFinanceiros = mysqlTable("chequesFinanceiros", {
   referencia: varchar("referencia", { length: 120 }).notNull(),
   valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
   dataRecebimento: timestamp("dataRecebimento").notNull(),
+  dataCompensacao: timestamp("dataCompensacao"),
   utilizadoEm: timestamp("utilizadoEm"),
   estado: mysqlEnum("estado", ["disponivel", "utilizado", "estornado"]).notNull().default("disponivel"),
   estornadoEm: timestamp("estornadoEm"),
@@ -607,6 +608,7 @@ export const chequesFinanceiros = mysqlTable("chequesFinanceiros", {
 }, (table) => ({
   referenciaPorContaUnica: uniqueIndex("cheques_financeiros_conta_referencia_unica").on(table.empresaId, table.contaFinanceiraId, table.referencia),
   contaEstadoIndice: index("cheques_financeiros_conta_estado_indice").on(table.empresaId, table.contaFinanceiraId, table.estado),
+  compensacaoIndice: index("cheques_financeiros_compensacao_indice").on(table.empresaId, table.estado, table.dataCompensacao),
   clienteIndice: index("cheques_financeiros_cliente_indice").on(table.empresaId, table.clienteId),
   entradaIndice: index("cheques_financeiros_entrada_indice").on(table.baixaEntradaId),
   saidaIndice: index("cheques_financeiros_saida_indice").on(table.baixaSaidaId),

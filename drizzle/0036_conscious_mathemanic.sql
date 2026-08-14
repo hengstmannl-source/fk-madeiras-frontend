@@ -1,0 +1,2 @@
+ALTER TABLE `chequesFinanceiros` ADD `dataCompensacao` timestamp;--> statement-breakpoint
+CREATE INDEX `cheques_financeiros_compensacao_indice` ON `chequesFinanceiros` (`empresaId`,`estado`,`dataCompensacao`);

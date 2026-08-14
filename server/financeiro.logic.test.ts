@@ -4,6 +4,7 @@ import {
   calcularPrevisaoSemanal,
   calcularRelatorioFluxoCaixa,
   calcularParcelas,
+  classificarAlertaCompensacaoCheque,
   classificarAlertaVencimento,
   planejarAtualizacaoAlertas,
   podeCancelarTituloFinanceiro,
@@ -55,6 +56,15 @@ describe("regras financeiras", () => {
     expect(validarValorDosCheques("250,00", ["100,15", "149,85"])).toBe(250);
     expect(() => validarValorDosCheques("250,00", ["100,15", "149,84"])).toThrow("A soma dos cheques deve ser exatamente igual ao valor da baixa");
     expect(() => validarValorDosCheques("0", ["0"])).toThrow("O valor da baixa deve ser maior que zero");
+  });
+
+  it("prioriza cheques pela proximidade da data de compensação", () => {
+    const hoje = new Date(2026, 7, 14, 12);
+    expect(classificarAlertaCompensacaoCheque(new Date(2026, 7, 13, 12), hoje)).toBe("atrasada");
+    expect(classificarAlertaCompensacaoCheque(new Date(2026, 7, 14, 12), hoje)).toBe("hoje");
+    expect(classificarAlertaCompensacaoCheque(new Date(2026, 7, 17, 12), hoje)).toBe("proxima");
+    expect(classificarAlertaCompensacaoCheque(new Date(2026, 7, 18, 12), hoje)).toBeNull();
+    expect(classificarAlertaCompensacaoCheque(null, hoje)).toBeNull();
   });
 
   it("apura entradas, saídas e saldo acumulado somente para o período informado", () => {

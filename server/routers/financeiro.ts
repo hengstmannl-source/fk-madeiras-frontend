@@ -145,6 +145,9 @@ export const financeiroRouter = router({
         ...(saldoInicial !== undefined ? { saldoInicial: saldoInicial.replace(",", ".") } : {}),
       }, ctx.empresaAtiva!.empresa.id);
     }),
+    delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => (
+      db.excluirContaFinanceira(input.id, ctx.empresaAtiva!.empresa.id)
+    )),
   }),
 
   cheques: router({
@@ -287,13 +290,18 @@ export const financeiroRouter = router({
         referencia: z.string().trim().min(1).max(120),
         valor: z.string().regex(/^\d+(?:[.,]\d{1,2})?$/),
         clienteId: z.number().int().positive().optional(),
+        dataCompensacao: DataFinanceiraSchema.optional(),
       })).min(1).max(100).optional(),
       chequeIdsUtilizados: z.array(z.number().int().positive()).min(1).max(100).optional(),
     })).mutation(({ ctx, input }) => db.registrarBaixaFinanceira({
       ...input,
       valor: input.valor.replace(",", "."),
       dataBaixa: dataLocal(input.dataBaixa),
-      chequesRecebidos: input.chequesRecebidos?.map((cheque) => ({ ...cheque, valor: cheque.valor.replace(",", ".") })),
+      chequesRecebidos: input.chequesRecebidos?.map((cheque) => ({
+        ...cheque,
+        valor: cheque.valor.replace(",", "."),
+        dataCompensacao: cheque.dataCompensacao ? dataLocal(cheque.dataCompensacao) : null,
+      })),
       criadoPor: ctx.user.id,
     }, ctx.empresaAtiva!.empresa.id)),
     conciliarBaixa: protectedProcedure.input(z.object({ id: z.number().int().positive(), conciliada: z.boolean() }))

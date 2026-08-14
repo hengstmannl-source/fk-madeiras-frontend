@@ -1,6 +1,7 @@
 export type EstadoTituloFinanceiro = "aberto" | "parcial" | "quitado" | "vencido" | "cancelado";
 export type FrequenciaFinanceira = "semanal" | "mensal" | "trimestral" | "semestral" | "anual";
 export type TipoAlertaFinanceiro = "vence_em_breve" | "vencido";
+export type EstadoAlertaCompensacaoCheque = "atrasada" | "hoje" | "proxima";
 
 export type MovimentoFluxoCaixa = {
   id: number;
@@ -105,6 +106,22 @@ function inicioDoDia(data: Date): Date {
   const resultado = new Date(data);
   resultado.setHours(0, 0, 0, 0);
   return resultado;
+}
+
+/** Classifica a prioridade operacional de um cheque disponível conforme sua compensação. */
+export function classificarAlertaCompensacaoCheque(
+  dataCompensacao: Date | string | null | undefined,
+  agora: Date = new Date(),
+  diasDeAntecedencia = 3,
+): EstadoAlertaCompensacaoCheque | null {
+  if (!dataCompensacao) return null;
+  const compensacao = inicioDoDia(new Date(dataCompensacao));
+  if (Number.isNaN(compensacao.getTime())) return null;
+  const hoje = inicioDoDia(agora);
+  const dias = Math.round((compensacao.getTime() - hoje.getTime()) / 86_400_000);
+  if (dias < 0) return "atrasada";
+  if (dias === 0) return "hoje";
+  return dias <= diasDeAntecedencia ? "proxima" : null;
 }
 
 function fimDoDia(data: Date): Date {

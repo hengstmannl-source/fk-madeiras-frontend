@@ -332,3 +332,8 @@
 - [x] Criar tela de Caixa Cheque com saldo, cheques disponíveis, utilizados e histórico de movimentações
 - [x] Impedir reutilização, valores divergentes e saídas sem cobertura por cheques selecionados
 - [x] Cobrir recebimento, pagamento, estorno e interface do Caixa Cheque com testes e validação visual
+- [x] Registrar data de compensação individual no recebimento de cada cheque
+- [x] Destacar no Caixa Cheque os itens com compensação próxima ou vencida
+- [x] Permitir excluir contas financeiras sem baixas, extratos ou demais movimentações vinculadas
+- [x] Bloquear com mensagem clara a exclusão de contas que possuam movimentações
+- [x] Cobrir data de compensação, alertas e exclusão segura de contas com testes e validação visual

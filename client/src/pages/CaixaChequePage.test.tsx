@@ -10,7 +10,7 @@ vi.mock("@/lib/trpc", () => ({
     financeiro: {
       cheques: {
         resumo: { useQuery: () => ({ data: { totalDisponivel: 750, quantidadeDisponivel: 2, totalUtilizado: 250, quantidadeUtilizada: 1, contas: [{ id: 9, nome: "Caixa Cheque" }] }, isLoading: false }) },
-        list: { useQuery: () => ({ data: [{ id: 3, referencia: "CHQ-001", clienteNome: "Madeireira Norte", contaNome: "Caixa Cheque", dataRecebimento: "2026-08-11T12:00:00.000Z", utilizadoEm: null, estado: "disponivel", valor: "750.00" }], isLoading: false }) },
+        list: { useQuery: () => ({ data: [{ id: 3, referencia: "CHQ-001", clienteNome: "Madeireira Norte", contaNome: "Caixa Cheque", dataRecebimento: "2026-08-11T12:00:00.000Z", dataCompensacao: new Date().toISOString(), alertaCompensacao: "hoje", utilizadoEm: null, estado: "disponivel", valor: "750.00" }], isLoading: false }) },
       },
     },
   },
@@ -30,9 +30,12 @@ describe("CaixaChequePage", () => {
     expect(screen.getByRole("heading", { name: "Caixa Cheque" })).toBeInTheDocument();
     expect(screen.getAllByText("R$ 750,00")).toHaveLength(2);
     expect(screen.getByText("R$ 250,00")).toBeInTheDocument();
+    expect(screen.getByText("1 conta(s) de cheque cadastrada(s) para o controle.")).toBeInTheDocument();
     expect(screen.getByText("CHQ-001")).toBeInTheDocument();
     expect(screen.getByText("Madeireira Norte")).toBeInTheDocument();
     expect(screen.getByText("Disponível")).toBeInTheDocument();
+    expect(screen.getByText("Atenção à compensação de cheques")).toBeInTheDocument();
+    expect(screen.getByText(/compensa hoje/i)).toBeInTheDocument();
   });
 
   it("leva aos fluxos financeiros de recebimento e pagamento", () => {

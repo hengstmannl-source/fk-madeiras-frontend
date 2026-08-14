@@ -253,6 +253,13 @@
       "when": 1786711110760,
       "tag": "0035_cultured_whizzer",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1786713718062,
+      "tag": "0036_conscious_mathemanic",
+      "breakpoints": true
     }
   ]
 }

@@ -102,7 +102,7 @@ vi.mock("@/lib/trpc", () => {
           list: { useQuery: () => ({ data: state.anexos, isLoading: false, refetch: vi.fn() }) },
           remove: mutationInerte,
         },
-        contas: { list: queryVazia, create: mutationInerte },
+        contas: { list: queryVazia, create: mutationInerte, delete: mutationInerte },
         cheques: { list: queryVazia, resumo: { useQuery: () => ({ data: { totalDisponivel: 0, quantidadeDisponivel: 0, totalUtilizado: 0, quantidadeUtilizada: 0, contas: [] }, isLoading: false }) } },
         recorrencias: { list: queryVazia, create: mutationInerte },
         alertas: { list: queryVazia },

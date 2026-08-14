@@ -13,7 +13,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarValorDosCheques } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
@@ -841,6 +841,27 @@ export async function updateContaFinanceira(id: number, data: Partial<InsertCont
   return { success: true };
 }
 
+/** Exclui uma conta apenas quando não existir dependência financeira, bancária ou programada. */
+export async function excluirContaFinanceira(id: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const conta = (await db.select({ id: contasFinanceiras.id }).from(contasFinanceiras)
+    .where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId))).limit(1))[0];
+  if (!conta) throw new Error("Conta financeira não encontrada");
+  const [baixa, cheque, extrato, movimentoExtrato, recorrencia] = await Promise.all([
+    db.select({ id: baixasFinanceiras.id }).from(baixasFinanceiras).where(and(eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.contaFinanceiraId, id))).limit(1),
+    db.select({ id: chequesFinanceiros.id }).from(chequesFinanceiros).where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.contaFinanceiraId, id))).limit(1),
+    db.select({ id: extratosBancarios.id }).from(extratosBancarios).where(and(eq(extratosBancarios.empresaId, empresaId), eq(extratosBancarios.contaFinanceiraId, id))).limit(1),
+    db.select({ id: movimentosExtratoBancario.id }).from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.contaFinanceiraId, id))).limit(1),
+    db.select({ id: recorrenciasFinanceiras.id }).from(recorrenciasFinanceiras).where(and(eq(recorrenciasFinanceiras.empresaId, empresaId), eq(recorrenciasFinanceiras.contaFinanceiraId, id))).limit(1),
+  ]);
+  if (baixa.length || cheque.length || extrato.length || movimentoExtrato.length || recorrencia.length) {
+    throw new Error("Esta conta não pode ser excluída porque possui movimentações, cheques, extratos ou recorrências vinculados");
+  }
+  await db.delete(contasFinanceiras).where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId)));
+  return { success: true };
+}
+
 export async function listCaixasCheque(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
@@ -858,7 +879,7 @@ export async function listChequesFinanceiros(
   const conditions = [eq(chequesFinanceiros.empresaId, empresaId)];
   if (filters.contaFinanceiraId) conditions.push(eq(chequesFinanceiros.contaFinanceiraId, filters.contaFinanceiraId));
   if (filters.estado) conditions.push(eq(chequesFinanceiros.estado, filters.estado));
-  return db.select({
+  const cheques = await db.select({
     id: chequesFinanceiros.id,
     contaFinanceiraId: chequesFinanceiros.contaFinanceiraId,
     baixaEntradaId: chequesFinanceiros.baixaEntradaId,
@@ -867,6 +888,7 @@ export async function listChequesFinanceiros(
     referencia: chequesFinanceiros.referencia,
     valor: chequesFinanceiros.valor,
     dataRecebimento: chequesFinanceiros.dataRecebimento,
+    dataCompensacao: chequesFinanceiros.dataCompensacao,
     utilizadoEm: chequesFinanceiros.utilizadoEm,
     estado: chequesFinanceiros.estado,
     estornadoEm: chequesFinanceiros.estornadoEm,
@@ -877,6 +899,10 @@ export async function listChequesFinanceiros(
     .innerJoin(clientes, eq(chequesFinanceiros.clienteId, clientes.id))
     .where(and(...conditions))
     .orderBy(desc(chequesFinanceiros.dataRecebimento), desc(chequesFinanceiros.createdAt));
+  return cheques.map((cheque) => ({
+    ...cheque,
+    alertaCompensacao: cheque.estado === "disponivel" ? classificarAlertaCompensacaoCheque(cheque.dataCompensacao) : null,
+  }));
 }
 
 export async function getResumoCaixaCheque(empresaId = 1) {
@@ -888,12 +914,21 @@ export async function getResumoCaixaCheque(empresaId = 1) {
     .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
   const totalUtilizado = cheques.filter((cheque) => cheque.estado === "utilizado")
     .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
+  const alertasCompensacao = cheques.filter((cheque) => cheque.estado === "disponivel")
+    .reduce((acumulado, cheque) => {
+      const alerta = classificarAlertaCompensacaoCheque(cheque.dataCompensacao);
+      if (alerta === "atrasada") acumulado.atrasados += 1;
+      if (alerta === "hoje") acumulado.hoje += 1;
+      if (alerta === "proxima") acumulado.proximos += 1;
+      return acumulado;
+    }, { atrasados: 0, hoje: 0, proximos: 0 });
   return {
     contas,
     totalDisponivel,
     totalUtilizado,
     quantidadeDisponivel: cheques.filter((cheque) => cheque.estado === "disponivel").length,
     quantidadeUtilizada: cheques.filter((cheque) => cheque.estado === "utilizado").length,
+    alertasCompensacao,
   };
 }
 
@@ -1195,6 +1230,7 @@ type ChequeRecebidoInput = {
   referencia: string;
   valor: string | number;
   clienteId?: number | null;
+  dataCompensacao?: Date | null;
 };
 
 type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor"> & {
@@ -1281,6 +1317,7 @@ export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empre
         referencia: cheque.referencia.trim(),
         valor: decimalParaNumero(cheque.valor).toFixed(2),
         dataRecebimento: data.dataBaixa,
+        dataCompensacao: cheque.dataCompensacao ?? null,
         estado: "disponivel",
         criadoPor: data.criadoPor,
       }));
