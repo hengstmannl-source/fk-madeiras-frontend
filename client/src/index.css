@@ -103,6 +103,28 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  input:user-invalid,
+  textarea:user-invalid,
+  select:user-invalid {
+    border-color: var(--destructive) !important;
+    background-color: color-mix(in oklab, var(--destructive) 5%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 14%, transparent);
+  }
+
+  input[aria-invalid="true"],
+  textarea[aria-invalid="true"],
+  select[aria-invalid="true"],
+  button[aria-invalid="true"],
+  [role="combobox"][aria-invalid="true"] {
+    border-color: var(--destructive) !important;
+    background-color: color-mix(in oklab, var(--destructive) 5%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--destructive) 14%, transparent);
+  }
+
+  [data-validation-row-incomplete="true"] {
+    border-color: color-mix(in oklab, var(--destructive) 42%, var(--border));
+  }
 }
 
 @media (max-width: 639px) {

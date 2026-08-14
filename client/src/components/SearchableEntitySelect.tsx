@@ -65,6 +65,7 @@ export function SearchableEntitySelect({
           role="combobox"
           aria-label={ariaLabel}
           aria-expanded={open}
+          data-placeholder={selected ? undefined : "true"}
           disabled={disabled}
           className={cn("w-full justify-between bg-background font-normal", className)}
         >
