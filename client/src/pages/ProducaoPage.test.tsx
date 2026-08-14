@@ -18,12 +18,14 @@ vi.mock("@/lib/trpc", () => {
   const invalidar = { invalidate: vi.fn() };
   return {
     trpc: {
-      useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar } } }),
+      useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar } } }),
       producao: {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 1, totalDisponiveis: 1, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
+        serragemTerceiros: { list: queryVazia, criar: mutationInerte },
       },
+      cliente: { list: queryVazia },
     },
   };
 });
@@ -46,6 +48,19 @@ describe("ProducaoPage", () => {
     expect(screen.getAllByRole("button", { name: /Nova produção/i })).toHaveLength(1);
     expect(screen.queryByRole("tab", { name: "Estoque de toras" })).not.toBeInTheDocument();
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
+  });
+
+  it("oferece o serviço de serragem de terceiros sem exigir entrada das toras no estoque próprio", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    expect(screen.getByText(/Toras recebidas de clientes não entram no estoque próprio/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent(/Registre as toras do cliente sem criar estoque próprio/i);
+    expect(screen.getByText("Toras serradas do cliente")).toBeInTheDocument();
+    expect(screen.getByText("Produção serrada")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Registrar serviço" })).toBeInTheDocument();
   });
 
   it("adiciona a tora por digitação da plaqueta, permite conferir o resultado consolidado e disponibiliza o PDF", async () => {

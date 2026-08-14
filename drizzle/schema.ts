@@ -374,11 +374,62 @@ export const itensRomaneioProducao = mysqlTable("itensRomaneioProducao", {
 export type ItemRomaneioProducao = typeof itensRomaneioProducao.$inferSelect;
 export type InsertItemRomaneioProducao = typeof itensRomaneioProducao.$inferInsert;
 
+/** Serviço executado com toras de um cliente, sem ingresso no estoque próprio de toras. */
+export const serragensTerceiros = mysqlTable("serragensTerceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  numero: varchar("numero", { length: 40 }).notNull().unique(),
+  clienteId: int("clienteId").notNull(),
+  dataProducao: timestamp("dataProducao").notNull(),
+  responsavel: varchar("responsavel", { length: 200 }),
+  observacoes: text("observacoes"),
+  valorServico: decimal("valorServico", { precision: 14, scale: 2 }).notNull(),
+  dataVencimento: timestamp("dataVencimento").notNull(),
+  volumeToras: decimal("volumeToras", { precision: 14, scale: 6 }).notNull(),
+  volumeProduzido: decimal("volumeProduzido", { precision: 14, scale: 6 }).notNull(),
+  aproveitamento: decimal("aproveitamento", { precision: 8, scale: 2 }).notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaClienteIndice: index("serragens_terceiros_empresa_cliente_indice").on(table.empresaId, table.clienteId, table.dataProducao),
+}));
+
+export const itensSerragemToras = mysqlTable("itensSerragemToras", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  serragemId: int("serragemId").notNull(),
+  referencia: varchar("referencia", { length: 120 }).notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  diametro: decimal("diametro", { precision: 8, scale: 2 }),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export const itensSerragemPecas = mysqlTable("itensSerragemPecas", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  serragemId: int("serragemId").notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
+  largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }).notNull(),
+  quantidade: int("quantidade").notNull(),
+  metrosLineares: decimal("metrosLineares", { precision: 14, scale: 4 }).notNull(),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
 export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   romaneioId: int("romaneioId"),
   itemRomaneioId: int("itemRomaneioId").unique(),
+  serragemTerceirosId: int("serragemTerceirosId"),
+  itemSerragemId: int("itemSerragemId").unique(),
+  propriedade: mysqlEnum("propriedade", ["proprio", "terceiro"]).notNull().default("proprio"),
+  clienteProprietarioId: int("clienteProprietarioId"),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
   largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
@@ -390,7 +441,9 @@ export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   estado: mysqlEnum("estado", ["disponivel", "esgotado", "cancelado", "negativo"]).notNull().default("disponivel"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  serragemIndice: index("lotes_pecas_serradas_serragem_indice").on(table.empresaId, table.serragemTerceirosId),
+}));
 
 export type LotePecasSerradas = typeof lotesPecasSerradas.$inferSelect;
 export type InsertLotePecasSerradas = typeof lotesPecasSerradas.$inferInsert;
@@ -512,7 +565,7 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
-  origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "nota_diesel", "manual", "recorrencia"]).notNull().default("manual"),
+  origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "nota_diesel", "serragem_terceiros", "manual", "recorrencia"]).notNull().default("manual"),
   chaveImportacao: varchar("chaveImportacao", { length: 120 }).unique(),
   descricao: varchar("descricao", { length: 300 }).notNull(),
   clienteId: int("clienteId"),
@@ -521,6 +574,7 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   orcamentoId: int("orcamentoId"),
   romaneioCargaId: int("romaneioCargaId").unique(),
   notaDieselId: int("notaDieselId").unique(),
+  serragemTerceirosId: int("serragemTerceirosId").unique(),
   categoriaId: int("categoriaId").notNull(),
   recorrenciaId: int("recorrenciaId"),
   grupoParcelamento: varchar("grupoParcelamento", { length: 64 }),

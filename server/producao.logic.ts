@@ -73,6 +73,28 @@ export function calcularItemRomaneio(item: ItemProducaoEntrada) {
   };
 }
 
+export function validarSerragemTerceiros(input: {
+  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | number | null; comprimento?: string | number | null; volume: string | number }>;
+  itens: ItemProducaoEntrada[];
+}) {
+  if (!input.toras.length) throw new Error("Informe ao menos uma tora do cliente para a serragem");
+  if (!input.itens.length) throw new Error("Adicione ao menos uma peça serrada");
+  const referencias = new Set<string>();
+  const toras = input.toras.map((tora) => {
+    const referencia = tora.referencia.trim();
+    const volume = numero(tora.volume);
+    if (!referencia || !tora.madeiraNome.trim() || volume <= 0) throw new Error("Informe referência, essência e volume válidos para cada tora");
+    if (referencias.has(referencia.toLocaleUpperCase("pt-BR"))) throw new Error(`A tora ${referencia} foi informada mais de uma vez`);
+    referencias.add(referencia.toLocaleUpperCase("pt-BR"));
+    return { ...tora, referencia, madeiraNome: tora.madeiraNome.trim(), volume: Number(volume.toFixed(6)) };
+  });
+  const itens = input.itens.map(calcularItemRomaneio);
+  const volumeToras = Number(toras.reduce((total, tora) => total + tora.volume, 0).toFixed(6));
+  const volumeProduzido = Number(itens.reduce((total, item) => total + item.volume, 0).toFixed(6));
+  if (volumeProduzido > volumeToras + 0.000001) throw new Error("O volume produzido não pode exceder o volume das toras do cliente");
+  return { toras, itens, volumeToras, volumeProduzido, aproveitamento: Number(((volumeProduzido / volumeToras) * 100).toFixed(2)) };
+}
+
 export function validarConfirmacaoRomaneio(input: {
   plaqueta?: PlaquetaParaConfirmacao | null | undefined;
   tora?: ToraParaRomaneio;
@@ -134,14 +156,18 @@ export function agruparEstoquePecas(lotes: Array<{
   quantidadeDisponivel: number;
   quantidadeProduzida?: number;
   volume: string | number;
+  propriedade?: "proprio" | "terceiro";
+  clienteProprietarioId?: number | null;
 }>) {
-  const grupos = new Map<string, { madeiraNome: string; espessura: number; largura: number; comprimento: number; quantidadeDisponivel: number; volumeDisponivel: number }>();
+  const grupos = new Map<string, { madeiraNome: string; espessura: number; largura: number; comprimento: number; propriedade: "proprio" | "terceiro"; clienteProprietarioId: number | null; quantidadeDisponivel: number; volumeDisponivel: number }>();
   lotes.forEach((lote) => {
     const espessura = numero(lote.espessura);
     const largura = numero(lote.largura);
     const comprimento = numero(lote.comprimento);
-    const chave = [lote.madeiraNome.trim().toLocaleUpperCase("pt-BR"), espessura, largura, comprimento].join("|");
-    const existente = grupos.get(chave) ?? { madeiraNome: lote.madeiraNome, espessura, largura, comprimento, quantidadeDisponivel: 0, volumeDisponivel: 0 };
+    const propriedade = lote.propriedade ?? "proprio";
+    const clienteProprietarioId = lote.clienteProprietarioId ?? null;
+    const chave = [lote.madeiraNome.trim().toLocaleUpperCase("pt-BR"), espessura, largura, comprimento, propriedade, clienteProprietarioId ?? ""].join("|");
+    const existente = grupos.get(chave) ?? { madeiraNome: lote.madeiraNome, espessura, largura, comprimento, propriedade, clienteProprietarioId, quantidadeDisponivel: 0, volumeDisponivel: 0 };
     existente.quantidadeDisponivel += lote.quantidadeDisponivel;
     const quantidadeProduzida = Math.abs(Number(lote.quantidadeProduzida ?? 0));
     const quantidadeDeReferencia = quantidadeProduzida > 0 ? quantidadeProduzida : Math.max(Math.abs(lote.quantidadeDisponivel), 1);

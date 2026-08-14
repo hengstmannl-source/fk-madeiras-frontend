@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao } from "./producao.logic";
+import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarSerragemTerceiros } from "./producao.logic";
 
 describe("regras de produção", () => {
   it("converte bitolas legadas de venda de milímetros para centímetros antes da baixa", () => {
@@ -59,6 +59,17 @@ describe("regras de produção", () => {
     expect(() => validarExclusaoRomaneioProducao({ possuiMovimentacoesPosteriores: false, saldoDasPecasFoiAlterado: true })).toThrow(/peças já movimentadas/i);
   });
 
+  it("valida a serragem de terceiros sem exigir plaquetas no estoque próprio", () => {
+    expect(validarSerragemTerceiros({
+      toras: [{ referencia: "CLI-01", madeiraNome: "Cedrinho", volume: "1.2" }],
+      itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 10 }],
+    })).toMatchObject({ volumeToras: 1.2, volumeProduzido: 0.1125, aproveitamento: 9.38 });
+    expect(() => validarSerragemTerceiros({
+      toras: [{ referencia: "", madeiraNome: "Cedrinho", volume: "1" }],
+      itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 1 }],
+    })).toThrow(/referência/i);
+  });
+
   it("calcula o volume cilíndrico da tora pelo diâmetro em centímetros e comprimento em metros", () => {
     expect(calcularVolumeToraCilindrica("50", "4")).toBeCloseTo(Math.PI * 0.25 ** 2 * 4, 8);
     expect(() => calcularVolumeToraCilindrica("0", "4")).toThrow(/diâmetro/i);
@@ -82,13 +93,20 @@ describe("regras de produção", () => {
     expect(agruparEstoquePecas([
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 10, volume: "0.112500" },
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 5, volume: "0.056250" },
-    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidadeDisponivel: 15, volumeDisponivel: 0.16875 }]);
+    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, propriedade: "proprio", clienteProprietarioId: null, quantidadeDisponivel: 15, volumeDisponivel: 0.16875 }]);
+  });
+
+  it("mantém peças de terceiros separadas do estoque próprio na mesma medida", () => {
+    expect(agruparEstoquePecas([
+      { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 5, volume: "0.056250", propriedade: "proprio" },
+      { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 8, volume: "0.090000", propriedade: "terceiro", clienteProprietarioId: 7 },
+    ])).toHaveLength(2);
   });
 
   it("mantém o volume proporcional quando o saldo de um lote fica negativo", () => {
     expect(agruparEstoquePecas([
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeProduzida: 10, quantidadeDisponivel: -4, volume: "0.112500" },
-    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidadeDisponivel: -4, volumeDisponivel: -0.045 }]);
+    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, propriedade: "proprio", clienteProprietarioId: null, quantidadeDisponivel: -4, volumeDisponivel: -0.045 }]);
   });
 
   it("aloca peças FIFO entre lotes equivalentes e bloqueia a entrega sem saldo", () => {

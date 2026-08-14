@@ -364,3 +364,9 @@
 - [x] Reverter o consumo das plaquetas e excluir as peças geradas ao remover um romaneio de produção
 - [x] Bloquear a remoção de Produção Diária com peças já vinculadas a vendas, inventário ou outros movimentos de estoque
 - [x] Adicionar confirmação, mensagens de bloqueio e testes para a exclusão segura de Produção Diária
+- [x] Modelar o serviço de Serragem de Terceiros, com cliente, toras próprias do cliente e identificação de propriedade
+- [x] Criar lançamento em formato de planilha para toras serradas de terceiros, sem entrada no estoque próprio de toras
+- [x] Reutilizar a grade de produção serrada para registrar peças originadas de Serragem de Terceiros
+- [x] Registrar peças de terceiros no estoque com identificação visual de proprietário e bloqueio de venda como estoque próprio
+- [x] Permitir informar e cobrar o valor do serviço de serragem sem transferir a propriedade das peças
+- [x] Cobrir fluxo de serviço, propriedade de estoque, cobrança e interface com testes e validação visual

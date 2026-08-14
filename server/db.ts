@@ -6,7 +6,7 @@ import {
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -17,7 +17,7 @@ import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCa
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
-import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, type ItemProducaoEntrada } from "./producao.logic";
+import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
@@ -2891,6 +2891,94 @@ export async function confirmarRomaneioProducao(data: {
   });
 }
 
+async function getOrCreateCategoriaReceitaSerragem(tx: any, empresaId: number, userId: number): Promise<number> {
+  const existente = (await tx.select().from(categoriasFinanceiras)
+    .where(and(eq(categoriasFinanceiras.empresaId, empresaId), eq(categoriasFinanceiras.nome, "Serviço de serragem"), eq(categoriasFinanceiras.ativo, true))).limit(1))[0];
+  if (existente) return existente.id;
+  const resultado = await tx.insert(categoriasFinanceiras).values({ empresaId, nome: "Serviço de serragem", tipo: "receita", ativo: true, criadoPor: userId });
+  return getInsertedId(resultado as MysqlInsertResult);
+}
+
+export async function criarSerragemTerceiros(data: {
+  clienteId: number;
+  dataProducao: Date;
+  dataVencimento: Date;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  valorServico: string;
+  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume: string }>;
+  itens: ItemProducaoEntrada[];
+  criadoPor: number;
+  empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const cliente = (await tx.select().from(clientes).where(and(eq(clientes.id, data.clienteId), eq(clientes.empresaId, data.empresaId))).limit(1))[0];
+    if (!cliente) throw new Error("Cliente não encontrado para o serviço de serragem");
+    const valorServico = Number(String(data.valorServico).replace(",", "."));
+    if (!(valorServico > 0)) throw new Error("Informe um valor válido para o serviço de serragem");
+    const calculo = validarSerragemTerceiros({ toras: data.toras, itens: data.itens });
+    const insercao = await tx.insert(serragensTerceiros).values({
+      empresaId: data.empresaId,
+      numero: `SER-TMP-${crypto.randomUUID().slice(0, 16)}`,
+      clienteId: data.clienteId,
+      dataProducao: data.dataProducao,
+      responsavel: data.responsavel?.trim() || null,
+      observacoes: data.observacoes?.trim() || null,
+      valorServico: valorServico.toFixed(2),
+      dataVencimento: data.dataVencimento,
+      volumeToras: calculo.volumeToras.toFixed(6),
+      volumeProduzido: calculo.volumeProduzido.toFixed(6),
+      aproveitamento: calculo.aproveitamento.toFixed(2),
+      criadoPor: data.criadoPor,
+    });
+    const serragemId = getInsertedId(insercao as MysqlInsertResult);
+    const numero = `SER-${String(serragemId).padStart(6, "0")}`;
+    await tx.update(serragensTerceiros).set({ numero }).where(eq(serragensTerceiros.id, serragemId));
+    await tx.insert(itensSerragemToras).values(calculo.toras.map((tora) => ({
+      empresaId: data.empresaId, serragemId, referencia: tora.referencia, madeiraNome: tora.madeiraNome,
+      diametro: tora.diametro ? Number(String(tora.diametro).replace(",", ".")).toFixed(2) : null,
+      comprimento: tora.comprimento ? Number(String(tora.comprimento).replace(",", ".")).toFixed(2) : null,
+      volume: tora.volume.toFixed(6),
+    })));
+    for (const item of calculo.itens) {
+      const insercaoItem = await tx.insert(itensSerragemPecas).values({
+        empresaId: data.empresaId, serragemId, madeiraNome: item.madeiraNome, espessura: item.espessura.toFixed(2), largura: item.largura.toFixed(2), comprimento: item.comprimento.toFixed(2),
+        quantidade: item.quantidade, metrosLineares: item.metrosLineares.toFixed(4), volume: item.volume.toFixed(6),
+      });
+      const itemSerragemId = getInsertedId(insercaoItem as MysqlInsertResult);
+      const insercaoLote = await tx.insert(lotesPecasSerradas).values({
+        empresaId: data.empresaId, romaneioId: null, itemRomaneioId: null, serragemTerceirosId: serragemId, itemSerragemId, propriedade: "terceiro", clienteProprietarioId: data.clienteId,
+        madeiraNome: item.madeiraNome, espessura: item.espessura.toFixed(2), largura: item.largura.toFixed(2), comprimento: item.comprimento.toFixed(2), quantidadeProduzida: item.quantidade, quantidadeDisponivel: item.quantidade,
+        metrosLineares: item.metrosLineares.toFixed(4), volume: item.volume.toFixed(6), estado: "disponivel",
+      });
+      const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
+      await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Serragem de terceiros ${numero} — propriedade de ${cliente.nome}`, criadoPor: data.criadoPor });
+    }
+    const categoriaId = await getOrCreateCategoriaReceitaSerragem(tx, data.empresaId, data.criadoPor);
+    const titulo = await tx.insert(titulosFinanceiros).values({
+      empresaId: data.empresaId, tipo: "receber", origem: "serragem_terceiros", chaveImportacao: null, descricao: `Serviço de serragem — ${numero}`,
+      clienteId: data.clienteId, fornecedorId: null, contraparteNome: cliente.nome, orcamentoId: null, romaneioCargaId: null, notaDieselId: null, serragemTerceirosId: serragemId,
+      categoriaId, recorrenciaId: null, grupoParcelamento: null, numeroParcela: null, totalParcelas: null, valorOriginal: valorServico.toFixed(2), desconto: "0", juros: "0", valorBaixado: "0",
+      dataEmissao: data.dataProducao, dataVencimento: data.dataVencimento, competencia: data.dataProducao, estado: calcularEstadoTitulo({ valorOriginal: valorServico.toFixed(2), dataVencimento: data.dataVencimento }),
+      observacoes: "Cobrança referente exclusivamente ao serviço de serragem; as peças permanecem de propriedade do cliente.", canceladoEm: null, canceladoPor: null, criadoPor: data.criadoPor,
+    });
+    return { id: serragemId, numero, tituloFinanceiroId: getInsertedId(titulo as MysqlInsertResult), ...calculo };
+  });
+}
+
+export async function listSerragensTerceiros(empresaId = 1) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select({
+    id: serragensTerceiros.id, numero: serragensTerceiros.numero, dataProducao: serragensTerceiros.dataProducao, dataVencimento: serragensTerceiros.dataVencimento,
+    clienteId: serragensTerceiros.clienteId, clienteNome: clientes.nome, valorServico: serragensTerceiros.valorServico, volumeToras: serragensTerceiros.volumeToras,
+    volumeProduzido: serragensTerceiros.volumeProduzido, aproveitamento: serragensTerceiros.aproveitamento, responsavel: serragensTerceiros.responsavel,
+  }).from(serragensTerceiros).innerJoin(clientes, and(eq(serragensTerceiros.clienteId, clientes.id), eq(clientes.empresaId, empresaId)))
+    .where(eq(serragensTerceiros.empresaId, empresaId)).orderBy(desc(serragensTerceiros.dataProducao), desc(serragensTerceiros.id));
+}
+
 export async function atualizarRomaneioProducao(id: number, data: {
   dataProducao: Date;
   fita?: string | null;
@@ -3189,7 +3277,7 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
 
     const [itens, lotes] = await Promise.all([
       tx.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId)),
-      tx.select().from(lotesPecasSerradas),
+      tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.empresaId, venda.empresaId), eq(lotesPecasSerradas.propriedade, "proprio"))),
     ]);
     const itensParaEstoque = itens.map(converterDimensoesVendaParaEstoque);
     const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itensParaEstoque, lotes);

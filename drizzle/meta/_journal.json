@@ -274,6 +274,13 @@
       "when": 1786718789228,
       "tag": "0038_third_namorita",
       "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1786734875394,
+      "tag": "0039_black_captain_stacy",
+      "breakpoints": true
     }
   ]
 }

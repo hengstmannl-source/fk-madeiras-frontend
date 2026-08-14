@@ -109,6 +109,25 @@ const RomaneioSchema = z.object({
   itens: z.array(ItemRomaneioSchema).min(1, "Adicione ao menos uma peça produzida"),
 });
 
+const ToraSerragemTerceirosSchema = z.object({
+  referencia: z.string().trim().min(1).max(120),
+  madeiraNome: z.string().trim().min(2).max(200),
+  diametro: DecimalPositivo.optional().nullable(),
+  comprimento: DecimalPositivo.optional().nullable(),
+  volume: DecimalPositivo,
+});
+
+const SerragemTerceirosSchema = z.object({
+  clienteId: z.number().int().positive(),
+  dataProducao: DataSchema,
+  dataVencimento: DataSchema,
+  responsavel: z.string().trim().max(200).nullable().optional(),
+  observacoes: z.string().max(4000).nullable().optional(),
+  valorServico: DecimalPositivo,
+  toras: z.array(ToraSerragemTerceirosSchema).min(1, "Adicione ao menos uma tora do cliente").max(500),
+  itens: z.array(ItemRomaneioSchema).min(1, "Adicione ao menos uma peça serrada").max(500),
+}).refine((valor) => valor.dataVencimento >= valor.dataProducao, "O vencimento não pode ser anterior à data do serviço");
+
 export const producaoRouter = router({
   cargas: router({
     list: protectedProcedure.input(FiltrosCargasSchema.optional()).query(({ ctx, input }) => db.listRomaneiosCargaToras({
@@ -170,6 +189,16 @@ export const producaoRouter = router({
       empresaId: ctx.empresaAtiva!.empresa.id,
     })),
     excluir: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.excluirRomaneioProducao(input.id, ctx.empresaAtiva!.empresa.id)),
+  }),
+  serragemTerceiros: router({
+    list: protectedProcedure.query(({ ctx }) => db.listSerragensTerceiros(ctx.empresaAtiva!.empresa.id)),
+    criar: protectedProcedure.input(SerragemTerceirosSchema).mutation(({ ctx, input }) => db.criarSerragemTerceiros({
+      ...input,
+      dataProducao: dataLocal(input.dataProducao),
+      dataVencimento: dataLocal(input.dataVencimento),
+      criadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
+    })),
   }),
   estoque: router({
     resumo: protectedProcedure.query(({ ctx }) => db.getResumoEstoqueSerrado(ctx.empresaAtiva!.empresa.id)),
