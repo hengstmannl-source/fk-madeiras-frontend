@@ -20,7 +20,7 @@ import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
-import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel } from "./diesel.logic";
+import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
 import { sugerirConciliacoes } from "./conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../shared/plaquetas";
@@ -3342,6 +3342,31 @@ export async function criarNotaDiesel(data: {
       criadoPor: data.criadoPor,
     });
     return { id: notaDieselId, tituloFinanceiroId: getInsertedId(tituloResultado as MysqlInsertResult) };
+  });
+}
+
+export async function excluirNotaDiesel(id: number, userId: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const nota = (await tx.select().from(notasDiesel)
+      .where(and(eq(notasDiesel.id, id), eq(notasDiesel.empresaId, empresaId))).limit(1))[0];
+    if (!nota) throw new Error("Nota de diesel não encontrada");
+
+    const [abastecimento] = await tx.select({ id: abastecimentosDiesel.id }).from(abastecimentosDiesel)
+      .where(eq(abastecimentosDiesel.empresaId, empresaId)).limit(1);
+    const titulo = (await tx.select().from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.notaDieselId, id), eq(titulosFinanceiros.empresaId, empresaId))).limit(1))[0];
+    const baixasAtivas = titulo ? await tx.select({ id: baixasFinanceiras.id }).from(baixasFinanceiras)
+      .where(and(eq(baixasFinanceiras.tituloId, titulo.id), eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.estornada, false))) : [];
+
+    validarExclusaoNotaDiesel({ possuiAbastecimentos: Boolean(abastecimento), possuiBaixasAtivas: baixasAtivas.length > 0 });
+    if (titulo && titulo.estado !== "cancelado") {
+      await tx.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: new Date(), canceladoPor: userId })
+        .where(and(eq(titulosFinanceiros.id, titulo.id), eq(titulosFinanceiros.empresaId, empresaId)));
+    }
+    await tx.delete(notasDiesel).where(and(eq(notasDiesel.id, id), eq(notasDiesel.empresaId, empresaId)));
+    return { success: true, id };
   });
 }
 

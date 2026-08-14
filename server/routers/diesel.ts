@@ -39,6 +39,8 @@ export const dieselRouter = router({
     criadoPor: ctx.user.id,
     empresaId: ctx.empresaAtiva!.empresa.id,
   })),
+  excluirNota: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ input, ctx }) =>
+    db.excluirNotaDiesel(input.id, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
   registrarAbastecimento: protectedProcedure.input(AbastecimentoDieselSchema).mutation(({ input, ctx }) => db.registrarAbastecimentoDiesel({
     ...input,
     dataAbastecimento: dataLocal(input.dataAbastecimento),

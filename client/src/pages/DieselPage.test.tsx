@@ -9,10 +9,11 @@ vi.stubGlobal("ResizeObserver", class {
 });
 Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
 
-const { criarNotaMutate, criarFornecedorMutate, registrarAbastecimentoMutate, resumoQuery } = vi.hoisted(() => ({
+const { criarNotaMutate, criarFornecedorMutate, registrarAbastecimentoMutate, excluirNotaMutate, resumoQuery } = vi.hoisted(() => ({
   criarNotaMutate: vi.fn(),
   criarFornecedorMutate: vi.fn(),
   registrarAbastecimentoMutate: vi.fn(),
+  excluirNotaMutate: vi.fn(),
   resumoQuery: vi.fn(() => ({
     data: {
       saldoLitros: 400,
@@ -35,6 +36,7 @@ vi.mock("@/lib/trpc", () => {
       diesel: {
         resumo: { useQuery: resumoQuery },
         criarNota: { useMutation: () => ({ mutate: criarNotaMutate, isPending: false }) },
+        excluirNota: { useMutation: () => ({ mutate: excluirNotaMutate, isPending: false }) },
         registrarAbastecimento: { useMutation: () => ({ mutate: registrarAbastecimentoMutate, isPending: false }) },
       },
       financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Posto Central" }], isLoading: false }) }, create: { useMutation: () => ({ mutate: criarFornecedorMutate, isPending: false }) } } },
@@ -49,6 +51,7 @@ afterEach(() => {
   criarNotaMutate.mockReset();
   criarFornecedorMutate.mockReset();
   registrarAbastecimentoMutate.mockReset();
+  excluirNotaMutate.mockReset();
   resumoQuery.mockClear();
 });
 
@@ -104,5 +107,22 @@ describe("DieselPage", () => {
 
     expect(registrarAbastecimentoMutate).toHaveBeenCalledWith(expect.objectContaining({ destino: "Empilhadeira", litros: "25" }), expect.any(Object));
     expect(criarNotaMutate).not.toHaveBeenCalled();
+  });
+
+  it("confirma a exclusão da nota e remove sua entrada do tanque quando não há abastecimentos", async () => {
+    const user = userEvent.setup();
+    resumoQuery.mockReturnValueOnce({ data: { saldoLitros: 500, custoMedioLitro: 6.5, valorEstoque: 3250, custoApropriado: 0, notas: [{ id: 1, numeroNota: "1001", fornecedorNome: "Posto Central", litros: "500", valorTotal: "3250", dataVencimento: "2026-08-20T12:00:00.000Z", titulo: { estado: "aberto" } }], abastecimentos: [] }, isLoading: false });
+    excluirNotaMutate.mockImplementationOnce((_entrada, opcoes) => opcoes.onSuccess());
+    render(<DieselPage />);
+
+    await user.click(screen.getByRole("button", { name: "Excluir nota 1001" }));
+    expect(screen.getByText("Excluir esta nota de diesel?")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: /^Excluir nota$/ }));
+    expect(excluirNotaMutate).toHaveBeenCalledWith({ id: 1 }, expect.any(Object));
+  });
+
+  it("bloqueia visualmente a exclusão depois de existir abastecimento", () => {
+    render(<DieselPage />);
+    expect((screen.getByRole("button", { name: "Excluir nota 1001" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

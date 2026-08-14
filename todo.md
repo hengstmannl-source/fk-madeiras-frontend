@@ -357,3 +357,6 @@
 - [x] Distinguir no Fluxo de Caixa o pagamento de compra de diesel para o tanque do custo operacional de abastecimento
 - [x] Explicar no relatório que o saldo de abertura incorpora movimentações anteriores ao intervalo selecionado
 - [x] Cobrir a identificação da compra de diesel, o saldo de abertura e os filtros temporais do fluxo com testes e validação visual
+- [x] Corrigir a exclusão de nota de diesel para reverter ou preservar de forma explícita os reflexos no tanque e no Fluxo de Caixa
+- [x] Informar claramente na interface quando uma nota não puder ser excluída por já possuir abastecimentos vinculados
+- [x] Cobrir a exclusão de nota de diesel sem abastecimentos e o bloqueio seguro quando houver movimentação de tanque vinculada

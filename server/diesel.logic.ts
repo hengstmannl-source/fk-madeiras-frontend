@@ -18,6 +18,15 @@ export type ResumoTanqueDiesel = {
   custoMedioLitro: number;
 };
 
+export function validarExclusaoNotaDiesel(params: { possuiAbastecimentos: boolean; possuiBaixasAtivas: boolean }) {
+  if (params.possuiAbastecimentos) {
+    throw new Error("Não é possível excluir esta nota porque já existem abastecimentos registrados. Mantenha a nota para preservar o saldo e o custo médio do tanque.");
+  }
+  if (params.possuiBaixasAtivas) {
+    throw new Error("Não é possível excluir esta nota porque seu pagamento possui baixa financeira ativa. Estorne ou exclua o pagamento antes.");
+  }
+}
+
 const numero = (valor: string | number) => Number(String(valor).replace(",", ".")) || 0;
 const arredondar = (valor: number, casas: number) => Number(valor.toFixed(casas));
 
