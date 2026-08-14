@@ -380,3 +380,4 @@
 - [x] Alterar a cobrança de Serragem de Terceiros para preço por m³ de tora serrada, com valor total calculado
 - [x] Reaproveitar automaticamente a essência da tora anterior ao adicionar uma nova tora de terceiros
 - [x] Cobrir cálculos de volume, cobrança por m³ e preenchimento sequencial de essência com testes e validação visual
+- [x] Impedir que linhas vazias de toras ou peças adicionadas no formulário de Serragem de Terceiros bloqueiem o registro do serviço

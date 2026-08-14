@@ -331,13 +331,19 @@ export default function ProducaoPage() {
   resumoTarifaSerragem = { volumeToras: totalTorasTerceiros, tarifaPorM3: tarifaPorM3Terceiros, valorTotal: valorTotalSerragemTerceiros };
   const salvarSerragemTerceiros = () => {
     if (!serragemTerceiros.clienteId) { toast.error("Selecione o cliente proprietário das toras"); return; }
+    const torasPreenchidas = serragemTerceiros.toras.filter((tora) => Boolean(tora.referencia.trim() || num(tora.diametro) > 0 || num(tora.comprimento) > 0));
+    const itensPreenchidos = serragemTerceiros.itens.filter((item) => Boolean(item.madeiraNome.trim() || num(item.espessura) > 0 || num(item.largura) > 0 || num(item.comprimento) > 0 || num(item.quantidade) > 0));
+    if (!torasPreenchidas.length) { toast.error("Informe pelo menos uma tora serrada"); return; }
+    if (!itensPreenchidos.length) { toast.error("Informe pelo menos uma peça produzida"); return; }
+    if (torasPreenchidas.some((tora) => !tora.referencia.trim() || num(tora.diametro) <= 0 || num(tora.comprimento) <= 0)) { toast.error("Preencha referência, diâmetro e comprimento de todas as toras informadas"); return; }
+    if (itensPreenchidos.some((item) => item.madeiraNome.trim().length < 2 || num(item.espessura) <= 0 || num(item.largura) <= 0 || num(item.comprimento) <= 0 || num(item.quantidade) <= 0)) { toast.error("Preencha essência, medidas e quantidade de todas as peças informadas"); return; }
     const { valorServico, ...dadosSerragem } = serragemTerceiros;
     criarSerragemTerceiros.mutate({
       ...dadosSerragem,
       clienteId: Number(serragemTerceiros.clienteId),
       valorMetroCubico: valorServico,
-      toras: serragemTerceiros.toras,
-      itens: serragemTerceiros.itens.map((item) => ({ ...item, quantidade: Number(item.quantidade) })),
+      toras: torasPreenchidas.map((tora) => ({ ...tora, referencia: tora.referencia.trim(), madeiraNome: tora.madeiraNome.trim() })),
+      itens: itensPreenchidos.map((item) => ({ ...item, madeiraNome: item.madeiraNome.trim(), quantidade: Number(item.quantidade) })),
     }, {
       onSuccess: (resultado) => { toast.success(`${resultado.numero} registrada · aproveitamento de ${formatarNumero(resultado.aproveitamento, 2)}%`); setDialogSerragemTerceiros(false); setDialogSerragemTerceirosResponsivo(false); invalidar(); },
       onError: (erro) => toast.error(erro.message),

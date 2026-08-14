@@ -4,6 +4,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const criarSerragemMock = vi.hoisted(() => vi.fn());
+
 vi.stubGlobal("ResizeObserver", class {
   observe() {}
   unobserve() {}
@@ -31,7 +33,7 @@ vi.mock("@/lib/trpc", () => {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 1, totalDisponiveis: 1, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
-        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: mutationInerte, registrarRetirada: mutationInerte },
+        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte },
       },
       cliente: { list: { useQuery: () => ({ data: [{ id: 1, nome: "Marcenaria Silva", telefone: "(67) 99999-0000" }], isLoading: false }) }, create: mutationInerte },
     },
@@ -45,7 +47,7 @@ Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable
 Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", { configurable: true, value: () => undefined });
 Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => undefined });
 
-afterEach(() => cleanup());
+afterEach(() => { cleanup(); criarSerragemMock.mockReset(); });
 
 describe("ProducaoPage", () => {
   it("apresenta somente a produção diária e orienta o uso prévio do Estoque", () => {
@@ -87,6 +89,35 @@ describe("ProducaoPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
     expect(screen.getAllByDisplayValue("Cedrinho")).toHaveLength(2);
+  });
+
+  it("descarta linhas vazias adicionadas antes de registrar a serragem de terceiros", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
+    await user.click(screen.getByRole("combobox", { name: "Cliente proprietário" }));
+    await user.click(screen.getAllByRole("option")[1]);
+    await user.type(screen.getByLabelText("Referência"), "CLI-03");
+    await user.type(screen.getAllByLabelText("Essência")[0], "Cedrinho");
+    await user.type(screen.getByLabelText("Diâmetro (cm)"), "50");
+    await user.type(screen.getAllByLabelText("Comprimento (m)")[0], "4");
+    await user.type(screen.getByLabelText("Tarifa por m³ (R$/m³) *"), "50");
+    await user.type(screen.getAllByLabelText("Essência")[1], "Cedrinho");
+    await user.type(screen.getByLabelText("Espessura (cm)"), "2.5");
+    await user.type(screen.getByLabelText("Largura (cm)"), "15");
+    await user.type(screen.getAllByLabelText("Comprimento (m)")[1], "3");
+    await user.type(screen.getByLabelText("Quantidade"), "10");
+    await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
+    await user.click(screen.getByRole("button", { name: "Adicionar peça" }));
+    await user.click(screen.getByRole("button", { name: "Registrar serviço" }));
+
+    expect(criarSerragemMock).toHaveBeenCalledOnce();
+    const [dados] = criarSerragemMock.mock.calls[0];
+    expect(dados.toras).toHaveLength(1);
+    expect(dados.itens).toHaveLength(1);
+    expect(dados.toras[0]).toMatchObject({ referencia: "CLI-03", madeiraNome: "Cedrinho", volume: "0.785398" });
+    expect(dados.itens[0]).toMatchObject({ madeiraNome: "Cedrinho", quantidade: 10 });
   });
 
   it("permite criar um cliente diretamente no seletor de serragem", async () => {
