@@ -74,7 +74,7 @@ export function calcularItemRomaneio(item: ItemProducaoEntrada) {
 }
 
 export function validarSerragemTerceiros(input: {
-  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | number | null; comprimento?: string | number | null; volume: string | number }>;
+  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | number | null; comprimento?: string | number | null; volume?: string | number }>;
   itens: ItemProducaoEntrada[];
 }) {
   if (!input.toras.length) throw new Error("Informe ao menos uma tora do cliente para a serragem");
@@ -82,11 +82,18 @@ export function validarSerragemTerceiros(input: {
   const referencias = new Set<string>();
   const toras = input.toras.map((tora) => {
     const referencia = tora.referencia.trim();
-    const volume = numero(tora.volume);
-    if (!referencia || !tora.madeiraNome.trim() || volume <= 0) throw new Error("Informe referência, essência e volume válidos para cada tora");
+    if (!referencia || !tora.madeiraNome.trim()) throw new Error("Informe referência e essência válidas para cada tora");
     if (referencias.has(referencia.toLocaleUpperCase("pt-BR"))) throw new Error(`A tora ${referencia} foi informada mais de uma vez`);
     referencias.add(referencia.toLocaleUpperCase("pt-BR"));
-    return { ...tora, referencia, madeiraNome: tora.madeiraNome.trim(), volume: Number(volume.toFixed(6)) };
+    const volume = calcularVolumeToraCilindrica(tora.diametro ?? 0, tora.comprimento ?? 0);
+    return {
+      ...tora,
+      referencia,
+      madeiraNome: tora.madeiraNome.trim(),
+      diametro: Number(numero(tora.diametro ?? 0).toFixed(2)),
+      comprimento: Number(numero(tora.comprimento ?? 0).toFixed(2)),
+      volume: Number(volume.toFixed(6)),
+    };
   });
   const itens = input.itens.map(calcularItemRomaneio);
   const volumeToras = Number(toras.reduce((total, tora) => total + tora.volume, 0).toFixed(6));

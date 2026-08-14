@@ -1,0 +1,1 @@
+ALTER TABLE `serragensTerceiros` ADD `valorMetroCubico` decimal(14,2) DEFAULT '0' NOT NULL;

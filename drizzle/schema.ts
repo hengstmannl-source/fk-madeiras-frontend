@@ -384,6 +384,7 @@ export const serragensTerceiros = mysqlTable("serragensTerceiros", {
   responsavel: varchar("responsavel", { length: 200 }),
   observacoes: text("observacoes"),
   valorServico: decimal("valorServico", { precision: 14, scale: 2 }).notNull(),
+  valorMetroCubico: decimal("valorMetroCubico", { precision: 14, scale: 2 }).notNull().default("0"),
   dataVencimento: timestamp("dataVencimento").notNull(),
   volumeToras: decimal("volumeToras", { precision: 14, scale: 6 }).notNull(),
   volumeProduzido: decimal("volumeProduzido", { precision: 14, scale: 6 }).notNull(),

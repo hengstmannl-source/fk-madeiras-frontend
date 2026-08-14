@@ -2905,8 +2905,8 @@ export async function criarSerragemTerceiros(data: {
   dataVencimento: Date;
   responsavel?: string | null;
   observacoes?: string | null;
-  valorServico: string;
-  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume: string }>;
+  valorMetroCubico: string;
+  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume?: string }>;
   itens: ItemProducaoEntrada[];
   criadoPor: number;
   empresaId: number;
@@ -2916,9 +2916,10 @@ export async function criarSerragemTerceiros(data: {
   return db.transaction(async (tx: any) => {
     const cliente = (await tx.select().from(clientes).where(and(eq(clientes.id, data.clienteId), eq(clientes.empresaId, data.empresaId))).limit(1))[0];
     if (!cliente) throw new Error("Cliente não encontrado para o serviço de serragem");
-    const valorServico = Number(String(data.valorServico).replace(",", "."));
-    if (!(valorServico > 0)) throw new Error("Informe um valor válido para o serviço de serragem");
     const calculo = validarSerragemTerceiros({ toras: data.toras, itens: data.itens });
+    const valorMetroCubico = Number(String(data.valorMetroCubico).replace(",", "."));
+    if (!Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) throw new Error("Informe um preço por m³ válido para o serviço de serragem");
+    const valorServico = Number((calculo.volumeToras * valorMetroCubico).toFixed(2));
     const insercao = await tx.insert(serragensTerceiros).values({
       empresaId: data.empresaId,
       numero: `SER-TMP-${crypto.randomUUID().slice(0, 16)}`,
@@ -2927,6 +2928,7 @@ export async function criarSerragemTerceiros(data: {
       responsavel: data.responsavel?.trim() || null,
       observacoes: data.observacoes?.trim() || null,
       valorServico: valorServico.toFixed(2),
+      valorMetroCubico: valorMetroCubico.toFixed(2),
       dataVencimento: data.dataVencimento,
       volumeToras: calculo.volumeToras.toFixed(6),
       volumeProduzido: calculo.volumeProduzido.toFixed(6),

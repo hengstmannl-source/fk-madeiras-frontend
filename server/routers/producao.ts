@@ -112,9 +112,9 @@ const RomaneioSchema = z.object({
 const ToraSerragemTerceirosSchema = z.object({
   referencia: z.string().trim().min(1).max(120),
   madeiraNome: z.string().trim().min(2).max(200),
-  diametro: DecimalPositivo.optional().nullable(),
-  comprimento: DecimalPositivo.optional().nullable(),
-  volume: DecimalPositivo,
+  diametro: DecimalPositivo,
+  comprimento: DecimalPositivo,
+  volume: DecimalPositivo.optional(),
 });
 
 const SerragemTerceirosSchema = z.object({
@@ -123,7 +123,7 @@ const SerragemTerceirosSchema = z.object({
   dataVencimento: DataSchema,
   responsavel: z.string().trim().max(200).nullable().optional(),
   observacoes: z.string().max(4000).nullable().optional(),
-  valorServico: DecimalPositivo,
+  valorMetroCubico: DecimalPositivo,
   toras: z.array(ToraSerragemTerceirosSchema).min(1, "Adicione ao menos uma tora do cliente").max(500),
   itens: z.array(ItemRomaneioSchema).min(1, "Adicione ao menos uma peça serrada").max(500),
 }).refine((valor) => valor.dataVencimento >= valor.dataProducao, "O vencimento não pode ser anterior à data do serviço");

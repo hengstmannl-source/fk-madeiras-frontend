@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { cloneElement, isValidElement, useMemo, useState, type ReactElement, type ReactNode, type SetStateAction } from "react";
 import { AlertTriangle, BarChart3, ChevronLeft, Download, Factory, FileSpreadsheet, FileText, Layers3, Loader2, Plus, Scissors, Trash2, TreePine, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -26,7 +26,9 @@ type NovoClienteSerragemForm = { nome: string; contacto: string };
 const hoje = () => new Date().toISOString().slice(0, 10);
 const num = (valor: string | number | null | undefined) => Number(String(valor ?? "").replace(",", ".")) || 0;
 const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: casas }).format(Number(valor ?? 0));
+const formatarMoeda = (valor: number | string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor ?? 0));
 const formatarData = (valor: string | Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(valor));
+let resumoTarifaSerragem: { volumeToras: number; tarifaPorM3: number; valorTotal: number } | null = null;
 const novoItem = (madeiraNome = ""): ItemForm => ({ madeiraNome, espessura: "", largura: "", comprimento: "", quantidade: "" });
 const novoGrupoPecas = (madeiraNome = ""): GrupoPecasForm => ({ madeiraNome, espessura: "", largura: "" });
 const novoRomaneio = (): RomaneioForm => ({ toras: [], dataProducao: hoje(), fita: "", responsavel: "", observacoes: "", itens: [] });
@@ -63,7 +65,7 @@ export default function ProducaoPage() {
   const [romaneioParaExcluir, setRomaneioParaExcluir] = useState<{ id: number; numero: string } | null>(null);
   const [dialogSerragemTerceiros, setDialogSerragemTerceiros] = useState(false);
   const [dialogSerragemTerceirosResponsivo, setDialogSerragemTerceirosResponsivo] = useState(false);
-  const [serragemTerceiros, setSerragemTerceiros] = useState<SerragemTerceirosForm>(novaSerragemTerceiros);
+  const [serragemTerceiros, atualizarEstadoSerragemTerceiros] = useState<SerragemTerceirosForm>(novaSerragemTerceiros);
   const [dialogRetiradaSerragem, setDialogRetiradaSerragem] = useState(false);
   const [serragemParaRetirada, setSerragemParaRetirada] = useState<any | null>(null);
   const [detalheRetiradaSerragem, setDetalheRetiradaSerragem] = useState<any | null>(null);
@@ -96,6 +98,22 @@ export default function ProducaoPage() {
     return { pecas: total.pecas + calculo.quantidade, metrosLineares: total.metrosLineares + calculo.metrosLineares, volume: total.volume + calculo.volume };
   }, { pecas: 0, metrosLineares: 0, volume: 0 }), [romaneio.itens]);
   const aproveitamento = totalToras > 0 ? (totaisPecas.volume / totalToras) * 100 : 0;
+  const setSerragemTerceiros = (atualizacao: SetStateAction<SerragemTerceirosForm>) => atualizarEstadoSerragemTerceiros((atual) => {
+    const proximo = typeof atualizacao === "function" ? atualizacao(atual) : atualizacao;
+    const essenciaAnterior = atual.toras.at(-1)?.madeiraNome ?? "";
+    const novaToraAdicionada = proximo.toras.length > atual.toras.length;
+    const toras = proximo.toras.map((tora, indice) => {
+      const diametroInformado = num(tora.diametro) > 0;
+      const comprimentoInformado = num(tora.comprimento) > 0;
+      const madeiraNome = novaToraAdicionada && indice >= atual.toras.length && !tora.madeiraNome.trim() ? essenciaAnterior : tora.madeiraNome;
+      return {
+        ...tora,
+        madeiraNome,
+        volume: diametroInformado && comprimentoInformado ? calcularVolumeTora(tora.diametro, tora.comprimento).toFixed(6) : "",
+      };
+    });
+    return { ...proximo, toras };
+  });
   const resumoEssencias = useMemo(() => {
     const totais = new Map<string, number>();
     romaneio.toras.forEach((tora) => totais.set(tora.madeiraNome.trim() || "Sem essência", (totais.get(tora.madeiraNome.trim() || "Sem essência") ?? 0) + num(tora.volume)));
@@ -308,11 +326,16 @@ export default function ProducaoPage() {
   };
   const totalTorasTerceiros = serragemTerceiros.toras.reduce((total, tora) => total + num(tora.volume), 0);
   const totalPecasTerceiros = serragemTerceiros.itens.reduce((total, item) => total + calcularItem(item).volume, 0);
+  const tarifaPorM3Terceiros = num(serragemTerceiros.valorServico);
+  const valorTotalSerragemTerceiros = Number((totalTorasTerceiros * tarifaPorM3Terceiros).toFixed(2));
+  resumoTarifaSerragem = { volumeToras: totalTorasTerceiros, tarifaPorM3: tarifaPorM3Terceiros, valorTotal: valorTotalSerragemTerceiros };
   const salvarSerragemTerceiros = () => {
     if (!serragemTerceiros.clienteId) { toast.error("Selecione o cliente proprietário das toras"); return; }
+    const { valorServico, ...dadosSerragem } = serragemTerceiros;
     criarSerragemTerceiros.mutate({
-      ...serragemTerceiros,
+      ...dadosSerragem,
       clienteId: Number(serragemTerceiros.clienteId),
+      valorMetroCubico: valorServico,
       toras: serragemTerceiros.toras,
       itens: serragemTerceiros.itens.map((item) => ({ ...item, quantidade: Number(item.quantidade) })),
     }, {
@@ -365,7 +388,13 @@ export default function ProducaoPage() {
   </div>;
 }
 
-function Campo({ label, children }: { label: string; children: ReactNode }) { return <div className="min-w-0 space-y-1.5"><Label className="break-words">{label}</Label>{children}</div>; }
+function Campo({ label, children }: { label: string; children: ReactNode }) {
+  const campoTarifaSerragem = label === "Valor do serviço (R$) *";
+  const resumo = campoTarifaSerragem ? resumoTarifaSerragem : null;
+  const nomeCampo = campoTarifaSerragem ? "Tarifa por m³ (R$/m³) *" : label;
+  const controle = isValidElement(children) ? cloneElement(children as ReactElement<any>, { "aria-label": (children.props as any)["aria-label"] ?? nomeCampo }) : children;
+  return <div className="min-w-0 space-y-1.5"><Label className="break-words">{nomeCampo}</Label>{controle}{resumo && <p className="text-xs font-medium text-violet-700">{formatarMoeda(resumo.tarifaPorM3)} × {formatarNumero(resumo.volumeToras)} m³ = <span className="font-semibold">{formatarMoeda(resumo.valorTotal)}</span></p>}</div>;
+}
 function Cabecalho({ titulo, texto, acao }: { titulo: string; texto: string; acao?: ReactNode }) { return <div className="flex min-w-0 flex-col gap-3 border-b bg-muted/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="min-w-0"><h2 className="font-semibold">{titulo}</h2><p className="mt-0.5 text-xs text-muted-foreground">{texto}</p></div>{acao}</div>; }
 function Resumo({ icon, titulo, valor, detalhe, cor }: { icon: ReactNode; titulo: string; valor: ReactNode; detalhe: string; cor: string }) { const cores: Record<string, string> = { emerald: "bg-emerald-50 text-emerald-700", sky: "bg-sky-50 text-sky-700", amber: "bg-amber-50 text-amber-700", violet: "bg-violet-50 text-violet-700" }; return <div className="min-w-0 rounded-xl border bg-card p-4 shadow-sm"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-muted-foreground">{titulo}</p><p className="mt-1 break-words text-xl font-bold">{valor}</p></div><div className={`shrink-0 rounded-lg p-2 ${cores[cor]}`}>{icon}</div></div><p className="mt-2 break-words text-xs text-muted-foreground">{detalhe}</p></div>; }
 function Indicador({ texto, valor, destaque }: { texto: string; valor: ReactNode; destaque?: string }) { return <div className={`min-w-0 rounded-lg border p-3 ${destaque === "destructive" ? "border-rose-200 bg-rose-50" : destaque ? "border-primary/20 bg-primary/5" : "bg-muted/20"}`}><p className="text-xs text-muted-foreground">{texto}</p><p className="mt-1 break-words font-semibold">{valor}</p></div>; }

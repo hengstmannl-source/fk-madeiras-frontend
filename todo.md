@@ -376,3 +376,7 @@
 - [x] Ajustar o formulário de Serragem de Terceiros para largura responsiva, sem corte horizontal e com grade de uso mais fluido
 - [x] Permitir pesquisar e criar um novo cliente diretamente no seletor do serviço de serragem
 - [x] Cobrir retirada, saldo remanescente, criação de cliente e responsividade com testes e validação visual
+- [x] Calcular automaticamente o volume individual e total das toras de Serragem de Terceiros a partir de diâmetro e comprimento
+- [x] Alterar a cobrança de Serragem de Terceiros para preço por m³ de tora serrada, com valor total calculado
+- [x] Reaproveitar automaticamente a essência da tora anterior ao adicionar uma nova tora de terceiros
+- [x] Cobrir cálculos de volume, cobrança por m³ e preenchimento sequencial de essência com testes e validação visual

@@ -61,13 +61,23 @@ describe("regras de produção", () => {
 
   it("valida a serragem de terceiros sem exigir plaquetas no estoque próprio", () => {
     expect(validarSerragemTerceiros({
-      toras: [{ referencia: "CLI-01", madeiraNome: "Cedrinho", volume: "1.2" }],
+      toras: [{ referencia: "CLI-01", madeiraNome: "Cedrinho", diametro: "50", comprimento: "6,1115498", volume: "1.2" }],
       itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 10 }],
     })).toMatchObject({ volumeToras: 1.2, volumeProduzido: 0.1125, aproveitamento: 9.38 });
     expect(() => validarSerragemTerceiros({
-      toras: [{ referencia: "", madeiraNome: "Cedrinho", volume: "1" }],
+      toras: [{ referencia: "", madeiraNome: "Cedrinho", diametro: "50", comprimento: "4", volume: "1" }],
       itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 1 }],
     })).toThrow(/referência/i);
+  });
+
+  it("recalcula as toras de terceiros pelas medidas e cobra pelo volume apurado", () => {
+    const resultado = validarSerragemTerceiros({
+      toras: [{ referencia: "CLI-02", madeiraNome: "Cedrinho", diametro: "50", comprimento: "4", volume: "999" }],
+      itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 1 }],
+    });
+    expect(resultado.volumeToras).toBeCloseTo(0.785398, 6);
+    expect(resultado.toras[0].volume).toBeCloseTo(0.785398, 6);
+    expect(calcularValorTora(resultado.volumeToras, "50,00")).toBe(39.27);
   });
 
   it("calcula o volume cilíndrico da tora pelo diâmetro em centímetros e comprimento em metros", () => {

@@ -71,6 +71,24 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("button", { name: "Registrar serviço" })).toBeInTheDocument();
   });
 
+  it("calcula o volume das toras de terceiros, mostra a cobrança por m³ e repete a última essência", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
+    await user.type(screen.getByLabelText("Referência"), "CLI-02");
+    await user.type(screen.getAllByLabelText("Essência")[0], "Cedrinho");
+    await user.type(screen.getByLabelText("Diâmetro (cm)"), "50");
+    await user.type(screen.getAllByLabelText("Comprimento (m)")[0], "4");
+    await user.type(screen.getByLabelText("Tarifa por m³ (R$/m³) *"), "50");
+
+    expect(screen.getByDisplayValue("0.785398")).toBeInTheDocument();
+    expect(screen.getByText(/R\$ 50,00 × 0,785 m³ =/)).toHaveTextContent("R$ 39,27");
+
+    await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
+    expect(screen.getAllByDisplayValue("Cedrinho")).toHaveLength(2);
+  });
+
   it("permite criar um cliente diretamente no seletor de serragem", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
