@@ -16,7 +16,11 @@ export type MovimentoFluxoCaixa = {
 const CENTAVOS_EPSILON = 0.005;
 
 export function decimalParaNumero(valor: string | number | null | undefined): number {
-  const numero = typeof valor === "number" ? valor : Number.parseFloat(valor ?? "0");
+  const texto = String(valor ?? "0").trim();
+  const normalizado = texto.includes(",") && texto.includes(".")
+    ? texto.replace(/\./g, "").replace(",", ".")
+    : texto.replace(",", ".");
+  const numero = typeof valor === "number" ? valor : Number.parseFloat(normalizado);
   return Number.isFinite(numero) ? numero : 0;
 }
 
@@ -84,6 +88,17 @@ export function podeCancelarTituloFinanceiro(valorBaixado: string | number | nul
 
 export function podeEstornarBaixa(estornada: boolean | number | null | undefined): boolean {
   return !Boolean(estornada);
+}
+
+/** Garante que os cheques informados cubram exatamente uma baixa financeira. */
+export function validarValorDosCheques(valorBaixa: string | number, valoresCheques: Array<string | number>): number {
+  const valorEsperadoEmCentavos = Math.round(decimalParaNumero(valorBaixa) * 100);
+  const valorChequesEmCentavos = valoresCheques.reduce<number>((total, valor) => total + Math.round(decimalParaNumero(valor) * 100), 0);
+  if (valorEsperadoEmCentavos <= 0) throw new Error("O valor da baixa deve ser maior que zero");
+  if (valorChequesEmCentavos !== valorEsperadoEmCentavos) {
+    throw new Error("A soma dos cheques deve ser exatamente igual ao valor da baixa");
+  }
+  return valorChequesEmCentavos / 100;
 }
 
 function inicioDoDia(data: Date): Date {

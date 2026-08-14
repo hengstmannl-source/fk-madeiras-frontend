@@ -5,15 +5,15 @@ import {
   orcamentos, itensOrcamento, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
-  baixasFinanceiras, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
+  baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
-  type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertRecorrenciaFinanceira,
+  type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
@@ -841,6 +841,62 @@ export async function updateContaFinanceira(id: number, data: Partial<InsertCont
   return { success: true };
 }
 
+export async function listCaixasCheque(empresaId = 1) {
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(contasFinanceiras)
+    .where(and(eq(contasFinanceiras.empresaId, empresaId), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.tipo, "caixa_cheque")))
+    .orderBy(desc(contasFinanceiras.createdAt));
+}
+
+export async function listChequesFinanceiros(
+  filters: { contaFinanceiraId?: number; estado?: "disponivel" | "utilizado" | "estornado" } = {},
+  empresaId = 1,
+) {
+  const db = await getDb();
+  if (!db) return [];
+  const conditions = [eq(chequesFinanceiros.empresaId, empresaId)];
+  if (filters.contaFinanceiraId) conditions.push(eq(chequesFinanceiros.contaFinanceiraId, filters.contaFinanceiraId));
+  if (filters.estado) conditions.push(eq(chequesFinanceiros.estado, filters.estado));
+  return db.select({
+    id: chequesFinanceiros.id,
+    contaFinanceiraId: chequesFinanceiros.contaFinanceiraId,
+    baixaEntradaId: chequesFinanceiros.baixaEntradaId,
+    baixaSaidaId: chequesFinanceiros.baixaSaidaId,
+    clienteId: chequesFinanceiros.clienteId,
+    referencia: chequesFinanceiros.referencia,
+    valor: chequesFinanceiros.valor,
+    dataRecebimento: chequesFinanceiros.dataRecebimento,
+    utilizadoEm: chequesFinanceiros.utilizadoEm,
+    estado: chequesFinanceiros.estado,
+    estornadoEm: chequesFinanceiros.estornadoEm,
+    contaNome: contasFinanceiras.nome,
+    clienteNome: clientes.nome,
+  }).from(chequesFinanceiros)
+    .innerJoin(contasFinanceiras, eq(chequesFinanceiros.contaFinanceiraId, contasFinanceiras.id))
+    .innerJoin(clientes, eq(chequesFinanceiros.clienteId, clientes.id))
+    .where(and(...conditions))
+    .orderBy(desc(chequesFinanceiros.dataRecebimento), desc(chequesFinanceiros.createdAt));
+}
+
+export async function getResumoCaixaCheque(empresaId = 1) {
+  const [contas, cheques] = await Promise.all([
+    listCaixasCheque(empresaId),
+    listChequesFinanceiros({}, empresaId),
+  ]);
+  const totalDisponivel = cheques.filter((cheque) => cheque.estado === "disponivel")
+    .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
+  const totalUtilizado = cheques.filter((cheque) => cheque.estado === "utilizado")
+    .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
+  return {
+    contas,
+    totalDisponivel,
+    totalUtilizado,
+    quantidadeDisponivel: cheques.filter((cheque) => cheque.estado === "disponivel").length,
+    quantidadeUtilizada: cheques.filter((cheque) => cheque.estado === "utilizado").length,
+  };
+}
+
 export async function getOrCreateCategoriaReceitaVendas(userId: number, empresaId: number): Promise<number> {
 const db = await getDb();
 if (!db) throw new Error("Database not available");
@@ -1135,28 +1191,117 @@ export async function importarLancamentosFinanceirosCsv(
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function registrarBaixaFinanceira(data: Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor">, empresaId = 1) {
+type ChequeRecebidoInput = {
+  referencia: string;
+  valor: string | number;
+  clienteId?: number | null;
+};
+
+type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor"> & {
+  chequesRecebidos?: ChequeRecebidoInput[];
+  chequeIdsUtilizados?: number[];
+};
+
+export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(data.tituloId, empresaId);
-  if (!titulo) throw new Error("Título financeiro não encontrado");
-  if (titulo.estado === "cancelado" || titulo.estado === "quitado") throw new Error("Este título não aceita novas baixas");
-  const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, data.contaFinanceiraId), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).limit(1);
-  if (!conta[0]) throw new Error("Informe uma conta financeira ativa para a baixa");
-  const valorBaixa = decimalParaNumero(data.valor);
-  const saldoAberto = saldoAbertoTitulo(titulo.valorOriginal, titulo.desconto, titulo.juros, titulo.valorBaixado);
-  if (valorBaixa <= 0 || valorBaixa > saldoAberto + 0.005) throw new Error("O valor da baixa deve ser maior que zero e não pode exceder o saldo em aberto");
-  const result = await db.insert(baixasFinanceiras).values({ ...data, valor: valorBaixa.toFixed(2), empresaId });
-  const novoValorBaixado = (decimalParaNumero(titulo.valorBaixado) + valorBaixa).toFixed(2);
-  const novoEstado = calcularEstadoTitulo({
-    valorOriginal: titulo.valorOriginal,
-    desconto: titulo.desconto,
-    juros: titulo.juros,
-    valorBaixado: novoValorBaixado,
-    dataVencimento: titulo.dataVencimento,
+  return db.transaction(async (tx: any) => {
+    const titulo = (await tx.select().from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.id, data.tituloId), eq(titulosFinanceiros.empresaId, empresaId))).limit(1))[0];
+    if (!titulo) throw new Error("Título financeiro não encontrado");
+    if (titulo.estado === "cancelado" || titulo.estado === "quitado") throw new Error("Este título não aceita novas baixas");
+    const conta = (await tx.select().from(contasFinanceiras)
+      .where(and(eq(contasFinanceiras.id, data.contaFinanceiraId), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).limit(1))[0];
+    if (!conta) throw new Error("Informe uma conta financeira ativa para a baixa");
+
+    const valorBaixa = decimalParaNumero(data.valor);
+    const saldoAberto = saldoAbertoTitulo(titulo.valorOriginal, titulo.desconto, titulo.juros, titulo.valorBaixado);
+    if (valorBaixa <= 0 || valorBaixa > saldoAberto + 0.005) throw new Error("O valor da baixa deve ser maior que zero e não pode exceder o saldo em aberto");
+
+    const ehCaixaCheque = conta.tipo === "caixa_cheque";
+    const chequesRecebidos = data.chequesRecebidos ?? [];
+    const chequeIdsUtilizados = Array.from(new Set(data.chequeIdsUtilizados ?? []));
+    if (!ehCaixaCheque && (data.formaPagamento === "cheque" || chequesRecebidos.length || chequeIdsUtilizados.length)) {
+      throw new Error("Cheque deve ser registrado exclusivamente em uma conta do tipo Caixa Cheque");
+    }
+    if (ehCaixaCheque && data.formaPagamento !== "cheque") {
+      throw new Error("Movimentações no Caixa Cheque devem usar a forma de pagamento Cheque");
+    }
+
+    if (ehCaixaCheque && titulo.tipo === "receber") {
+      if (!chequesRecebidos.length) throw new Error("Informe pelo menos um cheque para registrar este recebimento");
+      if (chequeIdsUtilizados.length) throw new Error("Cheques disponíveis só podem ser utilizados em contas a pagar");
+      const referencias = chequesRecebidos.map((cheque) => cheque.referencia.trim()).filter(Boolean);
+      if (referencias.length !== chequesRecebidos.length) throw new Error("Informe a referência de cada cheque recebido");
+      if (new Set(referencias.map((referencia) => referencia.toLocaleUpperCase("pt-BR"))).size !== referencias.length) {
+        throw new Error("Não informe a mesma referência de cheque mais de uma vez");
+      }
+      validarValorDosCheques(valorBaixa, chequesRecebidos.map((cheque) => cheque.valor));
+      const existentes = await tx.select({ referencia: chequesFinanceiros.referencia }).from(chequesFinanceiros)
+        .where(and(
+          eq(chequesFinanceiros.empresaId, empresaId),
+          eq(chequesFinanceiros.contaFinanceiraId, conta.id),
+          inArray(chequesFinanceiros.referencia, referencias),
+        ));
+      if (existentes.length) throw new Error(`A referência do cheque ${existentes[0].referencia} já está registrada neste Caixa Cheque`);
+      for (const cheque of chequesRecebidos) {
+        const clienteId = cheque.clienteId ?? titulo.clienteId;
+        if (!clienteId) throw new Error("Informe o cliente vinculado a cada cheque recebido");
+        if (titulo.clienteId && clienteId !== titulo.clienteId) throw new Error("O cliente do cheque deve ser o mesmo cliente do título a receber");
+      }
+    }
+
+    let chequesSelecionados: Array<{ id: number; valor: string; estado: string }> = [];
+    if (ehCaixaCheque && titulo.tipo === "pagar") {
+      if (!chequeIdsUtilizados.length) throw new Error("Selecione os cheques disponíveis que serão usados neste pagamento");
+      if (chequesRecebidos.length) throw new Error("Novos cheques só podem ser registrados em contas a receber");
+      chequesSelecionados = await tx.select({ id: chequesFinanceiros.id, valor: chequesFinanceiros.valor, estado: chequesFinanceiros.estado })
+        .from(chequesFinanceiros)
+        .where(and(
+          eq(chequesFinanceiros.empresaId, empresaId),
+          eq(chequesFinanceiros.contaFinanceiraId, conta.id),
+          inArray(chequesFinanceiros.id, chequeIdsUtilizados),
+        ));
+      if (chequesSelecionados.length !== chequeIdsUtilizados.length || chequesSelecionados.some((cheque) => cheque.estado !== "disponivel")) {
+        throw new Error("Um ou mais cheques selecionados não estão disponíveis para pagamento");
+      }
+      validarValorDosCheques(valorBaixa, chequesSelecionados.map((cheque) => cheque.valor));
+    }
+
+    const { chequesRecebidos: _chequesRecebidos, chequeIdsUtilizados: _chequeIdsUtilizados, ...dadosBaixa } = data;
+    const result = await tx.insert(baixasFinanceiras).values({ ...dadosBaixa, valor: valorBaixa.toFixed(2), empresaId });
+    const baixaId = getInsertedId(result as MysqlInsertResult);
+
+    if (ehCaixaCheque && titulo.tipo === "receber") {
+      const itens: InsertChequeFinanceiro[] = chequesRecebidos.map((cheque) => ({
+        empresaId,
+        contaFinanceiraId: conta.id,
+        baixaEntradaId: baixaId,
+        clienteId: cheque.clienteId ?? titulo.clienteId!,
+        referencia: cheque.referencia.trim(),
+        valor: decimalParaNumero(cheque.valor).toFixed(2),
+        dataRecebimento: data.dataBaixa,
+        estado: "disponivel",
+        criadoPor: data.criadoPor,
+      }));
+      await tx.insert(chequesFinanceiros).values(itens);
+    }
+    if (ehCaixaCheque && titulo.tipo === "pagar") {
+      await tx.update(chequesFinanceiros).set({ estado: "utilizado", utilizadoEm: data.dataBaixa, baixaSaidaId: baixaId })
+        .where(and(eq(chequesFinanceiros.empresaId, empresaId), inArray(chequesFinanceiros.id, chequesSelecionados.map((cheque) => cheque.id)), eq(chequesFinanceiros.estado, "disponivel")));
+    }
+
+    const novoValorBaixado = (decimalParaNumero(titulo.valorBaixado) + valorBaixa).toFixed(2);
+    const novoEstado = calcularEstadoTitulo({
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      valorBaixado: novoValorBaixado,
+      dataVencimento: titulo.dataVencimento,
+    });
+    await tx.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
+    return { id: baixaId, estado: novoEstado, valorBaixado: novoValorBaixado };
   });
-  await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
-  return { id: getInsertedId(result as MysqlInsertResult), estado: novoEstado, valorBaixado: novoValorBaixado };
 }
 
 export async function listBaixasFinanceiras(tituloId: number, empresaId = 1) {
@@ -1464,18 +1609,19 @@ export async function estornarBaixaFinanceira(
   userId: number,
   motivo: string,
   dependencias?: { database?: any; buscarBaixa?: (id: number) => Promise<any>; buscarTitulo?: (id: number) => Promise<any>; agora?: Date },
+  empresaId = 1,
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const baixa = dependencias?.buscarBaixa
     ? await dependencias.buscarBaixa(id)
-    : (await db.select().from(baixasFinanceiras).where(eq(baixasFinanceiras.id, id)).limit(1))[0];
+    : (await db.select().from(baixasFinanceiras).where(and(eq(baixasFinanceiras.id, id), eq(baixasFinanceiras.empresaId, empresaId))).limit(1))[0];
   if (!baixa) throw new Error("Baixa financeira não encontrada");
   if (!podeEstornarBaixa(baixa.estornada)) throw new Error("Esta baixa já foi estornada e não pode ser revertida novamente");
 
   const titulo = dependencias?.buscarTitulo
     ? await dependencias.buscarTitulo(baixa.tituloId)
-    : await getTituloFinanceiroById(baixa.tituloId);
+    : await getTituloFinanceiroById(baixa.tituloId, empresaId);
   if (!titulo) throw new Error("Título financeiro não encontrado para a baixa selecionada");
   if (titulo.estado === "cancelado") throw new Error("Não é possível estornar uma baixa de título cancelado");
 
@@ -1489,6 +1635,24 @@ export async function estornarBaixaFinanceira(
   });
   const estornadaEm = dependencias?.agora ?? new Date();
 
+  if (!dependencias) {
+    const chequesDaEntrada = await db.select().from(chequesFinanceiros)
+      .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaEntradaId, baixa.id)));
+    if (chequesDaEntrada.some((cheque: { estado: string }) => cheque.estado === "utilizado")) {
+      throw new Error("Não é possível estornar este recebimento enquanto houver cheque já utilizado; estorne primeiro o pagamento correspondente");
+    }
+    const chequesDaSaida = await db.select().from(chequesFinanceiros)
+      .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaSaidaId, baixa.id)));
+    if (chequesDaSaida.length) {
+      await db.update(chequesFinanceiros).set({ estado: "disponivel", utilizadoEm: null, baixaSaidaId: null })
+        .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaSaidaId, baixa.id), eq(chequesFinanceiros.estado, "utilizado")));
+    }
+    if (chequesDaEntrada.length) {
+      await db.update(chequesFinanceiros).set({ estado: "estornado", estornadoEm: estornadaEm })
+        .where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.baixaEntradaId, baixa.id), eq(chequesFinanceiros.estado, "disponivel")));
+    }
+  }
+
   await db.update(baixasFinanceiras).set({
     estornada: true,
     estornadaEm,
@@ -1496,8 +1660,8 @@ export async function estornarBaixaFinanceira(
     motivoEstorno: motivo.trim(),
     conciliada: false,
     conciliadaEm: null,
-  }).where(eq(baixasFinanceiras.id, id));
-  await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
+  }).where(and(eq(baixasFinanceiras.id, id), eq(baixasFinanceiras.empresaId, empresaId)));
+  await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(and(eq(titulosFinanceiros.id, titulo.id), eq(titulosFinanceiros.empresaId, empresaId)));
   return { success: true, tituloId: titulo.id, estado: novoEstado, valorBaixado: novoValorBaixado };
 }
 

@@ -45,6 +45,7 @@ vi.mock("@/lib/trpc", () => {
           categorias: { list: invalidar },
           fornecedores: { list: invalidar, modeloCsv: invalidar },
           contas: { list: invalidar },
+          cheques: { list: invalidar, resumo: invalidar },
           recorrencias: { list: invalidar },
           alertas: { list: invalidar },
           anexos: { list: invalidar },
@@ -102,6 +103,7 @@ vi.mock("@/lib/trpc", () => {
           remove: mutationInerte,
         },
         contas: { list: queryVazia, create: mutationInerte },
+        cheques: { list: queryVazia, resumo: { useQuery: () => ({ data: { totalDisponivel: 0, quantidadeDisponivel: 0, totalUtilizado: 0, quantidadeUtilizada: 0, contas: [] }, isLoading: false }) } },
         recorrencias: { list: queryVazia, create: mutationInerte },
         alertas: { list: queryVazia },
         relatorios: {

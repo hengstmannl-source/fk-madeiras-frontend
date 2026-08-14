@@ -11,6 +11,7 @@ import {
   proximoVencimento,
   saldoAbertoTitulo,
   tipoAlertaAtualDoTitulo,
+  validarValorDosCheques,
 } from "./financeiro.logic";
 
 describe("regras financeiras", () => {
@@ -48,6 +49,12 @@ describe("regras financeiras", () => {
     expect(podeEstornarBaixa(0)).toBe(true);
     expect(podeEstornarBaixa(true)).toBe(false);
     expect(podeEstornarBaixa(1)).toBe(false);
+  });
+
+  it("confere a soma dos cheques com precisão de centavos", () => {
+    expect(validarValorDosCheques("250,00", ["100,15", "149,85"])).toBe(250);
+    expect(() => validarValorDosCheques("250,00", ["100,15", "149,84"])).toThrow("A soma dos cheques deve ser exatamente igual ao valor da baixa");
+    expect(() => validarValorDosCheques("0", ["0"])).toThrow("O valor da baixa deve ser maior que zero");
   });
 
   it("apura entradas, saídas e saldo acumulado somente para o período informado", () => {

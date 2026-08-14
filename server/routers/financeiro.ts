@@ -7,7 +7,7 @@ import { normalizarDadosBoleto } from "../../shared/boleto";
 
 export const TipoTituloSchema = z.enum(["receber", "pagar"]);
 export const FormaPagamentoFinanceiraSchema = z.enum([
-  "pix", "dinheiro", "cartao_credito", "cartao_debito", "transferencia", "boleto", "outro",
+  "pix", "dinheiro", "cheque", "cartao_credito", "cartao_debito", "transferencia", "boleto", "outro",
 ]);
 export const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
 const FormatoExtratoBancarioSchema = z.enum(["csv", "ofx"]);
@@ -80,9 +80,9 @@ const CategoriaSchema = z.object({
   categoriaPaiId: z.number().int().positive().nullable().optional(),
 });
 
-const ContaSchema = z.object({
+export const ContaSchema = z.object({
   nome: z.string().trim().min(2).max(150),
-  tipo: z.enum(["caixa", "banco", "carteira", "outro"]).default("caixa"),
+  tipo: z.enum(["caixa", "caixa_cheque", "banco", "carteira", "outro"]).default("caixa"),
   saldoInicial: z.string().regex(/^-?\d+(?:[.,]\d{1,2})?$/).default("0"),
   observacoes: z.string().max(4000).nullable().optional(),
 });
@@ -145,6 +145,14 @@ export const financeiroRouter = router({
         ...(saldoInicial !== undefined ? { saldoInicial: saldoInicial.replace(",", ".") } : {}),
       }, ctx.empresaAtiva!.empresa.id);
     }),
+  }),
+
+  cheques: router({
+    resumo: protectedProcedure.query(({ ctx }) => db.getResumoCaixaCheque(ctx.empresaAtiva!.empresa.id)),
+    list: protectedProcedure.input(z.object({
+      contaFinanceiraId: z.number().int().positive().optional(),
+      estado: z.enum(["disponivel", "utilizado", "estornado"]).optional(),
+    }).optional()).query(({ ctx, input }) => db.listChequesFinanceiros(input, ctx.empresaAtiva!.empresa.id)),
   }),
 
   alertas: router({
@@ -275,10 +283,17 @@ export const financeiroRouter = router({
       dataBaixa: DataFinanceiraSchema,
       formaPagamento: FormaPagamentoFinanceiraSchema,
       observacoes: z.string().max(4000).optional(),
+      chequesRecebidos: z.array(z.object({
+        referencia: z.string().trim().min(1).max(120),
+        valor: z.string().regex(/^\d+(?:[.,]\d{1,2})?$/),
+        clienteId: z.number().int().positive().optional(),
+      })).min(1).max(100).optional(),
+      chequeIdsUtilizados: z.array(z.number().int().positive()).min(1).max(100).optional(),
     })).mutation(({ ctx, input }) => db.registrarBaixaFinanceira({
       ...input,
       valor: input.valor.replace(",", "."),
       dataBaixa: dataLocal(input.dataBaixa),
+      chequesRecebidos: input.chequesRecebidos?.map((cheque) => ({ ...cheque, valor: cheque.valor.replace(",", ".") })),
       criadoPor: ctx.user.id,
     }, ctx.empresaAtiva!.empresa.id)),
     conciliarBaixa: protectedProcedure.input(z.object({ id: z.number().int().positive(), conciliada: z.boolean() }))
@@ -286,7 +301,7 @@ export const financeiroRouter = router({
     estornarBaixa: protectedProcedure.input(z.object({
       id: z.number().int().positive(),
       motivo: z.string().trim().min(3, "Informe o motivo do estorno").max(2000),
-    })).mutation(({ ctx, input }) => db.estornarBaixaFinanceira(input.id, ctx.user.id, input.motivo)),
+    })).mutation(({ ctx, input }) => db.estornarBaixaFinanceira(input.id, ctx.user.id, input.motivo, undefined, ctx.empresaAtiva!.empresa.id)),
     cancelar: protectedProcedure.input(z.object({ id: z.number().int().positive() }))
       .mutation(({ ctx, input }) => db.cancelarTituloFinanceiro(input.id, ctx.user.id)),
   }),

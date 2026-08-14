@@ -28,7 +28,7 @@ import { useIsMobile } from "@/hooks/useMobile";
 import {
   ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
-  ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning, Truck, CircleCheckBig,
+  ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning, Truck, CircleCheckBig, ReceiptText,
 } from "lucide-react";
 import { CSSProperties, useEffect, useRef, useState } from "react";
 import { Redirect, useLocation, useSearch } from "wouter";
@@ -54,6 +54,7 @@ export const dashboardNavigation = {
     { icon: ArrowDownToLine, label: "Contas a receber", path: "/financeiro?tipo=receber" },
     { icon: BadgeCheck, label: "Contas pagas", path: "/financeiro?tipo=pagas" },
     { icon: CircleDollarSign, label: "Contas recebidas", path: "/financeiro?tipo=recebidas" },
+    { icon: ReceiptText, label: "Caixa Cheque", path: "/financeiro/caixa-cheque" },
     { icon: Landmark, label: "Conciliação bancária", path: "/conciliacao-bancaria" },
   ],
   vendas: [

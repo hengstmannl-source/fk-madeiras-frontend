@@ -326,3 +326,9 @@
 - [x] Remover a dependência entre pagamento e entrega, preservando a baixa física no estoque
 - [x] Registrar data, responsável, modalidade e observação em cada entrega
 - [x] Manter a conta a receber em aberto após entrega a prazo e quitá-la quando o pagamento for registrado
+- [x] Modelar o Caixa Cheque como conta financeira própria, com saldo compatível com os cheques disponíveis
+- [x] Registrar cheques individualmente em recebimentos, com referência, valor, cliente e rastreabilidade da entrada
+- [x] Permitir selecionar cheques disponíveis para efetuar pagamentos pelo Caixa Cheque, registrando a saída individual
+- [x] Criar tela de Caixa Cheque com saldo, cheques disponíveis, utilizados e histórico de movimentações
+- [x] Impedir reutilização, valores divergentes e saídas sem cobertura por cheques selecionados
+- [x] Cobrir recebimento, pagamento, estorno e interface do Caixa Cheque com testes e validação visual

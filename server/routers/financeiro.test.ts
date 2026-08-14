@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LancamentoManualSchema, RecorrenciaSchema } from "./financeiro";
+import { ContaSchema, FormaPagamentoFinanceiraSchema, LancamentoManualSchema, RecorrenciaSchema } from "./financeiro";
 
 describe("validação de lançamentos financeiros manuais", () => {
   const base = {
@@ -37,5 +37,20 @@ describe("validação de recorrências financeiras", () => {
 
   it("rejeita uma recorrência sem frequência válida", () => {
     expect(() => RecorrenciaSchema.parse({ ...base, frequencia: "diaria" })).toThrow();
+  });
+});
+
+describe("contrato do Caixa Cheque", () => {
+  it("aceita a forma de pagamento cheque", () => {
+    expect(FormaPagamentoFinanceiraSchema.parse("cheque")).toBe("cheque");
+  });
+
+  it("aceita uma conta financeira do tipo Caixa Cheque", () => {
+    expect(ContaSchema.parse({ nome: "Caixa Cheque", tipo: "caixa_cheque", saldoInicial: "0" })).toMatchObject({ tipo: "caixa_cheque" });
+  });
+
+  it("rejeita tipos de conta e formas de pagamento desconhecidos", () => {
+    expect(() => FormaPagamentoFinanceiraSchema.parse("promissoria")).toThrow();
+    expect(() => ContaSchema.parse({ nome: "Conta inválida", tipo: "credito" })).toThrow();
   });
 });

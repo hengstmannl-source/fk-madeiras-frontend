@@ -8,7 +8,7 @@ describe("navegação principal", () => {
   });
 
   it("organiza financeiro e vendas com as opções prioritárias", () => {
-    expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber", "Contas pagas", "Contas recebidas", "Conciliação bancária"]);
+    expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber", "Contas pagas", "Contas recebidas", "Caixa Cheque", "Conciliação bancária"]);
     expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados", "Pagas", "Entregues", "Concluídas"]);
     expect(dashboardNavigation.producao.map((item) => item.label)).toEqual(["Produção", "Estoque", "Relatório de plaquetas", "Inventário"]);
     expect(dashboardNavigation.producao.every((item) => !item.disabled)).toBe(true);
@@ -36,6 +36,8 @@ describe("navegação principal", () => {
     expect(isItemActive(contasPagas, "/financeiro", "?tipo=pagas")).toBe(true);
     expect(isItemActive(contasRecebidas, "/financeiro", "?tipo=recebidas")).toBe(true);
     expect(isItemActive(dashboardNavigation.financeiro[0], "/financeiro", "?tipo=receber")).toBe(true);
+    expect(dashboardNavigation.financeiro[5].path).toBe("/financeiro/caixa-cheque");
+    expect(isItemActive(dashboardNavigation.financeiro[5], "/financeiro/caixa-cheque", "")).toBe(true);
   });
 
   it("mantém todos os grupos expandidos por padrão e respeita grupos recolhidos salvos", () => {

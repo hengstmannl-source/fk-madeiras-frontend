@@ -461,7 +461,7 @@ export const contasFinanceiras = mysqlTable("contasFinanceiras", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   nome: varchar("nome", { length: 150 }).notNull(),
-  tipo: mysqlEnum("tipo", ["caixa", "banco", "carteira", "outro"]).notNull().default("caixa"),
+  tipo: mysqlEnum("tipo", ["caixa", "caixa_cheque", "banco", "carteira", "outro"]).notNull().default("caixa"),
   saldoInicial: decimal("saldoInicial", { precision: 14, scale: 2 }).notNull().default("0"),
   ativa: boolean("ativa").notNull().default(true),
   observacoes: text("observacoes"),
@@ -586,6 +586,34 @@ export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
 
 export type BaixaFinanceira = typeof baixasFinanceiras.$inferSelect;
 export type InsertBaixaFinanceira = typeof baixasFinanceiras.$inferInsert;
+
+/** Cheques recebidos e guardados em uma conta do tipo Caixa Cheque. */
+export const chequesFinanceiros = mysqlTable("chequesFinanceiros", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  contaFinanceiraId: int("contaFinanceiraId").notNull(),
+  baixaEntradaId: int("baixaEntradaId").notNull(),
+  baixaSaidaId: int("baixaSaidaId"),
+  clienteId: int("clienteId").notNull(),
+  referencia: varchar("referencia", { length: 120 }).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  dataRecebimento: timestamp("dataRecebimento").notNull(),
+  utilizadoEm: timestamp("utilizadoEm"),
+  estado: mysqlEnum("estado", ["disponivel", "utilizado", "estornado"]).notNull().default("disponivel"),
+  estornadoEm: timestamp("estornadoEm"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  referenciaPorContaUnica: uniqueIndex("cheques_financeiros_conta_referencia_unica").on(table.empresaId, table.contaFinanceiraId, table.referencia),
+  contaEstadoIndice: index("cheques_financeiros_conta_estado_indice").on(table.empresaId, table.contaFinanceiraId, table.estado),
+  clienteIndice: index("cheques_financeiros_cliente_indice").on(table.empresaId, table.clienteId),
+  entradaIndice: index("cheques_financeiros_entrada_indice").on(table.baixaEntradaId),
+  saidaIndice: index("cheques_financeiros_saida_indice").on(table.baixaSaidaId),
+}));
+
+export type ChequeFinanceiro = typeof chequesFinanceiros.$inferSelect;
+export type InsertChequeFinanceiro = typeof chequesFinanceiros.$inferInsert;
 
 export const extratosBancarios = mysqlTable("extratosBancarios", {
   id: int("id").autoincrement().primaryKey(),

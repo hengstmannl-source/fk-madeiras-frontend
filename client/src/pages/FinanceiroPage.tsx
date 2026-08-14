@@ -65,8 +65,9 @@ const estadoLabels: Record<string, string> = {
 };
 
 type EntidadeContextual = "cliente" | "fornecedor" | "categoria" | "conta";
-type DestinoContextual = "lancamento" | "recorrencia" | "baixa";
+type DestinoContextual = "lancamento" | "recorrencia" | "baixa" | "cheque";
 type VisaoFinanceira = "pagar" | "receber" | "pagas" | "recebidas";
+type ChequeRecebidoForm = { referencia: string; valor: string; clienteId: string };
 
 const opcoesVisaoFinanceira: Array<{ id: VisaoFinanceira; label: string; descricao: string }> = [
   { id: "pagar", label: "Contas a pagar", descricao: "Compromissos em aberto e em atraso" },
@@ -128,6 +129,7 @@ export default function FinanceiroPage() {
   const [contaAberta, setContaAberta] = useState(false);
   const [clienteAberto, setClienteAberto] = useState(false);
   const [contextoCriacao, setContextoCriacao] = useState<{ entidade: EntidadeContextual; destino: DestinoContextual } | null>(null);
+  const [indiceChequeCliente, setIndiceChequeCliente] = useState<number | null>(null);
   const [visaoFinanceira, setVisaoFinanceira] = useState<VisaoFinanceira>(() => {
     const tipo = new URLSearchParams(search).get("tipo");
     return tipo === "receber" ? "receber" : "pagar";
@@ -167,9 +169,11 @@ export default function FinanceiroPage() {
   }, [search]);
   const [lancamento, setLancamento] = useState(valorInicialLancamento);
   const [baixa, setBaixa] = useState({ contaFinanceiraId: "", valor: "", dataBaixa: hoje(), formaPagamento: "pix", observacoes: "" });
+  const [chequesRecebidos, setChequesRecebidos] = useState<ChequeRecebidoForm[]>([]);
+  const [chequesSelecionados, setChequesSelecionados] = useState<number[]>([]);
   const [fornecedor, setFornecedor] = useState({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" });
   const [categoria, setCategoria] = useState({ nome: "", tipo: "ambos" as "receita" | "despesa" | "ambos" });
-  const [conta, setConta] = useState({ nome: "", tipo: "caixa" as "caixa" | "banco" | "carteira" | "outro", saldoInicial: "0", observacoes: "" });
+  const [conta, setConta] = useState({ nome: "", tipo: "caixa" as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro", saldoInicial: "0", observacoes: "" });
   const [cliente, setCliente] = useState({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" });
   const [recorrencia, setRecorrencia] = useState(valorInicialRecorrencia);
   const tipoConsulta = new URLSearchParams(search).get("tipo");
@@ -186,6 +190,12 @@ export default function FinanceiroPage() {
   const categorias = trpc.financeiro.categorias.list.useQuery();
   const fornecedores = trpc.financeiro.fornecedores.list.useQuery();
   const contas = trpc.financeiro.contas.list.useQuery();
+  const contaBaixa = (contas.data ?? []).find((item: any) => String(item.id) === baixa.contaFinanceiraId);
+  const caixaChequeSelecionado = contaBaixa?.tipo === "caixa_cheque";
+  const chequesDisponiveis = trpc.financeiro.cheques.list.useQuery(
+    { contaFinanceiraId: Number(baixa.contaFinanceiraId || 0), estado: "disponivel" },
+    { enabled: caixaChequeSelecionado && Boolean(baixa.contaFinanceiraId) && tituloSelecionado?.tipo === "pagar" },
+  );
   const recorrencias = trpc.financeiro.recorrencias.list.useQuery();
   const alertas = trpc.financeiro.alertas.list.useQuery();
   const fluxoCaixa = trpc.financeiro.relatorios.fluxoCaixa.useQuery(periodoFluxo);
@@ -224,6 +234,10 @@ export default function FinanceiroPage() {
   );
   const removerAnexoFinanceiro = trpc.financeiro.anexos.remove.useMutation();
   const maiorFluxoDiario = useMemo(() => Math.max(...(fluxoCaixa.data?.dias ?? []).flatMap((dia: any) => [Number(dia.entradas), Number(dia.saidas)]), 1), [fluxoCaixa.data]);
+  const totalChequesRecebidos = useMemo(() => chequesRecebidos.reduce((total, cheque) => total + Number(cheque.valor.replace(",", ".") || 0), 0), [chequesRecebidos]);
+  const totalChequesSelecionados = useMemo(() => (chequesDisponiveis.data ?? [])
+    .filter((cheque: any) => chequesSelecionados.includes(cheque.id))
+    .reduce((total: number, cheque: any) => total + Number(cheque.valor), 0), [chequesDisponiveis.data, chequesSelecionados]);
 
   const resumo = useMemo(() => {
     const dados = titulos.data ?? [];
@@ -278,6 +292,8 @@ export default function FinanceiroPage() {
     utils.financeiro.categorias.list.invalidate();
     utils.financeiro.fornecedores.list.invalidate();
     utils.financeiro.contas.list.invalidate();
+    utils.financeiro.cheques.list.invalidate();
+    utils.financeiro.cheques.resumo.invalidate();
     utils.financeiro.recorrencias.list.invalidate();
     utils.financeiro.alertas.list.invalidate();
     utils.financeiro.relatorios.fluxoCaixa.invalidate();
@@ -306,6 +322,10 @@ export default function FinanceiroPage() {
     }
     if (contextoCriacao.destino === "baixa" && entidade === "conta") {
       setBaixa((atual) => ({ ...atual, contaFinanceiraId: valor }));
+    }
+    if (contextoCriacao.destino === "cheque" && entidade === "cliente" && indiceChequeCliente !== null) {
+      setChequesRecebidos((atuais) => atuais.map((cheque, indice) => indice === indiceChequeCliente ? { ...cheque, clienteId: valor } : cheque));
+      setIndiceChequeCliente(null);
     }
     setContextoCriacao(null);
   };
@@ -417,7 +437,10 @@ export default function FinanceiroPage() {
   const abrirBaixa = (titulo: any) => {
     if (!contas.data?.length) { toast.error("Cadastre uma conta financeira antes de registrar uma baixa"); setAba("contas"); return; }
     setTituloSelecionado(titulo);
-    setBaixa({ contaFinanceiraId: String(contas.data[0].id), valor: saldoTitulo(titulo).toFixed(2), dataBaixa: hoje(), formaPagamento: "pix", observacoes: "" });
+    const contaInicial = contas.data[0];
+    setBaixa({ contaFinanceiraId: String(contaInicial.id), valor: saldoTitulo(titulo).toFixed(2), dataBaixa: hoje(), formaPagamento: contaInicial.tipo === "caixa_cheque" ? "cheque" : "pix", observacoes: "" });
+    setChequesRecebidos([{ referencia: "", valor: saldoTitulo(titulo).toFixed(2), clienteId: titulo.clienteId ? String(titulo.clienteId) : "" }]);
+    setChequesSelecionados([]);
     setBaixaAberta(true);
   };
 
@@ -440,13 +463,20 @@ export default function FinanceiroPage() {
 
   const salvarBaixa = () => {
     if (!tituloSelecionado || !baixa.contaFinanceiraId) return;
+    if (caixaChequeSelecionado && baixa.formaPagamento !== "cheque") { toast.error("A conta Caixa Cheque exige a forma de pagamento Cheque"); return; }
+    if (caixaChequeSelecionado && tituloSelecionado.tipo === "receber" && !chequesRecebidos.length) { toast.error("Informe pelo menos um cheque recebido"); return; }
+    if (caixaChequeSelecionado && tituloSelecionado.tipo === "pagar" && !chequesSelecionados.length) { toast.error("Selecione os cheques que serão usados neste pagamento"); return; }
     registrarBaixa.mutate({
       tituloId: tituloSelecionado.id,
       contaFinanceiraId: Number(baixa.contaFinanceiraId),
       valor: baixa.valor,
       dataBaixa: baixa.dataBaixa,
-      formaPagamento: baixa.formaPagamento as "pix" | "dinheiro" | "cartao_credito" | "cartao_debito" | "transferencia" | "boleto" | "outro",
+      formaPagamento: baixa.formaPagamento as "pix" | "dinheiro" | "cheque" | "cartao_credito" | "cartao_debito" | "transferencia" | "boleto" | "outro",
       observacoes: baixa.observacoes || undefined,
+      chequesRecebidos: caixaChequeSelecionado && tituloSelecionado.tipo === "receber"
+        ? chequesRecebidos.map((cheque) => ({ referencia: cheque.referencia, valor: cheque.valor, ...(cheque.clienteId ? { clienteId: Number(cheque.clienteId) } : {}) }))
+        : undefined,
+      chequeIdsUtilizados: caixaChequeSelecionado && tituloSelecionado.tipo === "pagar" ? chequesSelecionados : undefined,
     }, {
       onSuccess: () => { toast.success("Baixa registrada com sucesso"); invalidarFinanceiro(); setBaixaAberta(false); },
       onError: (erro) => toast.error(erro.message),
@@ -709,9 +739,11 @@ export default function FinanceiroPage() {
           <DialogHeader><DialogTitle>Registrar baixa</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{tituloSelecionado?.descricao}</p><p className="text-muted-foreground mt-1">Saldo em aberto: <strong className="text-foreground">{formatCurrency(tituloSelecionado ? saldoTitulo(tituloSelecionado) : 0)}</strong></p></div>
-            <div className="space-y-2"><Label>Conta financeira *</Label><Select value={baixa.contaFinanceiraId} onCreate={() => abrirCriacaoContextual("conta", "baixa")} createLabel="Criar nova conta" onValueChange={(valor) => setBaixa({ ...baixa, contaFinanceiraId: valor })}><SelectTrigger className="w-full"><SelectValue placeholder="Pesquisar conta" /></SelectTrigger><SelectContent>{(contas.data ?? []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Conta financeira *</Label><Select value={baixa.contaFinanceiraId} onCreate={() => abrirCriacaoContextual("conta", "baixa")} createLabel="Criar nova conta" onValueChange={(valor) => { const contaSelecionada = (contas.data ?? []).find((item: any) => String(item.id) === valor); setBaixa({ ...baixa, contaFinanceiraId: valor, formaPagamento: contaSelecionada?.tipo === "caixa_cheque" ? "cheque" : baixa.formaPagamento === "cheque" ? "pix" : baixa.formaPagamento }); setChequesSelecionados([]); }}><SelectTrigger className="w-full"><SelectValue placeholder="Pesquisar conta" /></SelectTrigger><SelectContent>{(contas.data ?? []).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}{item.tipo === "caixa_cheque" ? " · Caixa Cheque" : ""}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid grid-cols-2 gap-3"><Campo label="Valor (R$) *" value={baixa.valor} onChange={(valor) => setBaixa({ ...baixa, valor })} /><Campo label="Data da baixa" type="date" value={baixa.dataBaixa} onChange={(valor) => setBaixa({ ...baixa, dataBaixa: valor })} /></div>
-            <CampoSelect label="Forma de pagamento" value={baixa.formaPagamento} onValueChange={(valor) => setBaixa({ ...baixa, formaPagamento: valor })} opcoes={[["pix", "PIX"], ["dinheiro", "Dinheiro"], ["transferencia", "Transferência"], ["boleto", "Boleto"], ["cartao_credito", "Cartão de crédito"], ["cartao_debito", "Cartão de débito"], ["outro", "Outro"]]} />
+            <CampoSelect label="Forma de pagamento" value={baixa.formaPagamento} onValueChange={(valor) => setBaixa({ ...baixa, formaPagamento: valor })} opcoes={caixaChequeSelecionado ? [["cheque", "Cheque"]] : [["pix", "PIX"], ["dinheiro", "Dinheiro"], ["cheque", "Cheque"], ["transferencia", "Transferência"], ["boleto", "Boleto"], ["cartao_credito", "Cartão de crédito"], ["cartao_debito", "Cartão de débito"], ["outro", "Outro"]]} />
+            {caixaChequeSelecionado && tituloSelecionado?.tipo === "receber" && <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50/40 p-3"><div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold text-emerald-950">Cheques recebidos</p><p className="mt-0.5 text-xs text-emerald-800">A soma dos cheques precisa coincidir com a baixa. Cada item fica disponível no Caixa Cheque.</p></div><Button type="button" size="sm" variant="outline" className="shrink-0" onClick={() => setChequesRecebidos((atuais) => [...atuais, { referencia: "", valor: "", clienteId: tituloSelecionado?.clienteId ? String(tituloSelecionado.clienteId) : "" }])}><Plus className="mr-1 h-3.5 w-3.5" />Adicionar</Button></div><div className="space-y-2">{chequesRecebidos.map((cheque, indice) => <div key={indice} className="grid grid-cols-1 gap-2 rounded-md border border-emerald-200 bg-background p-2.5 sm:grid-cols-[1.1fr_0.8fr_1.2fr_auto]"><Input aria-label={`Referência do cheque ${indice + 1}`} value={cheque.referencia} placeholder="Referência" onChange={(evento) => setChequesRecebidos((atuais) => atuais.map((item, posicao) => posicao === indice ? { ...item, referencia: evento.target.value } : item))} /><Input aria-label={`Valor do cheque ${indice + 1}`} value={cheque.valor} placeholder="Valor (R$)" inputMode="decimal" onChange={(evento) => setChequesRecebidos((atuais) => atuais.map((item, posicao) => posicao === indice ? { ...item, valor: evento.target.value } : item))} />{tituloSelecionado?.clienteId ? <div className="flex min-h-9 items-center truncate rounded-md border bg-muted/40 px-2 text-xs font-medium">{tituloSelecionado?.contraparteNome ?? "Cliente do título"}</div> : <SearchableEntitySelect value={cheque.clienteId} onValueChange={(valor) => setChequesRecebidos((atuais) => atuais.map((item, posicao) => posicao === indice ? { ...item, clienteId: valor } : item))} placeholder="Cliente" searchPlaceholder="Buscar cliente..." options={(clientes.data ?? []).map((cliente: any) => ({ value: String(cliente.id), label: cliente.nome, details: cliente.contacto ?? undefined }))} onCreate={() => { setIndiceChequeCliente(indice); abrirCriacaoContextual("cliente", "cheque"); }} createLabel="Criar novo cliente" />}{<Button type="button" size="icon" variant="ghost" className="h-9 w-9 text-muted-foreground hover:text-destructive" aria-label={`Remover cheque ${indice + 1}`} disabled={chequesRecebidos.length === 1} onClick={() => setChequesRecebidos((atuais) => atuais.filter((_, posicao) => posicao !== indice))}><X className="h-4 w-4" /></Button>}</div>)}</div><div className="flex items-center justify-between border-t border-emerald-200 pt-2 text-sm"><span className="text-emerald-900">Total informado: <strong>{formatCurrency(totalChequesRecebidos)}</strong></span><span className={Math.abs(totalChequesRecebidos - Number(baixa.valor.replace(",", ".") || 0)) < 0.005 ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>{Math.abs(totalChequesRecebidos - Number(baixa.valor.replace(",", ".") || 0)) < 0.005 ? "Valor conferido" : "Ajuste o total dos cheques"}</span></div></div>}
+            {caixaChequeSelecionado && tituloSelecionado?.tipo === "pagar" && <div className="space-y-3 rounded-lg border border-violet-200 bg-violet-50/40 p-3"><div><p className="text-sm font-semibold text-violet-950">Cheques disponíveis para pagamento</p><p className="mt-0.5 text-xs text-violet-800">Selecione os cheques que sairão do Caixa Cheque. O total deve coincidir com a baixa.</p></div>{chequesDisponiveis.isLoading ? <p className="py-3 text-center text-xs text-muted-foreground">Carregando cheques disponíveis...</p> : chequesDisponiveis.data?.length ? <div className="max-h-52 space-y-1.5 overflow-y-auto rounded-md border bg-background p-1.5">{chequesDisponiveis.data.map((cheque: any) => <label key={cheque.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-2 text-sm hover:bg-muted/60"><input type="checkbox" aria-label={`Selecionar cheque ${cheque.referencia}`} checked={chequesSelecionados.includes(cheque.id)} onChange={() => setChequesSelecionados((atuais) => atuais.includes(cheque.id) ? atuais.filter((id) => id !== cheque.id) : [...atuais, cheque.id])} /><span className="min-w-0 flex-1 truncate"><strong>{cheque.referencia}</strong><span className="ml-1.5 text-xs text-muted-foreground">· {cheque.clienteNome}</span></span><span className="font-medium">{formatCurrency(cheque.valor)}</span></label>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-4 text-center text-xs text-muted-foreground">Não há cheques disponíveis nesta conta.</p>}<div className="flex items-center justify-between border-t border-violet-200 pt-2 text-sm"><span className="text-violet-900">Total selecionado: <strong>{formatCurrency(totalChequesSelecionados)}</strong></span><span className={Math.abs(totalChequesSelecionados - Number(baixa.valor.replace(",", ".") || 0)) < 0.005 ? "font-medium text-emerald-700" : "font-medium text-amber-700"}>{Math.abs(totalChequesSelecionados - Number(baixa.valor.replace(",", ".") || 0)) < 0.005 ? "Valor conferido" : "A seleção deve totalizar a baixa"}</span></div></div>}
             <div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={baixa.observacoes} onChange={(e) => setBaixa({ ...baixa, observacoes: e.target.value})} /></div>
             <Button className="w-full" onClick={salvarBaixa} disabled={registrarBaixa.isPending}>{registrarBaixa.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}Confirmar baixa</Button>
           </div>
@@ -767,7 +799,7 @@ export default function FinanceiroPage() {
 
       <Dialog open={categoriaAberta} onOpenChange={setCategoriaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Nova categoria financeira</DialogTitle></DialogHeader><div className="space-y-4"><Campo label="Nome *" value={categoria.nome} onChange={(valor) => setCategoria({ ...categoria, nome: valor })} /><CampoSelect label="Aplicação" value={categoria.tipo} onValueChange={(valor) => setCategoria({ ...categoria, tipo: valor as "receita" | "despesa" | "ambos" })} opcoes={[["receita", "Somente receita"], ["despesa", "Somente despesa"], ["ambos", "Receita e despesa"]]} /><Button className="w-full" onClick={salvarCategoria} disabled={criarCategoria.isPending}>Salvar categoria</Button></div></DialogContent></Dialog>
 
-      <Dialog open={contaAberta} onOpenChange={setContaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Nova conta financeira</DialogTitle></DialogHeader><div className="space-y-4"><Campo label="Nome *" value={conta.nome} onChange={(valor) => setConta({ ...conta, nome: valor })} /><CampoSelect label="Tipo" value={conta.tipo} onValueChange={(valor) => setConta({ ...conta, tipo: valor as "caixa" | "banco" | "carteira" | "outro" })} opcoes={[["caixa", "Caixa"], ["banco", "Banco"], ["carteira", "Carteira"], ["outro", "Outro"]]} /><Campo label="Saldo inicial (R$)" value={conta.saldoInicial} onChange={(valor) => setConta({ ...conta, saldoInicial: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={conta.observacoes} onChange={(e) => setConta({ ...conta, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarConta} disabled={criarConta.isPending}>Salvar conta</Button></div></DialogContent></Dialog>
+      <Dialog open={contaAberta} onOpenChange={setContaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Nova conta financeira</DialogTitle></DialogHeader><div className="space-y-4"><Campo label="Nome *" value={conta.nome} onChange={(valor) => setConta({ ...conta, nome: valor })} /><CampoSelect label="Tipo" value={conta.tipo} onValueChange={(valor) => setConta({ ...conta, tipo: valor as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro" })} opcoes={[["caixa", "Caixa"], ["caixa_cheque", "Caixa Cheque"], ["banco", "Banco"], ["carteira", "Carteira"], ["outro", "Outro"]]} /><Campo label="Saldo inicial (R$)" value={conta.saldoInicial} onChange={(valor) => setConta({ ...conta, saldoInicial: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={conta.observacoes} onChange={(e) => setConta({ ...conta, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarConta} disabled={criarConta.isPending}>Salvar conta</Button></div></DialogContent></Dialog>
 
       <Dialog open={recorrenciaAberta} onOpenChange={setRecorrenciaAberta}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
