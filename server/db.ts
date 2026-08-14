@@ -1649,6 +1649,7 @@ export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFi
       id: baixasFinanceiras.id,
       tituloId: baixasFinanceiras.tituloId,
       tipo: titulosFinanceiros.tipo,
+      origem: titulosFinanceiros.origem,
       descricao: titulosFinanceiros.descricao,
       valor: baixasFinanceiras.valor,
       dataBaixa: baixasFinanceiras.dataBaixa,

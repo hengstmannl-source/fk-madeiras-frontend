@@ -354,3 +354,6 @@
 - [x] Exibir no Caixa Cheque os estados compensado, depositado e a conta bancária de destino
 - [x] Manter transferências de cheque fora das entradas e saídas do relatório de fluxo de caixa
 - [x] Cobrir depósitos, bloqueio de duplicidade, histórico por conta e neutralidade do fluxo de caixa com testes e validação visual
+- [x] Distinguir no Fluxo de Caixa o pagamento de compra de diesel para o tanque do custo operacional de abastecimento
+- [x] Explicar no relatório que o saldo de abertura incorpora movimentações anteriores ao intervalo selecionado
+- [x] Cobrir a identificação da compra de diesel, o saldo de abertura e os filtros temporais do fluxo com testes e validação visual

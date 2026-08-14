@@ -24,7 +24,7 @@ const state = vi.hoisted(() => ({
     saldoFinal: 130,
     quantidadeMovimentos: 2,
     dias: [{ data: "2026-08-11", entradas: 50, saidas: 20, saldoLiquido: 30, saldoAcumulado: 130 }],
-    movimentos: [{ id: 1, tipo: "receber", descricao: "Recebimento demonstrativo", valor: "50.00", dataBaixa: "2026-08-11T12:00:00.000Z", formaPagamento: "pix", contaNome: "Caixa geral" }],
+    movimentos: [{ id: 1, tipo: "receber", origem: "manual", descricao: "Recebimento demonstrativo", valor: "50.00", dataBaixa: "2026-08-11T12:00:00.000Z", formaPagamento: "pix", contaNome: "Caixa geral" }],
   },
   previsao: [{ inicioSemana: "2026-08-10", fimSemana: "2026-08-16", entradas: 300, saidas: 120, saldoLiquido: 180, saldoProjetado: -20, quantidadeTitulos: 2 }],
 }));
@@ -249,6 +249,28 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(screen.getByText("Previsão semanal de caixa")).toBeInTheDocument();
     expect(screen.getByText("Títulos projetados")).toBeInTheDocument();
     expect(screen.getByText("Previsão semanal de caixa").closest("section")).toHaveTextContent(/-R\$\s*20,00/);
+  });
+
+  it("distingue a compra de diesel para o tanque do custo de abastecimento", async () => {
+    const user = userEvent.setup();
+    state.fluxo = {
+      saldoAbertura: -64700,
+      entradas: 0,
+      saidas: 64700,
+      saldoLiquido: -64700,
+      saldoFinal: -64700,
+      quantidadeMovimentos: 1,
+      dias: [{ data: "2026-07-20", entradas: 0, saidas: 64700, saldoLiquido: -64700, saldoAcumulado: -64700 }],
+      movimentos: [{ id: 90, tipo: "pagar", origem: "nota_diesel", descricao: "Pagamento de diesel — Nota 0001", valor: "64700.00", dataBaixa: "2026-07-20T12:00:00.000Z", formaPagamento: "outro", contaNome: "Numerário em trânsito" }],
+    };
+    const { container } = render(<FinanceiroPage />);
+    const tela = within(container);
+
+    await user.click(tela.getByRole("button", { name: "Fluxo de caixa" }));
+
+    expect(tela.getByText(/saldo de abertura incorpora o saldo inicial/i)).toBeInTheDocument();
+    expect(tela.getByText(/Antes do período, com histórico anterior/i)).toBeInTheDocument();
+    expect(tela.getByText(/Compra para estoque do tanque/i)).toHaveTextContent(/custo é apropriado nos abastecimentos/i);
   });
 
   it("identifica a abertura direta do relatório pelo parâmetro de URL", () => {
