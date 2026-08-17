@@ -401,3 +401,6 @@
 - [x] Permitir editar com segurança a Serragem de Terceiros, incluindo preço, toras e peças, preservando estoque, cobrança e rastreabilidade
 - [x] Adicionar importação por planilha na Serragem de Terceiros, com modelo baixável, validação integral e prévia antes de gravar
 - [x] Corrigir a responsividade dos campos de toras e dos indicadores de produção serrada e aproveitamento em telas estreitas
+- [x] Ampliar o diálogo de lançamento de Produção para evitar compressão dos campos de toras em telas móveis
+- [x] Permitir inserir uma tora manualmente ao pressionar Enter no formulário de Produção
+- [x] Navegar por colunas na grade manual de peças: Tab entre comprimentos e Tab entre quantidades correspondentes

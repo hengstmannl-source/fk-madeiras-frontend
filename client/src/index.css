@@ -174,3 +174,31 @@
     grid-column: auto;
   }
 }
+
+/* Os lançamentos de Produção concentram muitos campos operacionais. Em telas
+   amplas o diálogo aproveita a largura disponível; em telas menores o ponto
+   de quebra usa a largura real do diálogo, não a largura total da janela. */
+[role="dialog"]:has(input[aria-label="Código da plaqueta"]),
+[role="dialog"]:has(input[aria-label^="Referência da tora"]) {
+  width: min(96vw, 88rem) !important;
+  max-width: 88rem !important;
+  container-type: inline-size;
+}
+
+@container (max-width: 44rem) {
+  [role="dialog"]:has(input[aria-label="Código da plaqueta"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-4,
+  [role="dialog"]:has(input[aria-label^="Referência da tora"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5,
+  [role="dialog"]:has(input[aria-label="Código da plaqueta"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5,
+  [role="dialog"]:has(input[aria-label^="Referência da tora"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@container (max-width: 32rem) {
+  [role="dialog"]:has(input[aria-label="Código da plaqueta"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-4,
+  [role="dialog"]:has(input[aria-label^="Referência da tora"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5,
+  [role="dialog"]:has(input[aria-label="Código da plaqueta"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5,
+  [role="dialog"]:has(input[aria-label^="Referência da tora"]) .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+}

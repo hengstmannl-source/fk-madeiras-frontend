@@ -15,4 +15,11 @@ describe("responsividade da Produção", () => {
     expect(estilos).toContain("@media (max-width: 419px)");
     expect(estilos).toContain("grid-template-columns: minmax(0, 1fr) !important");
   });
+
+  it("amplia os diálogos operacionais e usa a largura real do conteúdo como ponto de quebra", () => {
+    expect(estilos).toContain("width: min(96vw, 88rem) !important");
+    expect(estilos).toContain("container-type: inline-size");
+    expect(estilos).toContain("@container (max-width: 44rem)");
+    expect(estilos).toContain("Referência da tora");
+  });
 });

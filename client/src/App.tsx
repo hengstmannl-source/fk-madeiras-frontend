@@ -23,6 +23,11 @@ import InventarioPage from "./pages/InventarioPage";
 import DieselPage from "./pages/DieselPage";
 import EquipePage from "./pages/EquipePage";
 import { CadastroEmpresaPage, ConvitePage, LoginPage } from "./pages/AcessoPage";
+import { tratarAtalhosProducao } from "./lib/producaoKeyboardShortcuts";
+
+function ProducaoComAtalhos() {
+  return <div onKeyDown={tratarAtalhosProducao}><ProducaoPage /></div>;
+}
 
 function Router() {
   return (
@@ -50,7 +55,7 @@ function Router() {
         <Route path="/financeiro" component={FinanceiroPage} />
         <Route path="/financeiro/caixa-cheque" component={CaixaChequePage} />
         <Route path="/conciliacao-bancaria" component={ConciliacaoBancariaPage} />
-        <Route path="/producao" component={ProducaoPage} />
+        <Route path="/producao" component={ProducaoComAtalhos} />
         <Route path="/estoque" component={EstoquePage} />
         <Route path="/estoque/plaquetas" component={RelatorioPlaquetasPage} />
         <Route path="/inventario" component={InventarioPage} />
