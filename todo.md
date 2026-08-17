@@ -383,3 +383,6 @@
 - [x] Impedir que linhas vazias de toras ou peças adicionadas no formulário de Serragem de Terceiros bloqueiem o registro do serviço
 - [x] Padronizar indicação visual antecipada para campos e linhas obrigatórias incompletas em todos os formulários operacionais
 - [x] Reformular a Serragem de Terceiros para usar o mesmo fluxo e a mesma grade operacional da Produção Diária, preservando cliente proprietário, estoque de terceiros e cobrança por m³
+- [x] Inserir no topo a nova tora adicionada em Produção Diária e Serragem de Terceiros, mantendo as toras já lançadas abaixo
+- [x] Preencher a grade de peças de Produção Diária e Serragem de Terceiros com comprimentos padrão editáveis de 2 a 9 metros, em intervalos de 0,5 metro
+- [x] Cobrir a ordenação das toras e os comprimentos padrão editáveis com testes e validação visual nos dois fluxos

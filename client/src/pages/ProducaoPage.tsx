@@ -11,7 +11,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
-import { criarLinhasComprimentoVazias, type LinhaComprimentoVenda } from "@/lib/vendaItemGroup";
+import { type LinhaComprimentoVenda } from "@/lib/vendaItemGroup";
 
 type ItemForm = { madeiraNome: string; espessura: string; largura: string; comprimento: string; quantidade: string };
 type GrupoPecasForm = { madeiraNome: string; espessura: string; largura: string };
@@ -29,6 +29,9 @@ const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFor
 const formatarMoeda = (valor: number | string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor ?? 0));
 const formatarData = (valor: string | Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(valor));
 let resumoTarifaSerragem: { volumeToras: number; tarifaPorM3: number; valorTotal: number } | null = null;
+const comprimentosPadraoProducao = ["2", "2,5", "3", "3,5", "4", "4,5", "5", "5,5", "6", "6,5", "7", "7,5", "8", "8,5", "9"];
+const criarLinhasComprimentoPadrao = (): LinhaComprimento[] => comprimentosPadraoProducao.map((comprimento, indice) => ({ id: indice + 1, comprimento, quantidade: "" }));
+const criarLinhasComprimentoVazias = criarLinhasComprimentoPadrao;
 const novoItem = (madeiraNome = ""): ItemForm => ({ madeiraNome, espessura: "", largura: "", comprimento: "", quantidade: "" });
 const novoGrupoPecas = (madeiraNome = ""): GrupoPecasForm => ({ madeiraNome, espessura: "", largura: "" });
 const novoRomaneio = (): RomaneioForm => ({ toras: [], dataProducao: hoje(), fita: "", responsavel: "", observacoes: "", itens: [] });
@@ -74,7 +77,7 @@ export default function ProducaoPage() {
   const [dialogNovoClienteSerragem, setDialogNovoClienteSerragem] = useState(false);
   const [novoClienteSerragemForm, setNovoClienteSerragemForm] = useState<NovoClienteSerragemForm>(novoClienteSerragem);
   const [grupoPecas, setGrupoPecas] = useState<GrupoPecasForm>(novoGrupoPecas);
-  const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimento[]>(() => criarLinhasComprimentoVazias());
+  const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimento[]>(criarLinhasComprimentoPadrao);
   const utils = trpc.useUtils();
   const plaquetas = trpc.producao.plaquetas.list.useQuery({ busca: codigoPlaqueta.trim() ? normalizarCodigo(codigoPlaqueta) : undefined, limite: 10 });
   const romaneios = trpc.producao.romaneios.list.useQuery();
@@ -101,12 +104,12 @@ export default function ProducaoPage() {
   const aproveitamento = totalToras > 0 ? (totaisPecas.volume / totalToras) * 100 : 0;
   const setSerragemTerceiros = (atualizacao: SetStateAction<SerragemTerceirosForm>) => atualizarEstadoSerragemTerceiros((atual) => {
     const proximo = typeof atualizacao === "function" ? atualizacao(atual) : atualizacao;
-    const essenciaAnterior = atual.toras.at(-1)?.madeiraNome ?? "";
+    const essenciaAnterior = atual.toras[0]?.madeiraNome ?? "";
     const novaToraAdicionada = proximo.toras.length > atual.toras.length;
     const toras = proximo.toras.map((tora, indice) => {
       const diametroInformado = num(tora.diametro) > 0;
       const comprimentoInformado = num(tora.comprimento) > 0;
-      const madeiraNome = novaToraAdicionada && indice >= atual.toras.length && !tora.madeiraNome.trim() ? essenciaAnterior : tora.madeiraNome;
+      const madeiraNome = novaToraAdicionada && indice === 0 && !tora.madeiraNome.trim() ? essenciaAnterior : tora.madeiraNome;
       return {
         ...tora,
         madeiraNome,
@@ -167,7 +170,7 @@ export default function ProducaoPage() {
           setRomaneio((atual) => {
             const novasToras: ToraForm[] = resultado.toras.map((tora: any) => ({ ...tora, plaquetaId: tora.plaquetaId ? String(tora.plaquetaId) : "", origem: tora.origem, exigeConferenciaManual: Boolean(tora.exigeConferenciaManual) }));
             const primeiraEssencia = novasToras[0]?.madeiraNome ?? "";
-            return { ...atual, toras: [...atual.toras, ...novasToras], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: primeiraEssencia }) };
+            return { ...atual, toras: [...novasToras, ...atual.toras], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: primeiraEssencia }) };
           });
           setDialogImportacao(false);
           setArquivoImportacao(null);
@@ -216,7 +219,7 @@ export default function ProducaoPage() {
     const plaqueta: any = torasDisponiveis.find((item: any) => normalizarCodigo(item.codigo) === codigoNormalizado);
     if (!plaqueta) {
       const toraAvulsa: ToraForm = { plaquetaId: "", codigo: codigoNormalizado, madeiraNome: "", diametro: "", comprimento: "", volume: "", origem: "entrada_imediata", exigeConferenciaManual: false };
-      setRomaneio((atual) => ({ ...atual, toras: [...atual.toras, toraAvulsa] }));
+      setRomaneio((atual) => ({ ...atual, toras: [toraAvulsa, ...atual.toras] }));
       setCodigoPlaqueta("");
       toast.message("Plaqueta não encontrada no estoque. Informe os dados para registrar a entrada e o consumo imediato.");
       return;
@@ -232,7 +235,7 @@ export default function ProducaoPage() {
       origem: "estoque",
       exigeConferenciaManual,
     };
-    setRomaneio((atual) => ({ ...atual, toras: [...atual.toras, tora], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: tora.madeiraNome }) }));
+    setRomaneio((atual) => ({ ...atual, toras: [tora, ...atual.toras], itens: atual.itens.map((item) => item.madeiraNome ? item : { ...item, madeiraNome: tora.madeiraNome }) }));
     setCodigoPlaqueta("");
     if (exigeConferenciaManual) toast.warning("Há mais de uma tora com esta plaqueta. Preencha manualmente as medidas da tora selecionada antes de continuar.");
   };
@@ -251,7 +254,7 @@ export default function ProducaoPage() {
       toast.error("Informe essência, espessura e largura para a medida produzida");
       return;
     }
-    const linhasPreenchidas = linhasComprimento.filter((linha) => linha.comprimento.trim() || linha.quantidade.trim());
+    const linhasPreenchidas = linhasComprimento.filter((linha) => linha.quantidade.trim());
     if (!linhasPreenchidas.length) { toast.error("Informe ao menos um comprimento e sua quantidade"); return; }
     if (linhasPreenchidas.some((linha) => num(linha.comprimento) <= 0 || !Number.isInteger(num(linha.quantidade)) || num(linha.quantidade) <= 0)) {
       toast.error("Revise os comprimentos e as quantidades preenchidas");
@@ -430,17 +433,17 @@ function SerragemTerceirosUnificadaDialog({ valor, atualizarValor, clientes, abe
   const valorTotal = totalToras * tarifa;
   const atualizarTora = (indice: number, campo: keyof ToraTerceiroForm, novoValor: string) => atualizarValor((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, [campo]: novoValor } : tora) }));
   const removerTora = (indice: number) => atualizarValor((atual) => ({ ...atual, toras: atual.toras.length === 1 ? atual.toras : atual.toras.filter((_, posicao) => posicao !== indice) }));
-  const adicionarTora = () => atualizarValor((atual) => ({ ...atual, toras: [...atual.toras, { referencia: "", madeiraNome: "", diametro: "", comprimento: "", volume: "" }] }));
+  const adicionarTora = () => atualizarValor((atual) => ({ ...atual, toras: [{ referencia: "", madeiraNome: "", diametro: "", comprimento: "", volume: "" }, ...atual.toras] }));
   const atualizarLinha = (id: number, campo: "comprimento" | "quantidade", novoValor: string) => setLinhasComprimento((linhas) => linhas.map((linha) => linha.id === id ? { ...linha, [campo]: novoValor } : linha));
   const adicionarLinha = () => setLinhasComprimento((linhas) => [...linhas, { id: Math.max(0, ...linhas.map((linha) => linha.id)) + 1, comprimento: "", quantidade: "" }]);
   const removerLinha = (id: number) => setLinhasComprimento((linhas) => linhas.length === 1 ? linhas : linhas.filter((linha) => linha.id !== id));
   const adicionarGrupo = () => {
     if (!grupoPecas.madeiraNome.trim() || num(grupoPecas.espessura) <= 0 || num(grupoPecas.largura) <= 0) { toast.error("Informe essência, espessura e largura para a medida produzida"); return; }
-    const preenchidas = linhasComprimento.filter((linha) => linha.comprimento.trim() || linha.quantidade.trim());
+    const preenchidas = linhasComprimento.filter((linha) => linha.quantidade.trim());
     if (!preenchidas.length || preenchidas.some((linha) => num(linha.comprimento) <= 0 || !Number.isInteger(num(linha.quantidade)) || num(linha.quantidade) <= 0)) { toast.error("Revise os comprimentos e as quantidades preenchidas"); return; }
     const itens = preenchidas.map((linha) => ({ madeiraNome: grupoPecas.madeiraNome.trim(), espessura: grupoPecas.espessura, largura: grupoPecas.largura, comprimento: linha.comprimento, quantidade: linha.quantidade }));
     atualizarValor((atual) => ({ ...atual, itens: [...atual.itens.filter((item) => item.madeiraNome.trim() || item.espessura || item.largura || item.comprimento || item.quantidade), ...itens] }));
-    setLinhasComprimento(criarLinhasComprimentoVazias());
+    setLinhasComprimento(criarLinhasComprimentoPadrao());
     toast.success(`${itens.length} comprimento(s) adicionado(s). A medida foi mantida para o próximo lançamento.`);
   };
   const editarItem = (indice: number) => {

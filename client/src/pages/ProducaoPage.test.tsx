@@ -89,10 +89,12 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/Cobrança calculada:/)).toHaveTextContent("R$ 39,27");
 
     await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
-    expect(screen.getAllByDisplayValue("Cedrinho")).toHaveLength(2);
+    expect(screen.getByLabelText("Referência da tora 1")).toHaveValue("");
+    expect(screen.getByLabelText("Essência da tora 1")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Referência da tora 2")).toHaveValue("CLI-02");
   });
 
-  it("usa a mesma grade de comprimentos da produção diária e descarta a linha inicial vazia", async () => {
+  it("usa a mesma grade padrão de comprimentos editáveis da produção diária", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 
@@ -107,8 +109,11 @@ describe("ProducaoPage", () => {
     await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
     expect(screen.getByText("Romaneio de madeira serrada")).toBeInTheDocument();
     expect(screen.getByLabelText("Essência da medida de terceiros")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Comprimento da peça de terceiros 1")).toHaveValue("2");
+    expect(screen.getByLabelText("Comprimento da peça de terceiros 15")).toHaveValue("9");
     await user.type(screen.getByLabelText("Espessura da medida de terceiros"), "2.5");
     await user.type(screen.getByLabelText("Largura da medida de terceiros"), "15");
+    await user.clear(screen.getByLabelText("Comprimento da peça de terceiros 1"));
     await user.type(screen.getByLabelText("Comprimento da peça de terceiros 1"), "3");
     await user.type(screen.getByLabelText("Quantidade da peça de terceiros 1"), "10");
     await user.click(screen.getByRole("button", { name: "Adicionar comprimentos ao romaneio" }));
@@ -176,7 +181,7 @@ describe("ProducaoPage", () => {
     expect(await screen.findByDisplayValue("Ajuste de produção")).toBeInTheDocument();
     expect(screen.getByText(/Cedrinho · 3 × 5 cm · 2 m/)).toBeInTheDocument();
     expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
-    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("");
+    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("2");
   });
 
   it("permite preparar uma nova plaqueta digitada para entrada e consumo imediato", async () => {
@@ -228,11 +233,15 @@ describe("ProducaoPage", () => {
 
     expect(screen.getByText(/Nenhum comprimento adicionado/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
+    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("2");
+    expect(screen.getByLabelText("Comprimento da linha 15")).toHaveValue("9");
 
     await user.type(screen.getByLabelText("Espessura da medida"), "3");
     await user.type(screen.getByLabelText("Largura da medida"), "5");
+    await user.clear(screen.getByLabelText("Comprimento da linha 1"));
     await user.type(screen.getByLabelText("Comprimento da linha 1"), "2");
     await user.type(screen.getByLabelText("Quantidade da linha 1"), "11");
+    await user.clear(screen.getByLabelText("Comprimento da linha 2"));
     await user.type(screen.getByLabelText("Comprimento da linha 2"), "3");
     await user.type(screen.getByLabelText("Quantidade da linha 2"), "7");
     await user.click(screen.getByRole("button", { name: "Adicionar comprimentos ao romaneio" }));
@@ -244,7 +253,7 @@ describe("ProducaoPage", () => {
     expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
     expect(screen.getByLabelText("Espessura da medida")).toHaveValue("3");
     expect(screen.getByLabelText("Largura da medida")).toHaveValue("5");
-    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("");
+    expect(screen.getByLabelText("Comprimento da linha 1")).toHaveValue("2");
   });
 
   it("oferece a importação de peças serradas por planilha na etapa de bitolas", async () => {
