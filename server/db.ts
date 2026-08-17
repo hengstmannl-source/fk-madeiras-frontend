@@ -2196,17 +2196,18 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
   });
 }
 
-export async function listPlaquetas(parametros: { busca?: string; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
+export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
   const todas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
-  const filtradas = termo ? todas.filter((item) => {
+  const porBusca = termo ? todas.filter((item) => {
     const codigo = `${item.codigo} ${item.codigoFisico ?? ""}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
     const essencia = item.madeiraNome.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
     return codigo.includes(termo) || essencia.includes(termo);
   }) : todas;
+  const filtradas = parametros.estado ? porBusca.filter((item) => item.estado === parametros.estado) : porBusca;
   const limite = Math.min(Math.max(parametros.limite ?? 10, 1), 500);
   const deslocamento = Math.max(parametros.deslocamento ?? 0, 0);
   const itens = filtradas.slice(deslocamento, deslocamento + limite);
@@ -2987,9 +2988,14 @@ export async function getDetalheSerragemTerceiros(id: number, empresaId = 1) {
   const servico = (await db.select({
     id: serragensTerceiros.id, numero: serragensTerceiros.numero, dataProducao: serragensTerceiros.dataProducao, dataVencimento: serragensTerceiros.dataVencimento,
     clienteId: serragensTerceiros.clienteId, clienteNome: clientes.nome, responsavel: serragensTerceiros.responsavel, observacoes: serragensTerceiros.observacoes,
+    valorMetroCubico: serragensTerceiros.valorMetroCubico,
   }).from(serragensTerceiros).innerJoin(clientes, and(eq(serragensTerceiros.clienteId, clientes.id), eq(clientes.empresaId, empresaId)))
     .where(and(eq(serragensTerceiros.id, id), eq(serragensTerceiros.empresaId, empresaId))).limit(1))[0];
   if (!servico) throw new Error("Serviço de serragem não encontrado");
+  const toras = await db.select({ referencia: itensSerragemToras.referencia, madeiraNome: itensSerragemToras.madeiraNome, diametro: itensSerragemToras.diametro, comprimento: itensSerragemToras.comprimento, volume: itensSerragemToras.volume })
+    .from(itensSerragemToras).where(and(eq(itensSerragemToras.empresaId, empresaId), eq(itensSerragemToras.serragemId, id))).orderBy(asc(itensSerragemToras.id));
+  const itens = await db.select({ madeiraNome: itensSerragemPecas.madeiraNome, espessura: itensSerragemPecas.espessura, largura: itensSerragemPecas.largura, comprimento: itensSerragemPecas.comprimento, quantidade: itensSerragemPecas.quantidade })
+    .from(itensSerragemPecas).where(and(eq(itensSerragemPecas.empresaId, empresaId), eq(itensSerragemPecas.serragemId, id))).orderBy(asc(itensSerragemPecas.id));
   const lotes = await db.select({
     id: lotesPecasSerradas.id, madeiraNome: lotesPecasSerradas.madeiraNome, espessura: lotesPecasSerradas.espessura, largura: lotesPecasSerradas.largura,
     comprimento: lotesPecasSerradas.comprimento, quantidadeProduzida: lotesPecasSerradas.quantidadeProduzida, quantidadeDisponivel: lotesPecasSerradas.quantidadeDisponivel,
@@ -3002,7 +3008,60 @@ export async function getDetalheSerragemTerceiros(id: number, empresaId = 1) {
   }).from(retiradasSerragemTerceiros).innerJoin(itensRetiradaSerragemTerceiros, eq(itensRetiradaSerragemTerceiros.retiradaId, retiradasSerragemTerceiros.id))
     .innerJoin(lotesPecasSerradas, eq(lotesPecasSerradas.id, itensRetiradaSerragemTerceiros.loteId))
     .where(and(eq(retiradasSerragemTerceiros.empresaId, empresaId), eq(retiradasSerragemTerceiros.serragemId, id))).orderBy(desc(retiradasSerragemTerceiros.dataRetirada), desc(retiradasSerragemTerceiros.id));
-  return { servico, lotes, retiradas };
+  return { servico, toras, itens, lotes, retiradas };
+}
+
+export async function atualizarSerragemTerceiros(id: number, data: {
+  clienteId: number;
+  dataProducao: Date;
+  dataVencimento: Date;
+  responsavel?: string | null;
+  observacoes?: string | null;
+  valorMetroCubico: string;
+  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | null; comprimento?: string | null; volume?: string }>;
+  itens: ItemProducaoEntrada[];
+  atualizadoPor: number;
+  empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const servico = (await tx.select().from(serragensTerceiros).where(and(eq(serragensTerceiros.id, id), eq(serragensTerceiros.empresaId, data.empresaId))).limit(1))[0];
+    if (!servico) throw new Error("Serviço de serragem não encontrado");
+    const lotes = await tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.serragemTerceirosId, id), eq(lotesPecasSerradas.empresaId, data.empresaId)));
+    for (const lote of lotes) {
+      const movimentosPosteriores = await tx.select({ id: movimentacoesEstoqueSerrado.id }).from(movimentacoesEstoqueSerrado)
+        .where(and(eq(movimentacoesEstoqueSerrado.loteId, lote.id), ne(movimentacoesEstoqueSerrado.tipo, "entrada_producao"))).limit(1);
+      if (movimentosPosteriores[0] || lote.quantidadeDisponivel !== lote.quantidadeProduzida) {
+        throw new Error("Este serviço possui peças já retiradas ou movimentadas e não pode ser editado. Regularize as saídas antes de alterar a serragem.");
+      }
+    }
+    const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.serragemTerceirosId, id), eq(titulosFinanceiros.empresaId, data.empresaId), eq(titulosFinanceiros.origem, "serragem_terceiros"))).limit(1))[0];
+    if (!titulo) throw new Error("A cobrança vinculada ao serviço de serragem não foi encontrada");
+    const baixa = (await tx.select({ id: baixasFinanceiras.id }).from(baixasFinanceiras).where(and(eq(baixasFinanceiras.tituloId, titulo.id), eq(baixasFinanceiras.empresaId, data.empresaId))).limit(1))[0];
+    if (baixa || titulo.estado === "quitado" || titulo.estado === "cancelado") throw new Error("A cobrança deste serviço já possui movimentação financeira e não pode ser editada.");
+    const cliente = (await tx.select().from(clientes).where(and(eq(clientes.id, data.clienteId), eq(clientes.empresaId, data.empresaId))).limit(1))[0];
+    if (!cliente) throw new Error("Cliente não encontrado para o serviço de serragem");
+    const calculo = validarSerragemTerceiros({ toras: data.toras, itens: data.itens });
+    const valorMetroCubico = Number(String(data.valorMetroCubico).replace(",", "."));
+    if (!Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) throw new Error("Informe um preço por m³ válido para o serviço de serragem");
+    const valorServico = Number((calculo.volumeToras * valorMetroCubico).toFixed(2));
+    for (const lote of lotes) await tx.delete(movimentacoesEstoqueSerrado).where(eq(movimentacoesEstoqueSerrado.loteId, lote.id));
+    await tx.delete(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.serragemTerceirosId, id), eq(lotesPecasSerradas.empresaId, data.empresaId)));
+    await tx.delete(itensSerragemPecas).where(and(eq(itensSerragemPecas.serragemId, id), eq(itensSerragemPecas.empresaId, data.empresaId)));
+    await tx.delete(itensSerragemToras).where(and(eq(itensSerragemToras.serragemId, id), eq(itensSerragemToras.empresaId, data.empresaId)));
+    await tx.update(serragensTerceiros).set({ clienteId: data.clienteId, dataProducao: data.dataProducao, dataVencimento: data.dataVencimento, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, valorServico: valorServico.toFixed(2), valorMetroCubico: valorMetroCubico.toFixed(2), volumeToras: calculo.volumeToras.toFixed(6), volumeProduzido: calculo.volumeProduzido.toFixed(6), aproveitamento: calculo.aproveitamento.toFixed(2) }).where(eq(serragensTerceiros.id, id));
+    await tx.insert(itensSerragemToras).values(calculo.toras.map((tora) => ({ empresaId: data.empresaId, serragemId: id, referencia: tora.referencia, madeiraNome: tora.madeiraNome, diametro: tora.diametro.toFixed(2), comprimento: tora.comprimento.toFixed(2), volume: tora.volume.toFixed(6) })));
+    for (const item of calculo.itens) {
+      const insercaoItem = await tx.insert(itensSerragemPecas).values({ empresaId: data.empresaId, serragemId: id, madeiraNome: item.madeiraNome, espessura: item.espessura.toFixed(2), largura: item.largura.toFixed(2), comprimento: item.comprimento.toFixed(2), quantidade: item.quantidade, metrosLineares: item.metrosLineares.toFixed(4), volume: item.volume.toFixed(6) });
+      const itemSerragemId = getInsertedId(insercaoItem as MysqlInsertResult);
+      const insercaoLote = await tx.insert(lotesPecasSerradas).values({ empresaId: data.empresaId, romaneioId: null, itemRomaneioId: null, serragemTerceirosId: id, itemSerragemId, propriedade: "terceiro", clienteProprietarioId: data.clienteId, madeiraNome: item.madeiraNome, espessura: item.espessura.toFixed(2), largura: item.largura.toFixed(2), comprimento: item.comprimento.toFixed(2), quantidadeProduzida: item.quantidade, quantidadeDisponivel: item.quantidade, metrosLineares: item.metrosLineares.toFixed(4), volume: item.volume.toFixed(6), estado: "disponivel" });
+      const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
+      await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Serragem de terceiros ${servico.numero} — propriedade de ${cliente.nome}`, criadoPor: data.atualizadoPor });
+    }
+    await tx.update(titulosFinanceiros).set({ descricao: `Serviço de serragem — ${servico.numero}`, clienteId: data.clienteId, contraparteNome: cliente.nome, valorOriginal: valorServico.toFixed(2), dataEmissao: data.dataProducao, dataVencimento: data.dataVencimento, competencia: data.dataProducao, estado: calcularEstadoTitulo({ valorOriginal: valorServico.toFixed(2), dataVencimento: data.dataVencimento }) }).where(eq(titulosFinanceiros.id, titulo.id));
+    return { id, numero: servico.numero, ...calculo };
+  });
 }
 
 export async function registrarRetiradaSerragemTerceiros(data: {

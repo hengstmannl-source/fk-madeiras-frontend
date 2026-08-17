@@ -52,6 +52,7 @@ const FiltrosCargasSchema = z.object({
 
 const ListaPlaquetasSchema = z.object({
   busca: z.string().trim().max(200).optional(),
+  estado: z.enum(["disponivel", "consumida", "cancelada"]).optional(),
   limite: z.number().int().min(1).max(500).default(10),
   deslocamento: z.number().int().min(0).default(0),
 });
@@ -206,6 +207,13 @@ export const producaoRouter = router({
       dataProducao: dataLocal(input.dataProducao),
       dataVencimento: dataLocal(input.dataVencimento),
       criadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
+    })),
+    update: protectedProcedure.input(SerragemTerceirosSchema.safeExtend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.atualizarSerragemTerceiros(input.id, {
+      ...input,
+      dataProducao: dataLocal(input.dataProducao),
+      dataVencimento: dataLocal(input.dataVencimento),
+      atualizadoPor: ctx.user.id,
       empresaId: ctx.empresaAtiva!.empresa.id,
     })),
     registrarRetirada: protectedProcedure.input(RetiradaSerragemTerceirosSchema).mutation(({ ctx, input }) => db.registrarRetiradaSerragemTerceiros({

@@ -5,6 +5,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const criarSerragemMock = vi.hoisted(() => vi.fn());
+const atualizarSerragemMock = vi.hoisted(() => vi.fn());
+const definirLocalizacaoMock = vi.hoisted(() => vi.fn());
 
 vi.stubGlobal("ResizeObserver", class {
   observe() {}
@@ -12,7 +14,7 @@ vi.stubGlobal("ResizeObserver", class {
   disconnect() {}
 });
 
-vi.mock("wouter", () => ({ useSearch: () => "" }));
+vi.mock("wouter", () => ({ useSearch: () => "", useLocation: () => ["/producao", definirLocalizacaoMock] }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
   const queryVazia = { useQuery: () => ({ data: [], isLoading: false }) };
@@ -23,7 +25,7 @@ vi.mock("@/lib/trpc", () => {
   const romaneios = [{ id: 14, numero: "ROM-000014", dataProducao: "2026-08-12T12:00:00.000Z", plaquetaCodigo: "TOR-0008", madeiraTora: "Cedrinho", volumeTora: "0.380000", totalPecas: 12, volumeProduzido: "0.210000", aproveitamento: "55.26", fita: "Fita 1" }];
   const detalheRomaneio = { romaneio: { dataProducao: "2026-08-12T12:00:00.000Z", fita: "Fita 1", responsavel: "João", observacoes: "Ajuste de produção" }, toras: [{ plaquetaId: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30", comprimento: "4.2", volume: "0.38" }], itens: [{ madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2", quantidade: 11 }] };
   const serragens = [{ id: 31, numero: "SER-000031", clienteNome: "Marcenaria Silva", dataProducao: "2026-08-14T12:00:00.000Z", volumeToras: "0.750000", volumeProduzido: "0.390000", valorServico: "450.00" }];
-  const detalheSerragem = { lotes: [{ id: 71, madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2", quantidadeDisponivel: 12 }] };
+  const detalheSerragem = { servico: { clienteId: 1, dataProducao: "2026-08-14T12:00:00.000Z", dataVencimento: "2026-08-20T12:00:00.000Z", responsavel: "João", observacoes: "Sem observações", valorMetroCubico: "600.00" }, toras: [{ referencia: "CLI-01", madeiraNome: "Cedrinho", diametro: "50", comprimento: "4", volume: "0.785398" }], itens: [{ madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidade: 10 }], lotes: [{ id: 71, madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2", quantidadeDisponivel: 12 }] };
   const mutationInerte = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
   const invalidar = { invalidate: vi.fn() };
   return {
@@ -33,7 +35,7 @@ vi.mock("@/lib/trpc", () => {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, totalDisponiveis: 300, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
-        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte },
+        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte },
       },
       cliente: { list: { useQuery: () => ({ data: [{ id: 1, nome: "Marcenaria Silva", telefone: "(67) 99999-0000" }], isLoading: false }) }, create: mutationInerte },
     },
@@ -47,7 +49,7 @@ Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable
 Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", { configurable: true, value: () => undefined });
 Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => undefined });
 
-afterEach(() => { cleanup(); criarSerragemMock.mockReset(); });
+afterEach(() => { cleanup(); criarSerragemMock.mockReset(); atualizarSerragemMock.mockReset(); definirLocalizacaoMock.mockReset(); });
 
 describe("ProducaoPage", () => {
   it("apresenta somente a produção diária e orienta o uso prévio do Estoque", () => {
@@ -59,6 +61,15 @@ describe("ProducaoPage", () => {
     expect(screen.queryByRole("tab", { name: "Estoque de toras" })).not.toBeInTheDocument();
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
     expect(screen.getByText("Toras disponíveis").closest(".rounded-xl")).toHaveTextContent("300");
+    expect(screen.getByText("Toras disponíveis").closest(".rounded-xl")).toHaveTextContent("1,175 m³");
+  });
+
+  it("direciona o indicador de toras disponíveis para o Estoque já filtrado", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Ver toras disponíveis" }));
+    expect(definirLocalizacaoMock).toHaveBeenCalledWith("/estoque?estado=disponivel");
   });
 
   it("oferece a serragem de terceiros no mesmo fluxo em duas etapas da produção diária", async () => {
@@ -150,6 +161,20 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/Disponível para retirada/i)).toHaveTextContent("12 peça(s)");
     expect(screen.getByLabelText("Retirar agora — Cedrinho")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar retirada" })).toBeInTheDocument();
+  });
+
+  it("abre a serragem de terceiros para edição e envia a atualização do preço e das peças", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Editar serviço" }));
+    expect(await screen.findByLabelText("Tarifa por m³ (R$) *")).toHaveValue("600.00");
+    await user.clear(screen.getByLabelText("Tarifa por m³ (R$) *"));
+    await user.type(screen.getByLabelText("Tarifa por m³ (R$) *"), "650");
+    await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
+    await user.click(screen.getByRole("button", { name: "Registrar serviço" }));
+
+    expect(atualizarSerragemMock).toHaveBeenCalledWith(expect.objectContaining({ id: 31, valorMetroCubico: "650" }), expect.any(Object));
   });
 
   it("adiciona a tora por digitação da plaqueta, permite conferir o resultado consolidado e disponibiliza o PDF", async () => {

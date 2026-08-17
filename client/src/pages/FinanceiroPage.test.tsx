@@ -324,10 +324,10 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(within(tabelaPagar!).queryByText("Carga de toras RC-001")).not.toBeInTheDocument();
     await user.click(screen.getAllByRole("button", { name: "Limpar filtros" })[0]);
 
-    await user.click(screen.getAllByRole("button", { name: /contas pagas/i }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas pagas" }).at(-1)!);
     expect(screen.getByText("Conta paga arquivada")).toBeInTheDocument();
 
-    await user.click(screen.getAllByRole("button", { name: /contas recebidas/i }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas recebidas" }).at(-1)!);
     expect(screen.getByText("Receita recebida arquivada")).toBeInTheDocument();
   });
 
@@ -357,7 +357,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
 
-    await user.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas a receber" }).at(-1)!);
 
     const linha = screen.getAllByText("Recebimento com baixa").map((elemento) => elemento.closest("tr")).find(Boolean);
     expect(linha).not.toBeNull();
