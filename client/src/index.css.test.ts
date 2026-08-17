@@ -19,7 +19,7 @@ describe("responsividade da Produção", () => {
   it("amplia os diálogos operacionais e usa a largura real do conteúdo como ponto de quebra", () => {
     expect(estilos).toContain("width: min(96vw, 88rem) !important");
     expect(estilos).toContain("container-type: inline-size");
-    expect(estilos).toContain("@container (max-width: 44rem)");
-    expect(estilos).toContain("Referência da tora");
+    expect(estilos).toContain("@container (max-width: 56rem)");
+    expect(estilos).toContain("[role=\"dialog\"]:has(.grid.gap-3.sm\\:grid-cols-2.lg\\:grid-cols-5)");
   });
 });

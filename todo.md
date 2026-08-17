@@ -404,3 +404,4 @@
 - [x] Ampliar o diálogo de lançamento de Produção para evitar compressão dos campos de toras em telas móveis
 - [x] Permitir inserir uma tora manualmente ao pressionar Enter no formulário de Produção
 - [x] Navegar por colunas na grade manual de peças: Tab entre comprimentos e Tab entre quantidades correspondentes
+- [x] Reorganizar os indicadores da etapa de Peças Serradas e o painel por essência para evitar compressão em telas estreitas
