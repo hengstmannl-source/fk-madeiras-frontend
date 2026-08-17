@@ -386,3 +386,6 @@
 - [x] Inserir no topo a nova tora adicionada em Produção Diária e Serragem de Terceiros, mantendo as toras já lançadas abaixo
 - [x] Preencher a grade de peças de Produção Diária e Serragem de Terceiros com comprimentos padrão editáveis de 2 a 9 metros, em intervalos de 0,5 metro
 - [x] Cobrir a ordenação das toras e os comprimentos padrão editáveis com testes e validação visual nos dois fluxos
+- [x] Calcular volume de toras, volume de peças e percentual de aproveitamento separadamente por essência em Produção Diária e Serragem de Terceiros
+- [x] Exibir no formulário e nos romaneios um resumo de aproveitamento por essência, preservando o consolidado geral
+- [x] Cobrir cenários de múltiplas essências com rendimentos distintos, testes e validação visual

@@ -1,3 +1,5 @@
+import { calcularAproveitamentoPorEssencia } from "@shared/aproveitamentoPorEssencia";
+
 export type ItemProducaoEntrada = {
   madeiraNome: string;
   espessura: string | number;
@@ -99,7 +101,11 @@ export function validarSerragemTerceiros(input: {
   const volumeToras = Number(toras.reduce((total, tora) => total + tora.volume, 0).toFixed(6));
   const volumeProduzido = Number(itens.reduce((total, item) => total + item.volume, 0).toFixed(6));
   if (volumeProduzido > volumeToras + 0.000001) throw new Error("O volume produzido não pode exceder o volume das toras do cliente");
-  return { toras, itens, volumeToras, volumeProduzido, aproveitamento: Number(((volumeProduzido / volumeToras) * 100).toFixed(2)) };
+  const aproveitamentoPorEssencia = calcularAproveitamentoPorEssencia(toras, itens);
+  if (aproveitamentoPorEssencia.some((resumo) => resumo.volumeProduzido > resumo.volumeToras + 0.000001)) {
+    throw new Error("O volume produzido de uma essência não pode exceder o volume das toras desta essência");
+  }
+  return { toras, itens, volumeToras, volumeProduzido, aproveitamento: Number(((volumeProduzido / volumeToras) * 100).toFixed(2)), aproveitamentoPorEssencia };
 }
 
 export function validarRetiradaSerragemTerceiros(input: { itens: Array<{ loteId: number; quantidade: number }> }) {
@@ -145,6 +151,10 @@ export function validarConfirmacaoRomaneio(input: {
   if (volumeProduzido > volumeTora + 0.000001) {
     throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o volume total das toras (${volumeTora.toFixed(6)} m³)`);
   }
+  const aproveitamentoPorEssencia = calcularAproveitamentoPorEssencia(toras.map((entrada) => ({ madeiraNome: entrada.tora.madeiraNome, volume: entrada.volume })), itens);
+  if (aproveitamentoPorEssencia.some((resumo) => resumo.volumeProduzido > resumo.volumeToras + 0.000001)) {
+    throw new Error("O volume produzido de uma essência não pode exceder o volume das toras desta essência");
+  }
   return {
     toras,
     totalToras: toras.length,
@@ -155,6 +165,7 @@ export function validarConfirmacaoRomaneio(input: {
     volumeTora: Number(volumeTora.toFixed(6)),
     volumeRemanescente: Number((volumeTora - volumeProduzido).toFixed(6)),
     aproveitamento: Number(((volumeProduzido / volumeTora) * 100).toFixed(2)),
+    aproveitamentoPorEssencia,
   };
 }
 

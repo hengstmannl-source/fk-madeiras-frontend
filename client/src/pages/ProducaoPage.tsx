@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import { type LinhaComprimentoVenda } from "@/lib/vendaItemGroup";
+import { calcularAproveitamentoPorEssencia, type VolumePorEssencia } from "@shared/aproveitamentoPorEssencia";
 
 type ItemForm = { madeiraNome: string; espessura: string; largura: string; comprimento: string; quantidade: string };
 type GrupoPecasForm = { madeiraNome: string; espessura: string; largura: string };
@@ -29,6 +30,7 @@ const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFor
 const formatarMoeda = (valor: number | string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor ?? 0));
 const formatarData = (valor: string | Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(valor));
 let resumoTarifaSerragem: { volumeToras: number; tarifaPorM3: number; valorTotal: number } | null = null;
+let resumoAproveitamentoEmExibicao: VolumePorEssencia[] = [];
 const comprimentosPadraoProducao = ["2", "2,5", "3", "3,5", "4", "4,5", "5", "5,5", "6", "6,5", "7", "7,5", "8", "8,5", "9"];
 const criarLinhasComprimentoPadrao = (): LinhaComprimento[] => comprimentosPadraoProducao.map((comprimento, indice) => ({ id: indice + 1, comprimento, quantidade: "" }));
 const criarLinhasComprimentoVazias = criarLinhasComprimentoPadrao;
@@ -118,11 +120,12 @@ export default function ProducaoPage() {
     });
     return { ...proximo, toras };
   });
-  const resumoEssencias = useMemo(() => {
-    const totais = new Map<string, number>();
-    romaneio.toras.forEach((tora) => totais.set(tora.madeiraNome.trim() || "Sem essência", (totais.get(tora.madeiraNome.trim() || "Sem essência") ?? 0) + num(tora.volume)));
-    return Array.from(totais.entries());
-  }, [romaneio.toras]);
+  const aproveitamentoPorEssencia = useMemo(() => calcularAproveitamentoPorEssencia(
+    romaneio.toras,
+    romaneio.itens.map((item) => ({ madeiraNome: item.madeiraNome, volume: calcularItem(item).volume })),
+  ), [romaneio.toras, romaneio.itens]);
+  resumoAproveitamentoEmExibicao = aproveitamentoPorEssencia;
+  const resumoEssencias = useMemo(() => aproveitamentoPorEssencia.map((resumo) => [resumo.essencia, resumo.volumeToras] as const), [aproveitamentoPorEssencia]);
 
   const invalidar = () => {
     utils.producao.plaquetas.list.invalidate();
@@ -408,7 +411,11 @@ function Campo({ label, children }: { label: string; children: ReactNode }) {
 }
 function Cabecalho({ titulo, texto, acao }: { titulo: string; texto: string; acao?: ReactNode }) { return <div className="flex min-w-0 flex-col gap-3 border-b bg-muted/20 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="min-w-0"><h2 className="font-semibold">{titulo}</h2><p className="mt-0.5 text-xs text-muted-foreground">{texto}</p></div>{acao}</div>; }
 function Resumo({ icon, titulo, valor, detalhe, cor }: { icon: ReactNode; titulo: string; valor: ReactNode; detalhe: string; cor: string }) { const cores: Record<string, string> = { emerald: "bg-emerald-50 text-emerald-700", sky: "bg-sky-50 text-sky-700", amber: "bg-amber-50 text-amber-700", violet: "bg-violet-50 text-violet-700" }; return <div className="min-w-0 rounded-xl border bg-card p-4 shadow-sm"><div className="flex min-w-0 items-start justify-between gap-3"><div className="min-w-0"><p className="text-xs text-muted-foreground">{titulo}</p><p className="mt-1 break-words text-xl font-bold">{valor}</p></div><div className={`shrink-0 rounded-lg p-2 ${cores[cor]}`}>{icon}</div></div><p className="mt-2 break-words text-xs text-muted-foreground">{detalhe}</p></div>; }
-function Indicador({ texto, valor, destaque }: { texto: string; valor: ReactNode; destaque?: string }) { return <div className={`min-w-0 rounded-lg border p-3 ${destaque === "destructive" ? "border-rose-200 bg-rose-50" : destaque ? "border-primary/20 bg-primary/5" : "bg-muted/20"}`}><p className="text-xs text-muted-foreground">{texto}</p><p className="mt-1 break-words font-semibold">{valor}</p></div>; }
+function ResumoAproveitamentoPorEssencia({ resumos }: { resumos: VolumePorEssencia[] }) {
+  if (!resumos.length) return null;
+  return <div className="mt-3 space-y-2 border-t border-primary/15 pt-3"><p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Por essência</p>{resumos.map((resumo) => <div key={resumo.essencia} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-2 text-xs"><span className="truncate font-medium" title={resumo.essencia}>{resumo.essencia}</span><span className="font-semibold text-primary">{formatarNumero(resumo.aproveitamento, 2)}%</span><span className="truncate text-muted-foreground">{formatarNumero(resumo.volumeProduzido)} de {formatarNumero(resumo.volumeToras)} m³</span><span className="text-muted-foreground">produzido</span></div>)}</div>;
+}
+function Indicador({ texto, valor, destaque }: { texto: string; valor: ReactNode; destaque?: string }) { return <div className={`min-w-0 rounded-lg border p-3 ${destaque === "destructive" ? "border-rose-200 bg-rose-50" : destaque ? "border-primary/20 bg-primary/5" : "bg-muted/20"}`}><p className="text-xs text-muted-foreground">{texto}</p><p className="mt-1 break-words font-semibold">{valor}</p>{texto === "Aproveitamento" && <ResumoAproveitamentoPorEssencia resumos={resumoAproveitamentoEmExibicao} />}</div>; }
 function Acoes({ cancelar, confirmar, carregando, texto }: { cancelar: () => void; confirmar: () => void; carregando: boolean; texto: string }) { return <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row"><Button className="w-full sm:w-auto" variant="outline" onClick={cancelar} disabled={carregando}>Cancelar</Button><Button className="w-full sm:w-auto" onClick={confirmar} disabled={carregando}>{carregando && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{texto}</Button></div>; }
 function Carregando() { return <div className="py-12 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Carregando...</div>; }
 function Vazio({ icone, texto }: { icone: ReactNode; texto: string }) { return <div className="flex min-w-0 flex-col items-center gap-3 px-4 py-10 text-center text-muted-foreground"><div className="shrink-0 rounded-full bg-muted p-3">{icone}</div><p className="max-w-sm break-words text-sm">{texto}</p></div>; }
@@ -429,6 +436,8 @@ function SerragemTerceirosUnificadaDialog({ valor, atualizarValor, clientes, abe
     return { pecas: total.pecas + calculo.quantidade, metrosLineares: total.metrosLineares + calculo.metrosLineares, volume: total.volume + calculo.volume };
   }, { pecas: 0, metrosLineares: 0, volume: 0 });
   const aproveitamento = totalToras > 0 ? (totaisPecas.volume / totalToras) * 100 : 0;
+  const aproveitamentoPorEssencia = calcularAproveitamentoPorEssencia(valor.toras, valor.itens.map((item) => ({ madeiraNome: item.madeiraNome, volume: calcularItem(item).volume })));
+  resumoAproveitamentoEmExibicao = aproveitamentoPorEssencia;
   const tarifa = num(valor.valorServico);
   const valorTotal = totalToras * tarifa;
   const atualizarTora = (indice: number, campo: keyof ToraTerceiroForm, novoValor: string) => atualizarValor((atual) => ({ ...atual, toras: atual.toras.map((tora, posicao) => posicao === indice ? { ...tora, [campo]: novoValor } : tora) }));

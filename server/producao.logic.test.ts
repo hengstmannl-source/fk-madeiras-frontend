@@ -99,6 +99,46 @@ describe("regras de produção", () => {
     expect(resultado).toMatchObject({ volumeTora: 2, volumeProduzido: 0.4, aproveitamento: 20 });
   });
 
+  it("detalha o aproveitamento por essência na produção diária e na serragem de terceiros", () => {
+    const toras = [
+      { plaqueta: { codigo: "JAT-01", estado: "disponivel" as const, volumeDisponivel: "1" }, tora: { madeiraNome: "Jatobá", volume: "1" } },
+      { plaqueta: { codigo: "PIQ-01", estado: "disponivel" as const, volumeDisponivel: "1" }, tora: { madeiraNome: "Piqui", volume: "1" } },
+    ];
+    const itens = [
+      { madeiraNome: "Jatobá", espessura: 5, largura: 20, comprimento: 3, quantidade: 20 },
+      { madeiraNome: "Piqui", espessura: 4, largura: 20, comprimento: 3, quantidade: 20 },
+    ];
+    expect(validarConfirmacaoRomaneio({ toras, itens }).aproveitamentoPorEssencia).toEqual([
+      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60 },
+      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48 },
+    ]);
+
+    const terceiros = validarSerragemTerceiros({
+      toras: [
+        { referencia: "CLI-JAT", madeiraNome: "Jatobá", diametro: "50", comprimento: String(1 / (Math.PI * 0.25 ** 2)), volume: "" },
+        { referencia: "CLI-PIQ", madeiraNome: "Piqui", diametro: "50", comprimento: String(1 / (Math.PI * 0.25 ** 2)), volume: "" },
+      ],
+      itens,
+    });
+    expect(terceiros.aproveitamentoPorEssencia).toEqual([
+      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60 },
+      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48 },
+    ]);
+  });
+
+  it("bloqueia produção de uma essência acima do volume das toras desta essência", () => {
+    expect(() => validarConfirmacaoRomaneio({
+      toras: [
+        { plaqueta: { codigo: "JAT-02", estado: "disponivel", volumeDisponivel: "1" }, tora: { madeiraNome: "Jatobá", volume: "1" } },
+        { plaqueta: { codigo: "PIQ-02", estado: "disponivel", volumeDisponivel: "1" }, tora: { madeiraNome: "Piqui", volume: "1" } },
+      ],
+      itens: [
+        { madeiraNome: "Jatobá", espessura: 5, largura: 20, comprimento: 1, quantidade: 10 },
+        { madeiraNome: "Piqui", espessura: 5, largura: 20, comprimento: 3, quantidade: 40 },
+      ],
+    })).toThrow(/essência/i);
+  });
+
   it("agrupa o saldo disponível por madeira e dimensões de venda", () => {
     expect(agruparEstoquePecas([
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 10, volume: "0.112500" },
