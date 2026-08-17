@@ -382,3 +382,4 @@
 - [x] Cobrir cálculos de volume, cobrança por m³ e preenchimento sequencial de essência com testes e validação visual
 - [x] Impedir que linhas vazias de toras ou peças adicionadas no formulário de Serragem de Terceiros bloqueiem o registro do serviço
 - [x] Padronizar indicação visual antecipada para campos e linhas obrigatórias incompletas em todos os formulários operacionais
+- [x] Reformular a Serragem de Terceiros para usar o mesmo fluxo e a mesma grade operacional da Produção Diária, preservando cliente proprietário, estoque de terceiros e cobrança por m³

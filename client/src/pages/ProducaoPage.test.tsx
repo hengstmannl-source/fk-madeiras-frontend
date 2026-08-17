@@ -60,17 +60,18 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
   });
 
-  it("oferece o serviço de serragem de terceiros sem exigir entrada das toras no estoque próprio", async () => {
+  it("oferece a serragem de terceiros no mesmo fluxo em duas etapas da produção diária", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 
     expect(screen.getByText(/Toras recebidas de clientes não entram no estoque próprio/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
 
-    expect(screen.getByRole("dialog")).toHaveTextContent(/Registre toras pertencentes ao cliente/i);
-    expect(screen.getByText("Toras serradas do cliente")).toBeInTheDocument();
-    expect(screen.getByText("Produção serrada")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Registrar serviço" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog")).toHaveTextContent(/O mesmo processo da produção diária/i);
+    expect(screen.getByRole("tab", { name: "1. Toras serradas" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "2. Peças produzidas" })).toBeDisabled();
+    expect(screen.getByText("Toras do cliente")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
   });
 
   it("calcula o volume das toras de terceiros, mostra a cobrança por m³ e repete a última essência", async () => {
@@ -78,38 +79,39 @@ describe("ProducaoPage", () => {
     render(<ProducaoPage />);
 
     await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
-    await user.type(screen.getByLabelText("Referência"), "CLI-02");
-    await user.type(screen.getAllByLabelText("Essência")[0], "Cedrinho");
-    await user.type(screen.getByLabelText("Diâmetro (cm)"), "50");
-    await user.type(screen.getAllByLabelText("Comprimento (m)")[0], "4");
-    await user.type(screen.getByLabelText("Tarifa por m³ (R$/m³) *"), "50");
+    await user.type(screen.getByLabelText("Referência da tora 1"), "CLI-02");
+    await user.type(screen.getByLabelText("Essência da tora 1"), "Cedrinho");
+    await user.type(screen.getByLabelText("Diâmetro da tora 1"), "50");
+    await user.type(screen.getByLabelText("Comprimento da tora 1"), "4");
+    await user.type(screen.getByLabelText("Tarifa por m³ (R$) *"), "50");
 
-    expect(screen.getByDisplayValue("0.785398")).toBeInTheDocument();
-    expect(screen.getByText(/R\$ 50,00 × 0,785 m³ =/)).toHaveTextContent("R$ 39,27");
+    expect(screen.getByDisplayValue("0,785")).toBeInTheDocument();
+    expect(screen.getByText(/Cobrança calculada:/)).toHaveTextContent("R$ 39,27");
 
     await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
     expect(screen.getAllByDisplayValue("Cedrinho")).toHaveLength(2);
   });
 
-  it("descarta linhas vazias adicionadas antes de registrar a serragem de terceiros", async () => {
+  it("usa a mesma grade de comprimentos da produção diária e descarta a linha inicial vazia", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 
     await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
     await user.click(screen.getByRole("combobox", { name: "Cliente proprietário" }));
     await user.click(screen.getAllByRole("option")[1]);
-    await user.type(screen.getByLabelText("Referência"), "CLI-03");
-    await user.type(screen.getAllByLabelText("Essência")[0], "Cedrinho");
-    await user.type(screen.getByLabelText("Diâmetro (cm)"), "50");
-    await user.type(screen.getAllByLabelText("Comprimento (m)")[0], "4");
-    await user.type(screen.getByLabelText("Tarifa por m³ (R$/m³) *"), "50");
-    await user.type(screen.getAllByLabelText("Essência")[1], "Cedrinho");
-    await user.type(screen.getByLabelText("Espessura (cm)"), "2.5");
-    await user.type(screen.getByLabelText("Largura (cm)"), "15");
-    await user.type(screen.getAllByLabelText("Comprimento (m)")[1], "3");
-    await user.type(screen.getByLabelText("Quantidade"), "10");
-    await user.click(screen.getByRole("button", { name: "Adicionar tora" }));
-    await user.click(screen.getByRole("button", { name: "Adicionar peça" }));
+    await user.type(screen.getByLabelText("Referência da tora 1"), "CLI-03");
+    await user.type(screen.getByLabelText("Essência da tora 1"), "Cedrinho");
+    await user.type(screen.getByLabelText("Diâmetro da tora 1"), "50");
+    await user.type(screen.getByLabelText("Comprimento da tora 1"), "4");
+    await user.type(screen.getByLabelText("Tarifa por m³ (R$) *"), "50");
+    await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
+    expect(screen.getByText("Romaneio de madeira serrada")).toBeInTheDocument();
+    expect(screen.getByLabelText("Essência da medida de terceiros")).toHaveValue("Cedrinho");
+    await user.type(screen.getByLabelText("Espessura da medida de terceiros"), "2.5");
+    await user.type(screen.getByLabelText("Largura da medida de terceiros"), "15");
+    await user.type(screen.getByLabelText("Comprimento da peça de terceiros 1"), "3");
+    await user.type(screen.getByLabelText("Quantidade da peça de terceiros 1"), "10");
+    await user.click(screen.getByRole("button", { name: "Adicionar comprimentos ao romaneio" }));
     await user.click(screen.getByRole("button", { name: "Registrar serviço" }));
 
     expect(criarSerragemMock).toHaveBeenCalledOnce();
