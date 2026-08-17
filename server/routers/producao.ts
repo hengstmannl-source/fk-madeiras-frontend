@@ -202,6 +202,10 @@ export const producaoRouter = router({
   serragemTerceiros: router({
     list: protectedProcedure.query(({ ctx }) => db.listSerragensTerceiros(ctx.empresaAtiva!.empresa.id)),
     detalhe: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ ctx, input }) => db.getDetalheSerragemTerceiros(input.id, ctx.empresaAtiva!.empresa.id)),
+    modeloTorasCsv: protectedProcedure.query(() => db.getModeloImportacaoTorasSerragemTerceirosCsv()),
+    importarTorasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ input }) => db.prepararTorasSerragemTerceirosCsv(input.conteudo)),
+    modeloPecasCsv: protectedProcedure.query(() => db.getModeloImportacaoPecasProducaoCsv()),
+    importarPecasCsv: protectedProcedure.input(z.object({ conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB") })).mutation(({ input }) => db.prepararPecasProducaoCsv(input.conteudo)),
     criar: protectedProcedure.input(SerragemTerceirosSchema).mutation(({ ctx, input }) => db.criarSerragemTerceiros({
       ...input,
       dataProducao: dataLocal(input.dataProducao),

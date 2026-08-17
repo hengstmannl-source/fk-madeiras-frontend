@@ -1,6 +1,7 @@
 import { normalizarCodigoPlaqueta } from "./producao.logic";
 
 export const CABECALHOS_CSV_TORAS_PRODUCAO = ["plaqueta", "essencia", "diametro_cm", "comprimento_m", "volume_m3"] as const;
+export const CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS = ["referencia", "essencia", "diametro_cm", "comprimento_m"] as const;
 export const CABECALHOS_CSV_PECAS_PRODUCAO = ["essencia", "espessura_cm", "largura_cm", "comprimento_m", "quantidade"] as const;
 export const COLUNAS_MODELO_MATRIZ_PECAS = ["2,3x5", "2,3x10", "2,3x15", "2,3x20", "2,3x25", "2,3x30", "5x11", "5x5"] as const;
 
@@ -73,6 +74,10 @@ export function criarModeloCsvTorasProducao(): string {
   return `\uFEFF${CABECALHOS_CSV_TORAS_PRODUCAO.join(";")}\nTOR-0001;;;;`;
 }
 
+export function criarModeloCsvTorasSerragemTerceiros(): string {
+  return `\uFEFF${CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS.join(";")}\n-;Cedrinho;32;4,0\nTOR-002;Cedrinho;36;4,5`;
+}
+
 export function criarModeloCsvPecasProducao(): string {
   return `\uFEFFessencia;comprimento_m;${COLUNAS_MODELO_MATRIZ_PECAS.join(";")}\nCedrinho;2,0;35;36;17;3;7;2;0;0\nCedrinho;2,5;18;29;5;8;5;0;2;0\nCedrinho;3,0;17;29;13;14;5;23;3;0`;
 }
@@ -108,6 +113,39 @@ export function validarCsvTorasProducao(conteudo: string, maximoLinhas = 200): {
     } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: dados inválidos`); }
   });
   return erros.length ? { linhas: [], erros } : { linhas, erros: [] };
+}
+
+export function validarCsvTorasSerragemTerceiros(conteudo: string, maximoLinhas = 500): { toras: Array<{ referencia: string; madeiraNome: string; diametro: string; comprimento: string }>; erros: string[] } {
+  if (conteudo.length > 1_000_000) return { toras: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
+  let tabela: string[][];
+  try { tabela = lerLinhasCsv(conteudo); } catch (erro) { return { toras: [], erros: [erro instanceof Error ? erro.message : "Não foi possível ler o CSV"] }; }
+  const cabecalho = (tabela.shift() ?? []).map((campo) => campo.replace(/^\uFEFF/, "").trim().toLowerCase());
+  const indices = CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS.map((campo) => cabecalho.indexOf(campo));
+  if (indices.some((indice) => indice < 0)) return { toras: [], erros: [`Use o modelo CSV com os cabeçalhos: ${CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS.join(", ")}`] };
+  const dados = tabela.filter((linha) => linha.some((campo) => campo.trim()));
+  if (!dados.length) return { toras: [], erros: ["O arquivo CSV não possui toras para importar"] };
+  if (dados.length > maximoLinhas) return { toras: [], erros: [`O limite por importação é de ${maximoLinhas} toras`] };
+  const referencias = new Set<string>();
+  const toras: Array<{ referencia: string; madeiraNome: string; diametro: string; comprimento: string }> = [];
+  const erros: string[] = [];
+  dados.forEach((colunas, indice) => {
+    const numeroLinha = indice + 2;
+    const valor = (campo: typeof CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS[number]) => (colunas[indices[CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS.indexOf(campo)]] ?? "").trim();
+    const referencia = valor("referencia");
+    const madeiraNome = valor("essencia");
+    if (!referencia) { erros.push(`Linha ${numeroLinha}: informe a referência ou use - quando não houver identificação`); return; }
+    const referenciaNormalizada = referencia.toLocaleUpperCase("pt-BR");
+    if (referencia !== "-" && referencias.has(referenciaNormalizada)) { erros.push(`Linha ${numeroLinha}: a referência ${referencia} está repetida na planilha`); return; }
+    if (referencia !== "-") referencias.add(referenciaNormalizada);
+    if (madeiraNome.length < 2) { erros.push(`Linha ${numeroLinha}: informe a essência`); return; }
+    try {
+      const diametro = decimalOpcional(valor("diametro_cm"), "o diâmetro", numeroLinha);
+      const comprimento = decimalOpcional(valor("comprimento_m"), "o comprimento", numeroLinha);
+      if (!diametro || !comprimento) throw new Error(`Linha ${numeroLinha}: informe o diâmetro e o comprimento`);
+      toras.push({ referencia, madeiraNome, diametro, comprimento });
+    } catch (erro) { erros.push(erro instanceof Error ? erro.message : `Linha ${numeroLinha}: dados inválidos`); }
+  });
+  return erros.length ? { toras: [], erros } : { toras, erros: [] };
 }
 
 function validarFormatoLongoPecas(tabela: string[][], maximoLinhas: number): { itens: LinhaImportacaoPecaProducao[]; erros: string[] } {

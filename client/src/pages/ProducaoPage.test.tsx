@@ -35,7 +35,7 @@ vi.mock("@/lib/trpc", () => {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, totalDisponiveis: 300, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
-        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte },
+        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
       },
       cliente: { list: { useQuery: () => ({ data: [{ id: 1, nome: "Marcenaria Silva", telefone: "(67) 99999-0000" }], isLoading: false }) }, create: mutationInerte },
     },
@@ -172,9 +172,21 @@ describe("ProducaoPage", () => {
     await user.clear(screen.getByLabelText("Tarifa por m³ (R$) *"));
     await user.type(screen.getByLabelText("Tarifa por m³ (R$) *"), "650");
     await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
-    await user.click(screen.getByRole("button", { name: "Registrar serviço" }));
+    await user.click(screen.getByRole("button", { name: "Salvar alterações" }));
 
     expect(atualizarSerragemMock).toHaveBeenCalledWith(expect.objectContaining({ id: 31, valorMetroCubico: "650" }), expect.any(Object));
+  });
+
+  it("oferece modelos e importação CSV de toras no serviço de serragem", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
+
+    expect(screen.getByText("Importar toras por planilha")).toBeInTheDocument();
+    expect(screen.getByText(/referência “-” pode repetir/i)).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Baixar modelo" })).toHaveLength(1);
+    expect(screen.getByLabelText("Importar CSV")).toHaveAttribute("accept", ".csv,text/csv");
   });
 
   it("adiciona a tora por digitação da plaqueta, permite conferir o resultado consolidado e disponibiliza o PDF", async () => {

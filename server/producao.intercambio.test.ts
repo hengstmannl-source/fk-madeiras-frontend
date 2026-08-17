@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasProducao } from "./producao.intercambio";
+import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, criarModeloCsvTorasSerragemTerceiros, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasProducao, validarCsvTorasSerragemTerceiros } from "./producao.intercambio";
 
 describe("intercâmbio de plaquetas para produção", () => {
   it("fornece um modelo compatível e preserva os campos opcionais de correção", () => {
@@ -55,5 +55,22 @@ describe("intercâmbio de plaquetas para produção", () => {
     const resultado = validarCsvPecasProducao("essencia;espessura_cm;largura_cm;comprimento_m;quantidade\nCedrinho;3;5;2;11,5\nPinho;;5;2;2");
     expect(resultado.itens).toEqual([]);
     expect(resultado.erros.join(" ")).toMatch(/quantidade.*inteiro.*medidas da peça/i);
+  });
+
+  it("fornece modelo e prepara toras de terceiros, permitindo a referência externa - repetida", () => {
+    expect(criarModeloCsvTorasSerragemTerceiros()).toContain("referencia;essencia;diametro_cm;comprimento_m");
+    expect(validarCsvTorasSerragemTerceiros("referencia;essencia;diametro_cm;comprimento_m\n-;Cedrinho;32;4,0\n-;Piqui;36;4,5")).toEqual({
+      erros: [],
+      toras: [
+        { referencia: "-", madeiraNome: "Cedrinho", diametro: "32", comprimento: "4" },
+        { referencia: "-", madeiraNome: "Piqui", diametro: "36", comprimento: "4.5" },
+      ],
+    });
+  });
+
+  it("recusa referência identificada repetida ou medida ausente no CSV de terceiros", () => {
+    const resultado = validarCsvTorasSerragemTerceiros("referencia;essencia;diametro_cm;comprimento_m\nCLI-01;Cedrinho;32;4\nCLI-01;Cedrinho;;4");
+    expect(resultado.toras).toEqual([]);
+    expect(resultado.erros.join(" ")).toMatch(/repetida/i);
   });
 });

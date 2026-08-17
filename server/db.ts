@@ -19,7 +19,7 @@ import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fo
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarRetiradaSerragemTerceiros, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
-import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, prepararImportacaoTorasProducao, validarCsvPecasProducao } from "./producao.intercambio";
+import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, criarModeloCsvTorasSerragemTerceiros, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasSerragemTerceiros } from "./producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
 import { sugerirConciliacoes } from "./conciliacao.logic";
@@ -2250,6 +2250,14 @@ export function getModeloImportacaoPecasProducaoCsv() {
 
 export function prepararPecasProducaoCsv(conteudo: string) {
   return validarCsvPecasProducao(conteudo);
+}
+
+export function getModeloImportacaoTorasSerragemTerceirosCsv() {
+  return criarModeloCsvTorasSerragemTerceiros();
+}
+
+export function prepararTorasSerragemTerceirosCsv(conteudo: string) {
+  return validarCsvTorasSerragemTerceiros(conteudo);
 }
 
 export async function prepararTorasProducaoCsv(conteudo: string, empresaId = 1) {
