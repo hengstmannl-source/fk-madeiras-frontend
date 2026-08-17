@@ -143,4 +143,34 @@
   .venda-comprimentos input {
     min-width: 0;
   }
+
+  /* Produção: não permitir que os cinco campos de uma tora ou os cinco
+     indicadores sejam comprimidos no espaço de um diálogo estreito. */
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-4,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-5,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-6 {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5 > :last-child,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-5 > :last-child,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-6 > :last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 419px) {
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-4,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-5,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-6 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.lg\:grid-cols-5 > :last-child,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-5 > :last-child,
+  [role="dialog"] .grid.gap-3.sm\:grid-cols-2.xl\:grid-cols-6 > :last-child {
+    grid-column: auto;
+  }
 }

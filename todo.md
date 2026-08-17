@@ -400,3 +400,4 @@
 - [x] Adicionar atalho no indicador de toras da Produção para abrir o Estoque já filtrado por toras disponíveis
 - [x] Permitir editar com segurança a Serragem de Terceiros, incluindo preço, toras e peças, preservando estoque, cobrança e rastreabilidade
 - [x] Adicionar importação por planilha na Serragem de Terceiros, com modelo baixável, validação integral e prévia antes de gravar
+- [x] Corrigir a responsividade dos campos de toras e dos indicadores de produção serrada e aproveitamento em telas estreitas
