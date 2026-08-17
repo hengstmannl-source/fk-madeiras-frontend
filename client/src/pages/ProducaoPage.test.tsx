@@ -30,7 +30,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 1, totalDisponiveis: 1, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
+        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, totalDisponiveis: 300, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte },
@@ -58,6 +58,7 @@ describe("ProducaoPage", () => {
     expect(screen.getAllByRole("button", { name: /Nova produção/i })).toHaveLength(1);
     expect(screen.queryByRole("tab", { name: "Estoque de toras" })).not.toBeInTheDocument();
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
+    expect(screen.getByText("Toras disponíveis").closest(".rounded-xl")).toHaveTextContent("300");
   });
 
   it("oferece a serragem de terceiros no mesmo fluxo em duas etapas da produção diária", async () => {

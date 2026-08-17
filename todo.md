@@ -394,3 +394,4 @@
 - [x] Adicionar filtros por essência e período aos relatórios de produção para análise dos romaneios registrados
 - [x] Cobrir indicadores, PDF e filtros analíticos de produção com testes e validação visual
 - [x] Permitir a referência externa “-” repetida em toras da Serragem de Terceiros, mantendo unicidade de plaquetas no estoque próprio
+- [x] Corrigir a divergência entre a contagem de toras disponíveis em Estoque e em Produção Diária, garantindo o mesmo saldo elegível nos dois módulos
