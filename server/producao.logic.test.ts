@@ -109,8 +109,8 @@ describe("regras de produção", () => {
       { madeiraNome: "Piqui", espessura: 4, largura: 20, comprimento: 3, quantidade: 20 },
     ];
     expect(validarConfirmacaoRomaneio({ toras, itens }).aproveitamentoPorEssencia).toEqual([
-      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60 },
-      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48 },
+      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60, perdaVolume: 0.4, perdaPercentual: 40 },
+      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48, perdaVolume: 0.52, perdaPercentual: 52 },
     ]);
 
     const terceiros = validarSerragemTerceiros({
@@ -121,8 +121,8 @@ describe("regras de produção", () => {
       itens,
     });
     expect(terceiros.aproveitamentoPorEssencia).toEqual([
-      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60 },
-      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48 },
+      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60, perdaVolume: 0.4, perdaPercentual: 40 },
+      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48, perdaVolume: 0.52, perdaPercentual: 52 },
     ]);
   });
 

@@ -389,3 +389,7 @@
 - [x] Calcular volume de toras, volume de peças e percentual de aproveitamento separadamente por essência em Produção Diária e Serragem de Terceiros
 - [x] Exibir no formulário e nos romaneios um resumo de aproveitamento por essência, preservando o consolidado geral
 - [x] Cobrir cenários de múltiplas essências com rendimentos distintos, testes e validação visual
+- [x] Exibir a perda de volume por essência, em m³ e percentual, no resumo de Produção Diária e Serragem de Terceiros
+- [x] Incluir o detalhamento de volumes, aproveitamento e perdas por essência no PDF dos romaneios de produção
+- [x] Adicionar filtros por essência e período aos relatórios de produção para análise dos romaneios registrados
+- [x] Cobrir indicadores, PDF e filtros analíticos de produção com testes e validação visual

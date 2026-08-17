@@ -3,6 +3,7 @@ import { getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioCargaComPlaqu
 import { storageGetSignedUrl } from "./storage";
 import { sdk } from "./_core/sdk";
 import { etiquetaPlaqueta } from "../shared/plaquetas";
+import { calcularAproveitamentoPorEssencia } from "../shared/aproveitamentoPorEssencia";
 
 // Format number as BRL currency (pt-BR: 1.234,56)
 function formatBRL(value: string): string {
@@ -293,6 +294,10 @@ export async function registerPdfRoutes(app: any) {
       if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
       const data = await getRomaneioProducaoComItens(id);
       if (!data) return res.status(404).json({ error: "Romaneio não encontrado" });
+      const torasParaResumo = data.toras.length
+        ? data.toras
+        : [{ madeiraNome: data.romaneio.madeiraTora ?? "Não informada", volume: data.romaneio.volumeTora ?? "0" }];
+      const resumoPorEssencia = calcularAproveitamentoPorEssencia(torasParaResumo, data.itens);
 
       const pdfDoc = await PDFDocument.create();
       let page = pdfDoc.addPage([595, 842]);
@@ -363,6 +368,27 @@ export async function registerPdfRoutes(app: any) {
       page.drawText(`Total de peças: ${totalPecas}`, { x: 48, y, size: 10, font: bold });
       page.drawText(`Metros lineares: ${formatMeasurement(String(totalMetros))} m`, { x: 210, y, size: 10, font: bold });
       page.drawText(`Madeira serrada: ${formatMeasurement(String(totalVolume))} m³`, { x: 385, y, size: 10, font: bold });
+      if (resumoPorEssencia.length) {
+        if (y < 170) { page = pdfDoc.addPage([595, 842]); y = height - 58; }
+        y -= 32;
+        page.drawText("APROVEITAMENTO POR ESSÊNCIA", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
+        y -= 16;
+        const colunasResumo = [150, 70, 78, 82, 80];
+        const titulosResumo = ["Essência", "Toras", "Produção", "Aproveit.", "Perda"];
+        let xResumo = 48;
+        titulosResumo.forEach((titulo, indice) => { page.drawText(titulo, { x: xResumo, y, size: 8, font: bold, color: rgb(0.42, 0.42, 0.42) }); xResumo += colunasResumo[indice]; });
+        y -= 14;
+        for (const resumo of resumoPorEssencia) {
+          if (y < 78) { page = pdfDoc.addPage([595, 842]); y = height - 58; }
+          xResumo = 48;
+          page.drawText(resumo.essencia, { x: xResumo, y, size: 8, font, maxWidth: colunasResumo[0] - 6 }); xResumo += colunasResumo[0];
+          page.drawText(`${formatMeasurement(String(resumo.volumeToras))} m³`, { x: xResumo, y, size: 8, font }); xResumo += colunasResumo[1];
+          page.drawText(`${formatMeasurement(String(resumo.volumeProduzido))} m³`, { x: xResumo, y, size: 8, font }); xResumo += colunasResumo[2];
+          page.drawText(`${formatMeasurement(String(resumo.aproveitamento))}%`, { x: xResumo, y, size: 8, font: bold, color: rgb(0.12, 0.42, 0.25) }); xResumo += colunasResumo[3];
+          page.drawText(`${formatMeasurement(String(resumo.perdaVolume))} m³ (${formatMeasurement(String(resumo.perdaPercentual))}%)`, { x: xResumo, y, size: 8, font, color: rgb(0.66, 0.38, 0.04), maxWidth: colunasResumo[4] - 4 });
+          y -= 15;
+        }
+      }
       if (data.romaneio.observacoes) { y -= 30; page.drawText("Observações", { x: 48, y, size: 9, font: bold }); y -= 14; page.drawText(data.romaneio.observacoes, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 }); }
       page.drawText("FK Madeiras — Romaneio gerado eletronicamente", { x: 48, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
       page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 155, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });

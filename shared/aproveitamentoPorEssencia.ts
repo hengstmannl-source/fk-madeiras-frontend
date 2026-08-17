@@ -3,6 +3,8 @@ export type VolumePorEssencia = {
   volumeToras: number;
   volumeProduzido: number;
   aproveitamento: number;
+  perdaVolume: number;
+  perdaPercentual: number;
 };
 
 type VolumeEntrada = { madeiraNome: string; volume: string | number | null | undefined };
@@ -24,7 +26,7 @@ export function calcularAproveitamentoPorEssencia(toras: VolumeEntrada[], itens:
     const volume = numero(entrada.volume);
     if (!essencia || volume <= 0) return;
     const chave = chaveEssencia(essencia);
-    const atual = totais.get(chave) ?? { essencia, volumeToras: 0, volumeProduzido: 0, aproveitamento: 0 };
+    const atual = totais.get(chave) ?? { essencia, volumeToras: 0, volumeProduzido: 0, aproveitamento: 0, perdaVolume: 0, perdaPercentual: 0 };
     atual[campo] += volume;
     totais.set(chave, atual);
   };
@@ -38,6 +40,8 @@ export function calcularAproveitamentoPorEssencia(toras: VolumeEntrada[], itens:
       volumeToras: Number(item.volumeToras.toFixed(6)),
       volumeProduzido: Number(item.volumeProduzido.toFixed(6)),
       aproveitamento: item.volumeToras > 0 ? Number(((item.volumeProduzido / item.volumeToras) * 100).toFixed(2)) : 0,
+      perdaVolume: Number(Math.max(0, item.volumeToras - item.volumeProduzido).toFixed(6)),
+      perdaPercentual: item.volumeToras > 0 ? Number((Math.max(0, 1 - (item.volumeProduzido / item.volumeToras)) * 100).toFixed(2)) : 0,
     }))
     .sort((a, b) => a.essencia.localeCompare(b.essencia, "pt-BR"));
 }
