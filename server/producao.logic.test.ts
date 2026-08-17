@@ -70,6 +70,30 @@ describe("regras de produção", () => {
     })).toThrow(/referência/i);
   });
 
+  it("aceita a referência externa não informada repetida na serragem de terceiros", () => {
+    expect(validarSerragemTerceiros({
+      toras: [
+        { referencia: "-", madeiraNome: "Jatobá", diametro: "50", comprimento: "2", volume: "" },
+        { referencia: " - ", madeiraNome: "Piqui", diametro: "50", comprimento: "2", volume: "" },
+      ],
+      itens: [
+        { madeiraNome: "Jatobá", espessura: 2.5, largura: 15, comprimento: 2, quantidade: 1 },
+        { madeiraNome: "Piqui", espessura: 2.5, largura: 15, comprimento: 2, quantidade: 1 },
+      ],
+    })).toMatchObject({ toras: [{ referencia: "-" }, { referencia: "-" }] });
+
+    expect(() => validarSerragemTerceiros({
+      toras: [
+        { referencia: "TER-01", madeiraNome: "Jatobá", diametro: "50", comprimento: "2", volume: "" },
+        { referencia: "ter-01", madeiraNome: "Piqui", diametro: "50", comprimento: "2", volume: "" },
+      ],
+      itens: [
+        { madeiraNome: "Jatobá", espessura: 2.5, largura: 15, comprimento: 2, quantidade: 1 },
+        { madeiraNome: "Piqui", espessura: 2.5, largura: 15, comprimento: 2, quantidade: 1 },
+      ],
+    })).toThrow(/mais de uma vez/i);
+  });
+
   it("recalcula as toras de terceiros pelas medidas e cobra pelo volume apurado", () => {
     const resultado = validarSerragemTerceiros({
       toras: [{ referencia: "CLI-02", madeiraNome: "Cedrinho", diametro: "50", comprimento: "4", volume: "999" }],

@@ -85,8 +85,10 @@ export function validarSerragemTerceiros(input: {
   const toras = input.toras.map((tora) => {
     const referencia = tora.referencia.trim();
     if (!referencia || !tora.madeiraNome.trim()) throw new Error("Informe referência e essência válidas para cada tora");
-    if (referencias.has(referencia.toLocaleUpperCase("pt-BR"))) throw new Error(`A tora ${referencia} foi informada mais de uma vez`);
-    referencias.add(referencia.toLocaleUpperCase("pt-BR"));
+    const referenciaNormalizada = referencia.toLocaleUpperCase("pt-BR");
+    const referenciaNaoInformada = referencia === "-";
+    if (!referenciaNaoInformada && referencias.has(referenciaNormalizada)) throw new Error(`A tora ${referencia} foi informada mais de uma vez`);
+    if (!referenciaNaoInformada) referencias.add(referenciaNormalizada);
     const volume = calcularVolumeToraCilindrica(tora.diametro ?? 0, tora.comprimento ?? 0);
     return {
       ...tora,

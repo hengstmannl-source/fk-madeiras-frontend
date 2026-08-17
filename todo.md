@@ -393,3 +393,4 @@
 - [x] Incluir o detalhamento de volumes, aproveitamento e perdas por essência no PDF dos romaneios de produção
 - [x] Adicionar filtros por essência e período aos relatórios de produção para análise dos romaneios registrados
 - [x] Cobrir indicadores, PDF e filtros analíticos de produção com testes e validação visual
+- [x] Permitir a referência externa “-” repetida em toras da Serragem de Terceiros, mantendo unicidade de plaquetas no estoque próprio
