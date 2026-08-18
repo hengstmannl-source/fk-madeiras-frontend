@@ -17,3 +17,7 @@ O leitor foi então reestruturado para carregar o documento uma única vez e red
 O renderizador em canvas continuou a concluir apenas parcialmente a primeira página em documentos reais. Ele foi removido em favor do leitor nativo do navegador, agora dentro de um diálogo quase integral, com o painel de miniaturas desativado e a opção adicional **Abrir em tela cheia**. Isso preserva a fidelidade do PDF e elimina a etapa instável de conversão para canvas.
 
 Na validação seguinte do romaneio real `ROM-120001`, o leitor nativo carregou corretamente no diálogo amplo: o documento ocupou a área central, sem painel de miniaturas, e a primeira página pôde ser lida em tamanho útil. A conversão para canvas deixou de fazer parte do fluxo. A navegação interna das páginas é fornecida pelo visualizador do próprio navegador, mantendo o PDF fiel ao arquivo baixado.
+
+Na validação posterior da lista de Produção, os rendimentos dos romaneios `ROM-120001` e `ROM-090001` foram exibidos como `64%` e `62%`, respectivamente, confirmando a apresentação sem casas decimais nos percentuais de tabela.
+
+Na pré-visualização do `ROM-120001`, o leitor nativo amplo carregou o documento e apresentou a primeira página com o cabeçalho e as toras serradas. O indicador de aproveitamento também apareceu arredondado como `64%`.

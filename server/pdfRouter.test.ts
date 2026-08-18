@@ -214,6 +214,7 @@ describe("rotas de PDF protegidas", () => {
     expect(textos).toContain("2 × 10 cm");
     expect(textos).toContain("166");
     expect(textos).toContain("75%");
+    expect(textos).not.toContain("74,49%");
     expect(textos).toContain("Peças romaneadas: 2 m³");
     expect(textos).toContain("Aproveitamento manual: 0,2 m³");
     expect(textos).toContain("Produção total: 2,2 m³");

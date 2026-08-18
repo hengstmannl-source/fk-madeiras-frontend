@@ -31,6 +31,12 @@ function formatMeasurement(value: string | number | null | undefined): string {
   return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 }).format(num);
 }
 
+function formatPercentage(value: string | number | null | undefined): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(num);
+}
+
 function formatDate(value: Date | string | null | undefined, utc = false): string {
   if (!value) return "Não informada";
   const date = new Date(value);
@@ -454,7 +460,7 @@ export async function registerPdfRoutes(app: any) {
       layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 50, width: width - (MARGEM_LATERAL * 2), height: 62, color: rgb(0.95, 0.93, 0.89) });
       layout.page.drawText(normalizarTexto(data.romaneio.numero) || "ROMANEIO", { x: 62, y: layout.y - 7, size: 16, font: boldFont, color: COR_MARROM });
       layout.page.drawText(`Produção em ${formatDate(data.romaneio.dataProducao, true)}`, { x: 62, y: layout.y - 27, size: 9, font, color: COR_TEXTO_SECUNDARIO });
-      const aproveitamentoTexto = `Aproveitamento: ${formatMeasurement(data.romaneio.aproveitamento)}%`;
+      const aproveitamentoTexto = `Aproveitamento: ${formatPercentage(data.romaneio.aproveitamento)}%`;
       layout.page.drawText(aproveitamentoTexto, { x: width - 62 - larguraTexto(boldFont, aproveitamentoTexto, 10), y: layout.y - 16, size: 10, font: boldFont, color: rgb(0.12, 0.42, 0.25) });
       const regraRendimento = incluirAproveitamentoNoRendimento ? "Rendimento inclui aproveitamento" : "Rendimento considera apenas peças";
       layout.page.drawText(regraRendimento, { x: width - 62 - larguraTexto(font, regraRendimento, 7), y: layout.y - 30, size: 7, font, color: COR_TEXTO_SECUNDARIO });
@@ -563,25 +569,25 @@ export async function registerPdfRoutes(app: any) {
           layout.mover(18);
         });
 
-        layout.garantirEspaco(38);
+        layout.garantirEspaco(44);
         let xResumo = MARGEM_LATERAL;
         const largurasResumo = [larguraComprimento, ...bitolas.map(() => larguraBitola)];
         ["Resumo", ...bitolas.map((grupo: any) => ({
           pecas: `${formatMeasurement(grupo.totalPecas)} peças`,
           volume: `${formatMeasurement(grupo.volume)} m³`,
-          percentual: `${formatMeasurement(totalVolume > 0 ? (grupo.volume / totalVolume) * 100 : 0)}% da produção`,
+          percentual: `${formatPercentage(totalVolume > 0 ? (grupo.volume / totalVolume) * 100 : 0)}% da produção`,
         }))].forEach((valor, indice) => {
-          layout.page.drawRectangle({ x: xResumo, y: layout.y - 23, width: largurasResumo[indice], height: 28, color: rgb(0.93, 0.96, 0.92) });
+          layout.page.drawRectangle({ x: xResumo, y: layout.y - 28, width: largurasResumo[indice], height: 34, color: rgb(0.93, 0.96, 0.92) });
           if (typeof valor === "string") {
-            desenharTextoAjustado(layout.page, boldFont, valor, xResumo + 3, layout.y - 1, largurasResumo[indice] - 6, 7, { color: COR_MARROM });
+            desenharTextoAjustado(layout.page, boldFont, valor, xResumo + 4, layout.y - 3, largurasResumo[indice] - 8, 7.5, { color: COR_MARROM });
           } else {
-            desenharTextoAjustado(layout.page, boldFont, valor.pecas, xResumo + 3, layout.y + 1, largurasResumo[indice] - 6, 6.5, { color: rgb(0.12, 0.42, 0.25) });
-            desenharTextoAjustado(layout.page, font, valor.volume, xResumo + 3, layout.y - 7, largurasResumo[indice] - 6, 6.5, { color: COR_TEXTO_SECUNDARIO });
-            desenharTextoAjustado(layout.page, font, valor.percentual, xResumo + 3, layout.y - 15, largurasResumo[indice] - 6, 6.5, { color: COR_TEXTO_SECUNDARIO });
+            desenharTextoAjustado(layout.page, boldFont, valor.pecas, xResumo + 4, layout.y - 2, largurasResumo[indice] - 8, 7, { color: rgb(0.12, 0.42, 0.25) });
+            desenharTextoAjustado(layout.page, font, valor.volume, xResumo + 4, layout.y - 12, largurasResumo[indice] - 8, 7, { color: COR_TEXTO_SECUNDARIO });
+            desenharTextoAjustado(layout.page, font, valor.percentual, xResumo + 4, layout.y - 22, largurasResumo[indice] - 8, 7, { color: COR_TEXTO_SECUNDARIO });
           }
           xResumo += largurasResumo[indice];
         });
-        layout.mover(32);
+        layout.mover(38);
       });
 
       layout.garantirEspaco(78);
@@ -622,8 +628,8 @@ export async function registerPdfRoutes(app: any) {
             resumo.essencia,
             `${formatMeasurement(resumo.volumeToras)} m³`,
             `${formatMeasurement(resumo.volumeProduzido)} m³`,
-            `${formatMeasurement(resumo.aproveitamento)}%`,
-            `${formatMeasurement(resumo.perdaVolume)} m³ (${formatMeasurement(resumo.perdaPercentual)}%)`,
+            `${formatPercentage(resumo.aproveitamento)}%`,
+            `${formatMeasurement(resumo.perdaVolume)} m³ (${formatPercentage(resumo.perdaPercentual)}%)`,
           ];
           let x = MARGEM_LATERAL;
           valores.forEach((valor, indice) => {

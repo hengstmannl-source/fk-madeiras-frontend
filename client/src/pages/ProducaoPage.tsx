@@ -30,7 +30,7 @@ type NovoClienteSerragemForm = { nome: string; contacto: string };
 
 const hoje = () => new Date().toISOString().slice(0, 10);
 const num = (valor: string | number | null | undefined) => Number(String(valor ?? "").replace(",", ".")) || 0;
-const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: casas }).format(Number(valor ?? 0));
+const formatarNumero = (valor: number | string, casas = 3) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: casas === 2 ? 0 : casas }).format(Number(valor ?? 0));
 const formatarMoeda = (valor: number | string) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(valor ?? 0));
 const formatarData = (valor: string | Date) => new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC" }).format(new Date(valor));
 let resumoTarifaSerragem: { volumeToras: number; tarifaPorM3: number; valorTotal: number } | null = null;

@@ -434,3 +434,7 @@
 - [x] Inverter a grade de Produção: bitolas em colunas superiores e comprimentos em linhas
 - [x] Iniciar a grade de Produção sempre em uma nova página após a listagem de toras
 - [x] Cobrir com testes a orientação invertida e a quebra obrigatória de página da grade
+- [x] Padronizar todas as porcentagens exibidas nas tabelas da interface como números inteiros
+- [x] Padronizar todas as porcentagens dos PDFs como números inteiros, sem alterar cálculos internos
+- [x] Ajustar o espaçamento e a largura do texto no resumo verde da grade de Produção
+- [x] Cobrir a regra de arredondamento percentual com testes de regressão
