@@ -204,6 +204,10 @@ export const itensOrcamento = mysqlTable("itensOrcamento", {
   largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
   comprimento: decimal("comprimento", { precision: 8, scale: 2 }).notNull(),
   quantidade: int("quantidade").notNull(),
+  /** Forma como o item foi negociado, sem alterar a medida física usada pelo estoque quando ela existir. */
+  tipoComercializacao: mysqlEnum("tipoComercializacao", ["metro_cubico", "unidade", "pacote"]).notNull().default("metro_cubico"),
+  /** Quantidade de peças físicas representadas por uma unidade comercial; zero indica item sem baixa no estoque serrado. */
+  unidadesPorComercializacao: int("unidadesPorComercializacao").notNull().default(1),
   precoM3: decimal("precoM3", { precision: 12, scale: 2 }).notNull(),
   precoLinear: decimal("precoLinear", { precision: 12, scale: 4 }).notNull(),
   valorPeca: decimal("valorPeca", { precision: 12, scale: 2 }).notNull(),

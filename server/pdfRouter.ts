@@ -278,8 +278,8 @@ export async function registerPdfRoutes(app: any) {
         layout.mover(10);
       }
 
-      const colunas = [111, 100, 34, 66, 66, 66, 68];
-      const labels = ["Madeira", "Dimensões", "Qtd.", "Preço/m³", "Preço/m.l.", "Valor/peça", "Total"];
+      const colunas = [111, 100, 34, 52, 69, 73, 72];
+      const labels = ["Madeira", "Medidas / tipo", "Qtd.", "Unidade", "Preço base", "Valor unit.", "Total"];
       const desenharTabela = (continuacao = false) => {
         layout.garantirEspaco(42);
         layout.page.drawText(continuacao ? "ITENS DA VENDA — CONTINUAÇÃO" : "ITENS DA VENDA", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
@@ -298,12 +298,13 @@ export async function registerPdfRoutes(app: any) {
           layout.novaPagina(true);
           desenharTabela(true);
         }
+        const tipoComercializacao = item.tipoComercializacao ?? "metro_cubico";
         const valores = [
           item.madeiraNome,
-          `${formatDimensionCm(item.espessura)} × ${formatDimensionCm(item.largura)} cm × ${formatMeasurement(item.comprimento)} m`,
+          tipoComercializacao === "metro_cubico" ? `${formatDimensionCm(item.espessura)} × ${formatDimensionCm(item.largura)} cm × ${formatMeasurement(item.comprimento)} m` : tipoComercializacao === "unidade" ? "Venda por unidade" : "Venda por pacote",
           String(item.quantidade),
+          tipoComercializacao === "metro_cubico" ? "Peça" : tipoComercializacao === "unidade" ? "Unidade" : "Pacote",
           `R$ ${formatBRL(item.precoM3)}`,
-          `R$ ${formatBRL(item.precoLinear)}`,
           `R$ ${formatBRL(item.valorPeca)}`,
           `R$ ${formatBRL(item.valorTotal)}`,
         ];
@@ -330,7 +331,7 @@ export async function registerPdfRoutes(app: any) {
         layout.page.drawText(texto, { x: MARGEM_LATERAL, y: layout.y, size: indice === 3 ? 13 : 9.5, font: fonte, ...(cor ? { color: cor } : {}) });
         layout.mover(indice === 3 ? 18 : 14);
       });
-      layout.page.drawText(`Total de peças: ${data.orcamento.totalPecas}`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
+      layout.page.drawText(`Total de itens: ${data.orcamento.totalPecas}`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
       layout.mover(12);
       layout.page.drawText(`Total em metros lineares: ${formatMeasurement(data.orcamento.totalMetroLinear)} m`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
       layout.mover(12);

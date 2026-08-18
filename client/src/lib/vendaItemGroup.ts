@@ -13,6 +13,14 @@ export type LinhaComprimentoVenda = {
   quantidade: string;
 };
 
+export type TipoComercializacaoVenda = "metro_cubico" | "unidade" | "pacote";
+
+export const rotulosTipoComercializacaoVenda: Record<TipoComercializacaoVenda, string> = {
+  metro_cubico: "Por metro cúbico (m³)",
+  unidade: "Por unidade",
+  pacote: "Por pacote",
+};
+
 export type ItemVendaCalculado = {
   madeiraId: number | null;
   bitolaId: number | null;
@@ -22,6 +30,8 @@ export type ItemVendaCalculado = {
   largura: string;
   comprimento: string;
   quantidade: number;
+  tipoComercializacao: TipoComercializacaoVenda;
+  unidadesPorComercializacao: number;
   precoM3: string;
   precoLinear: string;
   valorPeca: string;
@@ -86,11 +96,52 @@ export function criarItensVendaPorMedida(input: {
         largura: String(largura),
         comprimento: String(comprimento),
         quantidade,
+        tipoComercializacao: "metro_cubico",
+        unidadesPorComercializacao: 1,
         precoM3: String(precoM3),
         precoLinear: String(parseFloat(precoLinear.toFixed(4))),
         valorPeca: String(parseFloat(valorPeca.toFixed(2))),
         valorTotal: String(parseFloat(valorTotal.toFixed(2))),
       };
     }),
+  };
+}
+
+/**
+ * Itens avulsos não usam a métrica física do estoque serrado. O campo
+ * precoM3 é mantido por compatibilidade com vendas históricas, mas passa a
+ * guardar o preço da unidade comercial escolhida.
+ */
+export function criarItemVendaComercial(input: {
+  madeiraNome: string;
+  tipoComercializacao: Exclude<TipoComercializacaoVenda, "metro_cubico">;
+  quantidade: string;
+  precoComercial: string;
+}): { item?: ItemVendaCalculado; erro?: string } {
+  const madeiraNome = input.madeiraNome.trim();
+  if (madeiraNome.length < 2) return { erro: "Informe o produto ou a madeira" };
+  const quantidade = Number.parseInt(input.quantidade, 10);
+  if (!Number.isInteger(quantidade) || quantidade <= 0) return { erro: "Informe uma quantidade inteira positiva" };
+  const precoComercial = parseDecimalInput(input.precoComercial);
+  if (!Number.isFinite(precoComercial) || precoComercial < 0) return { erro: "Informe um preço comercial válido" };
+
+  const unidade = input.tipoComercializacao === "unidade" ? "unidade" : "pacote";
+  return {
+    item: {
+      madeiraId: null,
+      bitolaId: null,
+      madeiraNome,
+      bitolaDescricao: `Venda por ${unidade}`,
+      espessura: "0",
+      largura: "0",
+      comprimento: "0",
+      quantidade,
+      tipoComercializacao: input.tipoComercializacao,
+      unidadesPorComercializacao: 0,
+      precoM3: String(precoComercial),
+      precoLinear: "0",
+      valorPeca: String(parseFloat(precoComercial.toFixed(2))),
+      valorTotal: String(parseFloat((precoComercial * quantidade).toFixed(2))),
+    },
   };
 }

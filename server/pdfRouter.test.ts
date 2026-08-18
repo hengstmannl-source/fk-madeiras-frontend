@@ -158,6 +158,28 @@ describe("rotas de PDF protegidas", () => {
     validarAreaSeguraDoRodape();
   });
 
+  it("apresenta produtos por unidade e pacote sem exigir dimensões no PDF de Venda", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "listClientes").mockResolvedValue([] as any);
+    vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
+      orcamento: { id: 2, numero: "VEN-000002", clienteId: 5, createdAt: new Date(), estado: "aprovado", subtotal: "930", desconto: "0", frete: "0", total: "930", totalPecas: 5, totalMetroLinear: "0", totalVolume: "0", observacoes: null },
+      itens: [
+        { madeiraNome: "Portal", espessura: "0", largura: "0", comprimento: "0", quantidade: 3, tipoComercializacao: "unidade", precoM3: "180", precoLinear: "0", valorPeca: "180", valorTotal: "540" },
+        { madeiraNome: "Pacote de cedrinho", espessura: "0", largura: "0", comprimento: "0", quantidade: 2, tipoComercializacao: "pacote", precoM3: "195", precoLinear: "0", valorPeca: "195", valorTotal: "390" },
+      ],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/orcamento/:id"]!({ params: { id: "2" } }, res);
+
+    const textos = textosDoPdf();
+    expect(textos).toContain("Venda por unidade");
+    expect(textos).toContain("Venda por pacote");
+    expect(textos).toContain("Total de itens: 5");
+    validarAreaSeguraDoRodape();
+  });
+
   it("pagina toras e peças no romaneio de produção sem desenhar linhas no rodapé", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);

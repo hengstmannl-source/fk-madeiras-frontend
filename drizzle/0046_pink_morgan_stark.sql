@@ -1,0 +1,2 @@
+ALTER TABLE `itensOrcamento` ADD `tipoComercializacao` enum('metro_cubico','unidade','pacote') DEFAULT 'metro_cubico' NOT NULL;--> statement-breakpoint
+ALTER TABLE `itensOrcamento` ADD `unidadesPorComercializacao` int DEFAULT 1 NOT NULL;

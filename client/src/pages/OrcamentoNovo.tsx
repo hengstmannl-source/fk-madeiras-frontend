@@ -17,7 +17,7 @@ import {
   formatCurrency,
   formatMeasurement,
 } from "@/lib/utils";
-import { criarItensVendaPorMedida, criarLinhasComprimentoVazias, type LinhaComprimentoVenda } from "@/lib/vendaItemGroup";
+import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias, rotulosTipoComercializacaoVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
 import { disponibilidadeEstoqueVenda, prepararModeloMedida } from "@/lib/vendaMedidas";
 import {
   Dialog,
@@ -35,6 +35,8 @@ interface ItemOrcamento {
   largura: string;
   comprimento: string;
   quantidade: number;
+  tipoComercializacao: TipoComercializacaoVenda;
+  unidadesPorComercializacao: number;
   precoM3: string;
   precoLinear: string;
   valorPeca: string;
@@ -72,6 +74,8 @@ export default function OrcamentoNovo() {
   const [aproveitamentoForm, setAproveitamentoForm] = useState<AproveitamentoVenda>({ madeiraNome: "", volume: "", precoM3: "" });
   const [grupoItem, setGrupoItem] = useState({ madeiraId: null as number | null, madeiraNome: "", precoM3: "", espessuraCm: "", larguraCm: "" });
   const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(() => criarLinhasComprimentoVazias());
+  const [tipoComercializacao, setTipoComercializacao] = useState<TipoComercializacaoVenda>("metro_cubico");
+  const [itemComercial, setItemComercial] = useState({ madeiraNome: "", quantidade: "", precoComercial: "" });
   const madeiras = trpc.madeira.list.useQuery();
   const estoqueSerrado = trpc.producao.estoque.resumo.useQuery();
   const createMadeira = trpc.madeira.create.useMutation();
@@ -141,6 +145,15 @@ export default function OrcamentoNovo() {
     setGrupoItem((grupo) => ({ ...grupo, espessuraCm: "", larguraCm: "" }));
     setLinhasComprimento(criarLinhasComprimentoVazias());
     toast.success(`${resultado.itens.length} comprimento(s) adicionado(s) à venda`);
+  };
+
+  const adicionarItemComercial = () => {
+    if (tipoComercializacao === "metro_cubico") return;
+    const resultado = criarItemVendaComercial({ ...itemComercial, tipoComercializacao });
+    if (resultado.erro || !resultado.item) { toast.error(resultado.erro ?? "Não foi possível adicionar o item"); return; }
+    setItens((itensAtuais) => [...itensAtuais, resultado.item!]);
+    setItemComercial({ madeiraNome: "", quantidade: "", precoComercial: "" });
+    toast.success(`${tipoComercializacao === "unidade" ? "Unidade" : "Pacote"} adicionado à venda`);
   };
 
   const removeItem = (index: number) => setItens(itens.filter((_, i) => i !== index));
@@ -347,8 +360,8 @@ export default function OrcamentoNovo() {
           {/* Adicionar itens por medida */}
           <Card className="border border-border/50 shadow-sm">
             <CardContent className="p-5">
-              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-sm flex items-center gap-2"><Calculator className="h-4 w-4" />Romaneio de itens</h3><p className="mt-1 text-xs text-muted-foreground">Defina a medida uma vez e preencha todos os comprimentos e quantidades abaixo.</p></div><div className="flex flex-wrap items-center gap-2"><select aria-label="Aplicar modelo de medida" defaultValue="" onChange={(e) => { aplicarModeloMedida(e.target.value); e.currentTarget.value = ""; }} className="h-9 max-w-48 rounded-md border border-input bg-background px-2 text-xs"><option value="">Aplicar modelo...</option>{modelosMedida.data?.map((modelo) => <option key={modelo.id} value={modelo.id}>{modelo.nome}</option>)}</select><Button type="button" size="sm" variant="outline" onClick={() => setModeloOpen(true)}><Save className="mr-1.5 h-3.5 w-3.5" />Guardar medida</Button><span className="text-xs font-medium text-primary">Medida em centímetros</span></div></div>
-              <div className="space-y-4">
+              <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="font-semibold text-sm flex items-center gap-2"><Calculator className="h-4 w-4" />Itens da venda</h3><p className="mt-1 text-xs text-muted-foreground">Escolha se o item será negociado pelo volume, por unidade ou por pacote.</p></div><div className="flex flex-wrap items-center gap-2"><select aria-label="Tipo de comercialização" value={tipoComercializacao} onChange={(e) => setTipoComercializacao(e.target.value as TipoComercializacaoVenda)} className="h-9 rounded-md border border-input bg-background px-2 text-xs font-medium"><option value="metro_cubico">{rotulosTipoComercializacaoVenda.metro_cubico}</option><option value="unidade">{rotulosTipoComercializacaoVenda.unidade}</option><option value="pacote">{rotulosTipoComercializacaoVenda.pacote}</option></select>{tipoComercializacao === "metro_cubico" && <><select aria-label="Aplicar modelo de medida" defaultValue="" onChange={(e) => { aplicarModeloMedida(e.target.value); e.currentTarget.value = ""; }} className="h-9 max-w-48 rounded-md border border-input bg-background px-2 text-xs"><option value="">Aplicar modelo...</option>{modelosMedida.data?.map((modelo) => <option key={modelo.id} value={modelo.id}>{modelo.nome}</option>)}</select><Button type="button" size="sm" variant="outline" onClick={() => setModeloOpen(true)}><Save className="mr-1.5 h-3.5 w-3.5" />Guardar medida</Button></>}<span className="text-xs font-medium text-primary">{tipoComercializacao === "metro_cubico" ? "Medida em centímetros" : "Preço comercial direto"}</span></div></div>
+              {tipoComercializacao === "metro_cubico" ? <div className="space-y-4">
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-2 space-y-2">
                     <Label>Madeira *</Label>
@@ -377,7 +390,15 @@ export default function OrcamentoNovo() {
                 <Button onClick={adicionarGrupoItens} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="h-4 w-4 mr-2" />Adicionar comprimentos à venda
                 </Button>
-              </div>
+              </div> : <div className="space-y-4 rounded-lg border border-primary/15 bg-primary/[0.03] p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <div className="space-y-2"><Label>{tipoComercializacao === "unidade" ? "Produto / item *" : "Madeira ou produto do pacote *"}</Label><Input value={itemComercial.madeiraNome} onChange={(e) => setItemComercial((item) => ({ ...item, madeiraNome: e.target.value }))} placeholder={tipoComercializacao === "unidade" ? "Ex.: Portal" : "Ex.: Pacote de cedrinho"} className="bg-white" /></div>
+                  <div className="space-y-2"><Label>Quantidade de {tipoComercializacao === "unidade" ? "unidades" : "pacotes"} *</Label><Input value={itemComercial.quantidade} onChange={(e) => setItemComercial((item) => ({ ...item, quantidade: e.target.value }))} type="number" min="1" step="1" placeholder="1" className="bg-white" /></div>
+                  <div className="space-y-2"><Label>Preço por {tipoComercializacao === "unidade" ? "unidade" : "pacote"} (R$) *</Label><Input value={itemComercial.precoComercial} onChange={(e) => setItemComercial((item) => ({ ...item, precoComercial: e.target.value }))} inputMode="decimal" placeholder="0,00" className="bg-white" /></div>
+                </div>
+                <p className="text-xs text-muted-foreground">Itens por unidade e pacote usam preço direto e não exigem metragem cúbica. Eles não movimentam automaticamente o estoque de madeira serrada.</p>
+                <Button type="button" onClick={adicionarItemComercial} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="mr-2 h-4 w-4" />Adicionar {tipoComercializacao === "unidade" ? "unidade" : "pacote"} à venda</Button>
+              </div>}
             </CardContent>
           </Card>
 
@@ -404,9 +425,9 @@ export default function OrcamentoNovo() {
                   {itens.map((item, idx) => (
                     <div key={idx} className="flex items-center justify-between p-3 rounded-lg border border-border/50 bg-muted/30">
                       <div className="flex-1">
-                        <p className="text-sm font-medium">{item.madeiraNome} — {item.bitolaDescricao} × {item.comprimento}m</p>
+                        <p className="text-sm font-medium">{item.madeiraNome}{item.tipoComercializacao === "metro_cubico" ? ` — ${item.bitolaDescricao} × ${item.comprimento}m` : ` — ${rotulosTipoComercializacaoVenda[item.tipoComercializacao]}`}</p>
                         <p className="text-xs text-muted-foreground">
-                          {item.quantidade} pcs × {formatCurrency(item.valorPeca)} = {formatCurrency(item.valorTotal)}
+                          {item.quantidade} {item.tipoComercializacao === "unidade" ? "un." : item.tipoComercializacao === "pacote" ? "pacote(s)" : "pcs"} × {formatCurrency(item.valorPeca)} = {formatCurrency(item.valorTotal)}
                         </p>
                       </div>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(idx)}>
@@ -443,7 +464,7 @@ export default function OrcamentoNovo() {
               </div>
               <Separator />
               <div className="grid grid-cols-3 gap-2 text-center">
-                <div><p className="text-xs text-muted-foreground">Peças</p><p className="font-semibold text-sm">{totals.totalPecas}</p></div>
+                <div><p className="text-xs text-muted-foreground">Itens</p><p className="font-semibold text-sm">{totals.totalPecas}</p></div>
                 <div><p className="text-xs text-muted-foreground">M. Linear</p><p className="font-semibold text-sm">{formatMeasurement(totals.totalMetroLinear)} m</p></div>
                 <div><p className="text-xs text-muted-foreground">Volume</p><p className="font-semibold text-sm">{formatMeasurement(totals.totalVolume)} m³</p></div>
               </div>

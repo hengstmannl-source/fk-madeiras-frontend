@@ -24,6 +24,28 @@ describe("itens de orçamento livres", () => {
     expect(item.madeiraNome).toBe("Garapeira aparelhada");
     expect(item.precoM3).toBe("2450.50");
   });
+
+  it("aceita item comercial por unidade ou pacote sem exigir medidas físicas", () => {
+    const unidade = ItemSchema.parse({
+      madeiraId: null,
+      bitolaId: null,
+      madeiraNome: "Portal",
+      bitolaDescricao: "Venda por unidade",
+      espessura: "0",
+      largura: "0",
+      comprimento: "0",
+      quantidade: 2,
+      tipoComercializacao: "unidade",
+      unidadesPorComercializacao: 0,
+      precoM3: "180",
+      precoLinear: "0",
+      valorPeca: "180",
+      valorTotal: "360",
+    });
+
+    expect(unidade).toMatchObject({ tipoComercializacao: "unidade", unidadesPorComercializacao: 0, quantidade: 2 });
+    expect(() => ItemSchema.parse({ ...unidade, tipoComercializacao: "pacote", quantidade: 0 })).toThrow(/quantidade/i);
+  });
 });
 
 describe("aproveitamento selecionado no romaneio", () => {

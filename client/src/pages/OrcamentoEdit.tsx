@@ -159,11 +159,11 @@ export default function OrcamentoEdit() {
                   <thead>
                     <tr className="border-b border-border">
                       <th className="text-left py-2 font-medium text-muted-foreground">Madeira</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">Dimensões</th>
+                      <th className="text-left py-2 font-medium text-muted-foreground">Medida / tipo</th>
                       <th className="text-right py-2 font-medium text-muted-foreground">Qtd</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Preço/m³</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Preço/m.l.</th>
-                      <th className="text-right py-2 font-medium text-muted-foreground">Valor/peça</th>
+                      <th className="text-right py-2 font-medium text-muted-foreground">Unidade</th>
+                      <th className="text-right py-2 font-medium text-muted-foreground">Preço base</th>
+                      <th className="text-right py-2 font-medium text-muted-foreground">Valor unit.</th>
                       <th className="text-right py-2 font-medium text-muted-foreground">Total</th>
                     </tr>
                   </thead>
@@ -171,10 +171,10 @@ export default function OrcamentoEdit() {
                     {itens?.map((item, idx) => (
                       <tr key={idx} className="border-b border-border/50">
                         <td className="py-2.5 font-medium">{item.madeiraNome}</td>
-                        <td className="py-2.5 text-muted-foreground">{formatDimensionCm(item.espessura)}×{formatDimensionCm(item.largura)} cm × {item.comprimento} m</td>
+                        <td className="py-2.5 text-muted-foreground">{item.tipoComercializacao === "metro_cubico" ? `${formatDimensionCm(item.espessura)}×${formatDimensionCm(item.largura)} cm × ${item.comprimento} m` : item.tipoComercializacao === "unidade" ? "Venda por unidade" : "Venda por pacote"}</td>
                         <td className="py-2.5 text-right">{item.quantidade}</td>
+                        <td className="py-2.5 text-right">{item.tipoComercializacao === "metro_cubico" ? "Peça" : item.tipoComercializacao === "unidade" ? "Unidade" : "Pacote"}</td>
                         <td className="py-2.5 text-right">{formatCurrency(item.precoM3)}</td>
-                        <td className="py-2.5 text-right">{formatCurrency(item.precoLinear)}</td>
                         <td className="py-2.5 text-right">{formatCurrency(item.valorPeca)}</td>
                         <td className="py-2.5 text-right font-semibold">{formatCurrency(item.valorTotal)}</td>
                       </tr>

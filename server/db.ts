@@ -543,6 +543,8 @@ export async function createOrcamento(
       largura: i.largura!,
       comprimento: i.comprimento!,
       quantidade: i.quantidade!,
+      tipoComercializacao: i.tipoComercializacao ?? "metro_cubico",
+      unidadesPorComercializacao: i.unidadesPorComercializacao ?? 1,
       precoM3: i.precoM3!,
       precoLinear: i.precoLinear!,
       valorPeca: i.valorPeca!,
@@ -723,6 +725,8 @@ export async function duplicateOrcamento(id: number) {
     largura: i.largura,
     comprimento: i.comprimento,
     quantidade: i.quantidade,
+    tipoComercializacao: i.tipoComercializacao,
+    unidadesPorComercializacao: i.unidadesPorComercializacao,
     precoM3: i.precoM3,
     precoLinear: i.precoLinear,
     valorPeca: i.valorPeca,
@@ -3511,7 +3515,12 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       tx.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId)),
       tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.empresaId, venda.empresaId), eq(lotesPecasSerradas.propriedade, "proprio"))),
     ]);
-    const itensParaEstoque = itens.map(converterDimensoesVendaParaEstoque);
+    const itensParaEstoque = itens
+      .filter((item: any) => Number(item.unidadesPorComercializacao ?? 1) > 0)
+      .map((item: any) => converterDimensoesVendaParaEstoque({
+        ...item,
+        quantidade: Number(item.quantidade) * Number(item.unidadesPorComercializacao ?? 1),
+      }));
     const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itensParaEstoque, lotes);
     const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
     const movimentacoes: Array<{ itemVendaId?: number; loteId: number; quantidade: number; volume?: number }> = [];

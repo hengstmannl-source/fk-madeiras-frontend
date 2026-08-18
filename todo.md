@@ -438,3 +438,8 @@
 - [x] Padronizar todas as porcentagens dos PDFs como números inteiros, sem alterar cálculos internos
 - [x] Ajustar o espaçamento e a largura do texto no resumo verde da grade de Produção
 - [x] Cobrir a regra de arredondamento percentual com testes de regressão
+- [x] Permitir selecionar o tipo de comercialização de cada item de Nova Venda: m³, unidade ou pacote
+- [x] Adaptar quantidade, preço unitário, total e validações ao tipo de comercialização selecionado
+- [x] Manter a baixa e a disponibilidade de estoque físico restritas aos itens vendidos por metragem, sem movimentar automaticamente itens por unidade ou pacote
+- [x] Atualizar romaneios, recibos e documentos de Venda para apresentar corretamente a unidade comercial
+- [x] Cobrir os três tipos de comercialização em cálculos, estoque e formulários com testes de regressão
