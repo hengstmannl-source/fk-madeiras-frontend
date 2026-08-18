@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ItemSchema, RegistroEntregaFisicaSchema } from "./orcamento";
+import { AproveitamentoVendaSchema, ItemSchema, RegistroEntregaFisicaSchema } from "./orcamento";
 import { historicoAlteracoes } from "../../drizzle/schema";
 import { classificarCategoriaOperacionalVenda } from "../db";
 
@@ -23,6 +23,21 @@ describe("itens de orçamento livres", () => {
     expect(item.madeiraId).toBeNull();
     expect(item.madeiraNome).toBe("Garapeira aparelhada");
     expect(item.precoM3).toBe("2450.50");
+  });
+});
+
+describe("aproveitamento selecionado no romaneio", () => {
+  it("aceita a essência, o volume em m³ e o preço por m³ escolhidos na venda", () => {
+    expect(AproveitamentoVendaSchema.parse({
+      madeiraNome: "Cedrinho",
+      volume: "0,350",
+      precoM3: "620,00",
+    })).toEqual({ madeiraNome: "Cedrinho", volume: "0.350", precoM3: "620.00" });
+  });
+
+  it("rejeita aproveitamento sem volume positivo", () => {
+    expect(() => AproveitamentoVendaSchema.parse({ madeiraNome: "Cedrinho", volume: "0", precoM3: "620" }))
+      .toThrow("Informe um volume de aproveitamento positivo");
   });
 });
 

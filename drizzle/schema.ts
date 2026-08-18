@@ -213,6 +213,21 @@ export const itensOrcamento = mysqlTable("itensOrcamento", {
 export type ItemOrcamento = typeof itensOrcamento.$inferSelect;
 export type InsertItemOrcamento = typeof itensOrcamento.$inferInsert;
 
+/** Aproveitamentos volumétricos reservados no romaneio comercial antes da baixa física na entrega. */
+export const aproveitamentosOrcamento = mysqlTable("aproveitamentosOrcamento", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  orcamentoId: int("orcamentoId").notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  volume: decimal("volume", { precision: 12, scale: 3 }).notNull(),
+  precoM3: decimal("precoM3", { precision: 12, scale: 2 }).notNull(),
+  valorTotal: decimal("valorTotal", { precision: 12, scale: 2 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type AproveitamentoOrcamento = typeof aproveitamentosOrcamento.$inferSelect;
+export type InsertAproveitamentoOrcamento = typeof aproveitamentosOrcamento.$inferInsert;
+
 export const modelosMedidaVenda = mysqlTable("modelosMedidaVenda", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),

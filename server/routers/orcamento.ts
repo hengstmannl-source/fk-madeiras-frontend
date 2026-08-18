@@ -41,6 +41,12 @@ const BaixaAproveitamentoSchema = z.object({
     .refine((valor) => Number(valor) > 0, "Informe um volume de aproveitamento positivo"),
 });
 
+export const AproveitamentoVendaSchema = BaixaAproveitamentoSchema.extend({
+  precoM3: z.union([z.string(), z.number()])
+    .transform((valor) => String(valor).replace(",", "."))
+    .refine((valor) => Number(valor) >= 0, "Informe um preço por m³ válido"),
+});
+
 export const RegistroEntregaFisicaSchema = z.object({
   id: z.number().int().positive(),
   entregueEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida"),
@@ -100,6 +106,7 @@ export const orcamentoRouter = router({
       dataVencimento: DataFinanceiraSchema.optional(),
       competencia: DataFinanceiraSchema.optional(),
       itens: z.array(ItemSchema),
+      aproveitamentos: z.array(AproveitamentoVendaSchema).max(30).default([]),
     }))
     .mutation(async ({ ctx, input }) => {
       const now = new Date();
@@ -123,7 +130,8 @@ export const orcamentoRouter = router({
           dataVencimento: input.dataVencimento ? parseDataFinanceira(input.dataVencimento) : now,
           competencia: input.competencia ? parseDataFinanceira(input.competencia) : now,
         },
-        input.itens
+        input.itens,
+        input.aproveitamentos,
       );
       if (input.estado === "aprovado") {
         await db.updateOrcamentoEstado(orcamento.id, "aprovado", ctx.user.id);

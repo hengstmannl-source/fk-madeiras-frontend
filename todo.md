@@ -419,3 +419,4 @@
 - [x] Permitir incluir opcionalmente o aproveitamento manual no percentual de produção, mantendo-o fora do cálculo por padrão
 - [x] Permitir selecionar e baixar o estoque identificado de aproveitamento diretamente na tela de Vendas
 - [x] Preservar a rastreabilidade e o estorno do aproveitamento entregue em cada venda
+- [x] Permitir selecionar e incluir aproveitamento identificado diretamente no romaneio de itens da Venda

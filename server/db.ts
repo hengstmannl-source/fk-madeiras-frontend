@@ -6,7 +6,7 @@ import {
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -495,7 +495,8 @@ export async function getOrcamentoWithItems(id: number, empresaId = 1) {
   const orc = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
   if (orc.length === 0) return undefined;
   const itens = await db.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, id));
-  return { orcamento: orc[0], itens };
+  const aproveitamentos = await db.select().from(aproveitamentosOrcamento).where(and(eq(aproveitamentosOrcamento.orcamentoId, id), eq(aproveitamentosOrcamento.empresaId, empresaId)));
+  return { orcamento: orc[0], itens, aproveitamentos };
 }
 
 export function podeAlterarOrcamentoPago(pago: boolean, confirmacaoDupla: boolean) {
@@ -521,7 +522,11 @@ async function validarAlteracaoOrcamento(id: number, confirmacaoDupla = false, d
   return orcamento;
 }
 
-export async function createOrcamento(data: InsertOrcamento, itens: Partial<InsertItemOrcamento>[]) {
+export async function createOrcamento(
+  data: InsertOrcamento,
+  itens: Partial<InsertItemOrcamento>[],
+  aproveitamentos: Array<{ madeiraNome: string; volume: string; precoM3: string }> = [],
+) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const result = await db.insert(orcamentos).values(data);
@@ -544,6 +549,20 @@ export async function createOrcamento(data: InsertOrcamento, itens: Partial<Inse
       valorTotal: i.valorTotal!,
     }));
     await db.insert(itensOrcamento).values(itensWithOrcId);
+  }
+  if (aproveitamentos.length > 0) {
+    await db.insert(aproveitamentosOrcamento).values(aproveitamentos.map((item) => {
+      const volume = Number(item.volume);
+      const precoM3 = Number(item.precoM3);
+      return {
+        empresaId: data.empresaId,
+        orcamentoId: orcId,
+        madeiraNome: item.madeiraNome,
+        volume: volume.toFixed(3),
+        precoM3: precoM3.toFixed(2),
+        valorTotal: (volume * precoM3).toFixed(2),
+      };
+    }));
   }
   if (data.criadoPor) {
     await db.insert(historicoAlteracoes).values({

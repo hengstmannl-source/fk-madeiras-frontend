@@ -41,6 +41,12 @@ interface ItemOrcamento {
   valorTotal: string;
 }
 
+interface AproveitamentoVenda {
+  madeiraNome: string;
+  volume: string;
+  precoM3: string;
+}
+
 function dataLocalParaInput(data = new Date()) {
   const deslocamento = data.getTimezoneOffset() * 60_000;
   return new Date(data.getTime() - deslocamento).toISOString().slice(0, 10);
@@ -62,6 +68,8 @@ export default function OrcamentoNovo() {
   const [dataVencimento, setDataVencimento] = useState(() => dataLocalParaInput());
   const [competencia, setCompetencia] = useState(() => dataLocalParaInput());
   const [itens, setItens] = useState<ItemOrcamento[]>([]);
+  const [aproveitamentosVenda, setAproveitamentosVenda] = useState<AproveitamentoVenda[]>([]);
+  const [aproveitamentoForm, setAproveitamentoForm] = useState<AproveitamentoVenda>({ madeiraNome: "", volume: "", precoM3: "" });
   const [grupoItem, setGrupoItem] = useState({ madeiraId: null as number | null, madeiraNome: "", precoM3: "", espessuraCm: "", larguraCm: "" });
   const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(() => criarLinhasComprimentoVazias());
   const madeiras = trpc.madeira.list.useQuery();
@@ -98,11 +106,17 @@ export default function OrcamentoNovo() {
       totalMetroLinear += comp * q;
       totalVolume += calculateVolume(esp, larg, comp, q);
     }
+    for (const item of aproveitamentosVenda) {
+      const volume = Number(item.volume.replace(",", ".")) || 0;
+      const precoM3 = Number(item.precoM3.replace(",", ".")) || 0;
+      subtotal += volume * precoM3;
+      totalVolume += volume;
+    }
     const descVal = parseFloat(desconto) || 0;
     const freteVal = parseFloat(frete) || 0;
     const total = subtotal - descVal + freteVal;
     return { subtotal, totalPecas, totalMetroLinear, totalVolume, total };
-  }, [itens, desconto, frete]);
+  }, [itens, aproveitamentosVenda, desconto, frete]);
 
   const atualizarLinhaComprimento = (id: number, campo: "comprimento" | "quantidade", valor: string) => {
     setLinhasComprimento((linhas) => linhas.map((linha) => linha.id === id ? { ...linha, [campo]: valor } : linha));
@@ -130,6 +144,19 @@ export default function OrcamentoNovo() {
   };
 
   const removeItem = (index: number) => setItens(itens.filter((_, i) => i !== index));
+
+  const aproveitamentosDisponiveis = useMemo(() => (estoqueSerrado.data ?? [])
+    .filter((item) => String(item.madeiraNome ?? "").toLocaleLowerCase("pt-BR").startsWith("aproveitamento de ")),
+    [estoqueSerrado.data]);
+
+  const adicionarAproveitamento = () => {
+    const volume = Number(aproveitamentoForm.volume.replace(",", "."));
+    const precoM3 = Number(aproveitamentoForm.precoM3.replace(",", "."));
+    if (!aproveitamentoForm.madeiraNome || !Number.isFinite(volume) || volume <= 0) { toast.error("Selecione o aproveitamento e informe um volume positivo"); return; }
+    if (!Number.isFinite(precoM3) || precoM3 < 0) { toast.error("Informe um preço por m³ válido"); return; }
+    setAproveitamentosVenda((atuais) => [...atuais, { ...aproveitamentoForm, volume: String(volume), precoM3: String(precoM3) }]);
+    setAproveitamentoForm({ madeiraNome: "", volume: "", precoM3: "" });
+  };
 
   const create = trpc.orcamento.create.useMutation();
   const utils = trpc.useUtils();
@@ -188,7 +215,7 @@ export default function OrcamentoNovo() {
 
   const handleSave = (estado: "rascunho" | "enviado") => {
     if (!clienteId) { toast.error("Selecione um cliente"); return; }
-    if (itens.length === 0) { toast.error("Adicione pelo menos um item"); return; }
+    if (itens.length === 0 && aproveitamentosVenda.length === 0) { toast.error("Adicione pelo menos um item ou aproveitamento"); return; }
     create.mutate({
       clienteId: Number(clienteId),
       estado,
@@ -204,6 +231,7 @@ export default function OrcamentoNovo() {
       dataVencimento,
       competencia,
       itens,
+      aproveitamentos: aproveitamentosVenda,
     }, {
       onSuccess: () => { toast.success(estado === "enviado" ? "Venda enviada!" : "Venda salva!"); utils.orcamento.list.invalidate(); setLocation("/orcamentos"); },
       onError: (err: any) => toast.error(err.message),
@@ -350,6 +378,20 @@ export default function OrcamentoNovo() {
                   <Plus className="h-4 w-4 mr-2" />Adicionar comprimentos à venda
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border border-amber-200 bg-amber-50/35 shadow-sm">
+            <CardContent className="p-5">
+              <div className="mb-4"><h3 className="font-semibold text-sm">Aproveitamento em estoque</h3><p className="mt-1 text-xs text-muted-foreground">Registre metros cúbicos de peças abaixo de 2 m. A baixa física será vinculada à entrega desta venda.</p></div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.4fr_.8fr_.8fr_auto] sm:items-end">
+                <div className="space-y-2"><Label>Aproveitamento disponível</Label><select aria-label="Selecionar aproveitamento" value={aproveitamentoForm.madeiraNome} onChange={(e) => setAproveitamentoForm((form) => ({ ...form, madeiraNome: e.target.value }))} className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"><option value="">Selecione a essência</option>{aproveitamentosDisponiveis.map((item) => <option key={item.madeiraNome} value={item.madeiraNome}>{item.madeiraNome} · {formatMeasurement(item.volumeDisponivel ?? 0)} m³ disponíveis</option>)}</select></div>
+                <div className="space-y-2"><Label>Volume (m³)</Label><Input aria-label="Volume de aproveitamento" value={aproveitamentoForm.volume} onChange={(e) => setAproveitamentoForm((form) => ({ ...form, volume: e.target.value }))} inputMode="decimal" placeholder="0,250" className="bg-white" /></div>
+                <div className="space-y-2"><Label>Preço/m³ (R$)</Label><Input aria-label="Preço por metro cúbico do aproveitamento" value={aproveitamentoForm.precoM3} onChange={(e) => setAproveitamentoForm((form) => ({ ...form, precoM3: e.target.value }))} inputMode="decimal" placeholder="2.700,00" className="bg-white" /></div>
+                <Button type="button" variant="outline" onClick={adicionarAproveitamento}><Plus className="mr-1.5 h-4 w-4" />Adicionar</Button>
+              </div>
+              {aproveitamentosDisponiveis.length === 0 && <p className="mt-3 text-xs text-muted-foreground">Nenhum aproveitamento disponível no estoque neste momento.</p>}
+              {aproveitamentosVenda.length > 0 && <div className="mt-4 space-y-2">{aproveitamentosVenda.map((item, index) => <div key={`${item.madeiraNome}-${index}`} className="flex items-center justify-between rounded-md border border-amber-200 bg-white px-3 py-2"><div><p className="text-sm font-medium">{item.madeiraNome}</p><p className="text-xs text-muted-foreground">{formatMeasurement(item.volume)} m³ × {formatCurrency(item.precoM3)}/m³ = {formatCurrency(String(Number(item.volume.replace(",", ".")) * Number(item.precoM3.replace(",", "."))))}</p></div><Button type="button" aria-label={`Remover ${item.madeiraNome}`} variant="ghost" size="icon" className="text-destructive" onClick={() => setAproveitamentosVenda((atuais) => atuais.filter((_, atual) => atual !== index))}><Trash2 className="h-4 w-4" /></Button></div>)}</div>}
             </CardContent>
           </Card>
 
