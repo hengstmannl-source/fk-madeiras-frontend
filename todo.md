@@ -411,3 +411,4 @@
 - [x] Exibir o volume médio por tora no cartão de disponibilidade da Produção Diária
 - [x] Detalhar volume e quantidade disponíveis por essência no atalho de toras disponíveis
 - [x] Alertar visualmente quando a relação entre quantidade e volume das toras apresentar variação atípica explicável
+- [x] Corrigir o retorno interno de Pagas para Vendas para impedir a abertura de uma venda inexistente

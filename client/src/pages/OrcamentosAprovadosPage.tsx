@@ -55,6 +55,13 @@ type FormaPagamento = (typeof FORMAS_PAGAMENTO)[number][0];
 type ModalidadeEntrega = "retirada" | "entrega";
 type AlvoVenda = { id: number; numero: string; entregue: boolean; pago: boolean };
 
+const ROTAS_CATEGORIA: Record<CategoriaOperacional, string> = {
+  aprovadas: "/orcamentos/aprovados",
+  pagas: "/orcamentos/pagas",
+  entregues: "/orcamentos/entregues",
+  concluidas: "/orcamentos/concluidas",
+};
+
 function dataLocalDeHoje() {
   const hoje = new Date();
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
@@ -186,7 +193,7 @@ export default function OrcamentosAprovadosPage() {
         {(Object.keys(CATEGORIAS) as CategoriaOperacional[]).map((chave) => {
           const ativa = chave === categoria;
           const item = CATEGORIAS[chave];
-          return <Button key={chave} variant="outline" onClick={() => setLocation(`/orcamentos/${chave}`)} className={`h-auto justify-start border p-4 text-left ${ativa ? item.destaque : "bg-card text-card-foreground hover:bg-muted"}`}>
+          return <Button key={chave} variant="outline" onClick={() => setLocation(ROTAS_CATEGORIA[chave])} className={`h-auto justify-start border p-4 text-left ${ativa ? item.destaque : "bg-card text-card-foreground hover:bg-muted"}`}>
             <div><p className="font-semibold">{item.titulo.replace("Vendas ", "")}</p><p className="mt-1 text-xs font-normal text-muted-foreground">{chave === "aprovadas" ? "Aguardam ambos" : chave === "pagas" ? "Aguardam entrega" : chave === "entregues" ? "Aguardam pagamento" : "Fluxo finalizado"}</p></div>
           </Button>;
         })}

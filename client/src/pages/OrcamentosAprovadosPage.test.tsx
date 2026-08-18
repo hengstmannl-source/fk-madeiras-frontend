@@ -9,9 +9,11 @@ const state = vi.hoisted(() => ({
   entregar: vi.fn(),
   estornar: vi.fn(),
   invalidar: vi.fn(),
+  localizacao: "/vendas/aprovadas",
+  navegar: vi.fn(),
 }));
 
-vi.mock("wouter", () => ({ useLocation: () => ["/vendas/aprovadas", vi.fn()] }));
+vi.mock("wouter", () => ({ useLocation: () => [state.localizacao, state.navegar] }));
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
@@ -37,6 +39,8 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
     state.entregar.mockReset();
     state.estornar.mockReset();
     state.invalidar.mockReset();
+    state.navegar.mockReset();
+    state.localizacao = "/vendas/aprovadas";
     state.venda = {
       id: 25,
       numero: "VND-000025",
@@ -79,5 +83,15 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
     expect(screen.getByText("Em aberto")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Registrar entrega" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Registrar pagamento" })).toBeInTheDocument();
+  });
+
+  it("retorna de Pagas para Aprovadas pela rota da fila, sem interpretar a categoria como uma venda", async () => {
+    const user = userEvent.setup();
+    state.localizacao = "/orcamentos/pagas";
+    render(<OrcamentosAprovadosPage />);
+
+    await user.click(screen.getByRole("button", { name: /Aprovadas/i }));
+
+    expect(state.navegar).toHaveBeenCalledWith("/orcamentos/aprovados");
   });
 });
