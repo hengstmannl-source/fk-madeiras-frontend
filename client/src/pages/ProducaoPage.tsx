@@ -104,7 +104,7 @@ export default function ProducaoPage() {
   const modeloPecasCsv = trpc.producao.romaneios.modeloPecasCsv.useQuery(undefined, { enabled: false });
   const importarPecasCsv = trpc.producao.romaneios.importarPecasCsv.useMutation();
   const torasDisponiveis = useMemo(() => (plaquetas.data?.itens ?? []).filter((item: any) => item.estado === "disponivel"), [plaquetas.data]);
-  const volumeTorasDisponiveis = useMemo(() => (plaquetas.data?.itens ?? []).filter((item: any) => item.estado === "disponivel").reduce((total: number, item: any) => total + num(item.volumeDisponivel), 0), [plaquetas.data]);
+  const volumeTorasDisponiveis = Number(plaquetas.data?.totalVolumeDisponivel ?? 0);
   const estoqueProprio = useMemo(() => (estoque.data ?? []).filter((item: any) => item.propriedade !== "terceiro"), [estoque.data]);
   const totalToras = useMemo(() => romaneio.toras.reduce((total, tora) => total + num(tora.volume), 0), [romaneio.toras]);
   const totaisPecas = useMemo(() => romaneio.itens.reduce((total, item) => {

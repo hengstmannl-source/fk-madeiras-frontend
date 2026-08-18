@@ -373,7 +373,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
       expect(screen.getByText("Estornada")).toBeInTheDocument();
       expect(screen.getByText(/Pagamento duplicado/)).toBeInTheDocument();
     });
-  });
+  }, 10_000);
 
   it("oferece modelo, exportação e importação CSV com orientação de validação", async () => {
     render(<FinanceiroPage />);

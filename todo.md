@@ -405,3 +405,6 @@
 - [x] Permitir inserir uma tora manualmente ao pressionar Enter no formulário de Produção
 - [x] Navegar por colunas na grade manual de peças: Tab entre comprimentos e Tab entre quantidades correspondentes
 - [x] Reorganizar os indicadores da etapa de Peças Serradas e o painel por essência para evitar compressão em telas estreitas
+- [x] Criar competência reutilizável que padronize investigação, implementação, testes, validação visual e publicação de evoluções do ERP
+- [x] Corrigir a divergência entre a quantidade de toras disponíveis e o volume total em m³ exibido na Produção
+- [x] Eliminar a reincidência de tempo excedido no teste financeiro de estorno identificado na suíte completa

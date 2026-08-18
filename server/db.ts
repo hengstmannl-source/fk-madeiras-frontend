@@ -2198,7 +2198,7 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
 
 export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
   const db = await getDb();
-  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, proximoDeslocamento: null };
+  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
   const todas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
@@ -2212,7 +2212,9 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
   const deslocamento = Math.max(parametros.deslocamento ?? 0, 0);
   const itens = filtradas.slice(deslocamento, deslocamento + limite);
   const proximoDeslocamento = deslocamento + itens.length < filtradas.length ? deslocamento + itens.length : null;
-  return { itens, total: filtradas.length, totalDisponiveis: todas.filter((item) => item.estado === "disponivel").length, proximoDeslocamento };
+  const disponiveis = todas.filter((item) => item.estado === "disponivel");
+  const totalVolumeDisponivel = disponiveis.reduce((total, item) => total + Number(item.volumeDisponivel ?? 0), 0);
+  return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, proximoDeslocamento };
 }
 
 export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId = 1) {
