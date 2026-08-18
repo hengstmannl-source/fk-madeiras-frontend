@@ -5,32 +5,37 @@ import { sdk } from "./_core/sdk";
 import { etiquetaPlaqueta } from "../shared/plaquetas";
 import { calcularAproveitamentoPorEssencia } from "../shared/aproveitamentoPorEssencia";
 
-// Format number as BRL currency (pt-BR: 1.234,56)
-function formatBRL(value: string): string {
-  const num = parseFloat(value);
-  if (isNaN(num)) return "0,00";
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(num);
+const A4: [number, number] = [595, 842];
+const MARGEM_LATERAL = 48;
+const LIMITE_INFERIOR_CONTEUDO = 66;
+const COR_MARROM = rgb(0.22, 0.16, 0.08);
+const COR_TEXTO_SECUNDARIO = rgb(0.35, 0.35, 0.35);
+const COR_CINZA_CLARO = rgb(0.55, 0.55, 0.55);
+const COR_LINHA = rgb(0.72, 0.67, 0.58);
+
+function formatBRL(value: string | number | null | undefined): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0,00";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(num);
 }
 
-function formatDimensionCm(valueInMillimeters: string): string {
-  const num = parseFloat(valueInMillimeters);
-  if (isNaN(num)) return "0";
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  }).format(num / 10);
-}
-
-function formatMeasurement(value: string): string {
-  const num = parseFloat(value);
+function formatDimensionCm(valueInMillimeters: string | number | null | undefined): string {
+  const num = Number(valueInMillimeters);
   if (!Number.isFinite(num)) return "0";
-  return new Intl.NumberFormat("pt-BR", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 3,
-  }).format(num);
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num / 10);
+}
+
+function formatMeasurement(value: string | number | null | undefined): string {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return "0";
+  return new Intl.NumberFormat("pt-BR", { minimumFractionDigits: 0, maximumFractionDigits: 3 }).format(num);
+}
+
+function formatDate(value: Date | string | null | undefined, utc = false): string {
+  if (!value) return "Não informada";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Não informada";
+  return date.toLocaleDateString("pt-BR", utc ? { timeZone: "UTC" } : undefined);
 }
 
 function formatFormaPagamento(formaPagamento?: string | null): string {
@@ -44,6 +49,61 @@ function formatFormaPagamento(formaPagamento?: string | null): string {
     outro: "Outro",
   };
   return formas[formaPagamento ?? ""] ?? "Não informada";
+}
+
+function normalizarTexto(value: unknown): string {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function larguraTexto(font: any, texto: string, tamanho: number): number {
+  if (typeof font?.widthOfTextAtSize === "function") return font.widthOfTextAtSize(texto, tamanho);
+  return texto.length * tamanho * 0.52;
+}
+
+/** Encurta conteúdo de célula antes de desenhá-lo, evitando invadir a coluna seguinte. */
+function truncarTexto(font: any, texto: unknown, larguraMaxima: number, tamanho: number): string {
+  const original = normalizarTexto(texto) || "—";
+  if (larguraTexto(font, original, tamanho) <= larguraMaxima) return original;
+
+  let resultado = original;
+  while (resultado.length > 1 && larguraTexto(font, `${resultado}…`, tamanho) > larguraMaxima) resultado = resultado.slice(0, -1);
+  return resultado.length ? `${resultado}…` : "…";
+}
+
+function quebrarTexto(font: any, texto: unknown, larguraMaxima: number, tamanho: number): string[] {
+  const conteudo = normalizarTexto(texto);
+  if (!conteudo) return [];
+  const palavras = conteudo.split(" ");
+  const linhas: string[] = [];
+  let linha = "";
+
+  const adicionarPalavraLonga = (palavra: string) => {
+    let restante = palavra;
+    while (restante && larguraTexto(font, restante, tamanho) > larguraMaxima) {
+      let limite = restante.length - 1;
+      while (limite > 1 && larguraTexto(font, `${restante.slice(0, limite)}-`, tamanho) > larguraMaxima) limite -= 1;
+      linhas.push(`${restante.slice(0, limite)}-`);
+      restante = restante.slice(limite);
+    }
+    return restante;
+  };
+
+  for (const palavraOriginal of palavras) {
+    const palavra = adicionarPalavraLonga(palavraOriginal);
+    const candidata = linha ? `${linha} ${palavra}` : palavra;
+    if (linha && larguraTexto(font, candidata, tamanho) > larguraMaxima) {
+      linhas.push(linha);
+      linha = palavra;
+    } else {
+      linha = candidata;
+    }
+  }
+  if (linha) linhas.push(linha);
+  return linhas;
+}
+
+function desenharTextoAjustado(page: any, font: any, texto: unknown, x: number, y: number, larguraMaxima: number, tamanho: number, opcoes: Record<string, unknown> = {}) {
+  page.drawText(truncarTexto(font, texto, larguraMaxima, tamanho), { x, y, size: tamanho, font, ...opcoes });
 }
 
 async function requirePdfAuthentication(req: any, res: any) {
@@ -75,129 +135,199 @@ async function loadCompanyLogo(pdfDoc: PDFDocument, empresaId = 1) {
   }
 }
 
+type LayoutPdf = ReturnType<typeof criarLayoutPdf>;
+
+/**
+ * Mantém uma área de conteúdo segura: cada página recebe cabeçalho e rodapé
+ * próprios, e nenhum bloco é desenhado dentro da área reservada do rodapé.
+ */
+function criarLayoutPdf(pdfDoc: any, font: any, boldFont: any, logo: any, tituloDocumento: string) {
+  const largura = A4[0];
+  const altura = A4[1];
+  const logoDimensoes = logo?.scaleToFit?.(108, 50);
+  let page: any;
+  let y = 0;
+
+  const rodape = () => {
+    const numeroPagina = typeof pdfDoc.getPageCount === "function" ? pdfDoc.getPageCount() : 1;
+    page.drawLine({
+      start: { x: MARGEM_LATERAL, y: 50 },
+      end: { x: largura - MARGEM_LATERAL, y: 50 },
+      thickness: 0.45,
+      color: rgb(0.86, 0.84, 0.79),
+    });
+    page.drawText("FK Madeiras — Documento gerado eletronicamente", { x: MARGEM_LATERAL, y: 35, size: 7.5, font, color: COR_CINZA_CLARO });
+    const pagina = `Página ${numeroPagina}`;
+    page.drawText(pagina, { x: largura - MARGEM_LATERAL - larguraTexto(font, pagina, 7.5), y: 35, size: 7.5, font, color: COR_CINZA_CLARO });
+  };
+
+  const cabecalho = (continuacao: boolean) => {
+    if (logoDimensoes) {
+      page.drawImage(logo, {
+        x: MARGEM_LATERAL,
+        y: altura - 50 - logoDimensoes.height,
+        width: logoDimensoes.width,
+        height: logoDimensoes.height,
+      });
+    }
+    const xTitulo = logoDimensoes ? MARGEM_LATERAL + logoDimensoes.width + 14 : MARGEM_LATERAL;
+    page.drawText("FK MADEIRAS", { x: xTitulo, y: altura - 55, size: 21, font: boldFont, color: COR_MARROM });
+    desenharTextoAjustado(
+      page,
+      font,
+      continuacao ? `${tituloDocumento} — continuação` : tituloDocumento,
+      xTitulo,
+      altura - 72,
+      largura - xTitulo - MARGEM_LATERAL,
+      9.5,
+      { color: rgb(0.4, 0.4, 0.4) },
+    );
+  };
+
+  const novaPagina = (continuacao = true) => {
+    page = pdfDoc.addPage(A4);
+    cabecalho(continuacao);
+    rodape();
+    y = altura - 110;
+  };
+
+  const garantirEspaco = (alturaNecessaria: number) => {
+    if (y - alturaNecessaria < LIMITE_INFERIOR_CONTEUDO) novaPagina(true);
+  };
+
+  const escreverParagrafo = (texto: unknown, x: number, larguraMaxima: number, tamanho = 8.5, opcoes: Record<string, unknown> = {}, alturaLinha = tamanho + 4) => {
+    const linhas = quebrarTexto(font, texto, larguraMaxima, tamanho);
+    for (const linha of linhas) {
+      garantirEspaco(alturaLinha);
+      page.drawText(linha, { x, y, size: tamanho, font, ...opcoes });
+      y -= alturaLinha;
+    }
+    return linhas.length;
+  };
+
+  novaPagina(false);
+  return {
+    get page() { return page; },
+    get y() { return y; },
+    get width() { return largura; },
+    get height() { return altura; },
+    get bottom() { return LIMITE_INFERIOR_CONTEUDO; },
+    setY: (novoY: number) => { y = novoY; },
+    mover: (distancia: number) => { y -= distancia; },
+    garantirEspaco,
+    temEspaco: (alturaNecessaria: number) => y - alturaNecessaria >= LIMITE_INFERIOR_CONTEUDO,
+    novaPagina,
+    escreverParagrafo,
+  };
+}
+
 export async function registerPdfRoutes(app: any) {
   app.get("/api/pdf/orcamento/:id", async (req: any, res: any) => {
     try {
       if (!(await requirePdfAuthentication(req, res))) return;
       const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+      if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
       const data = await getOrcamentoWithItems(id);
       if (!data) return res.status(404).json({ error: "Orçamento não encontrado" });
 
       const clientes = await listClientes();
-      const cliente = clientes.find((c: any) => c.id === data.orcamento.clienteId);
-
+      const cliente = clientes.find((item: any) => item.id === data.orcamento.clienteId);
       const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595, 842]); // A4
-      const { width, height } = page.getSize();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const logo = await loadCompanyLogo(pdfDoc);
+      const layout = criarLayoutPdf(pdfDoc, font, boldFont, logo, "Venda");
+      const { width } = layout;
 
-      const logoDimensions = logo?.scaleToFit(118, 54);
-      const headerX = logoDimensions ? 50 + logoDimensions.width + 16 : 50;
-      if (logoDimensions) {
-        page.drawImage(logo!, {
-          x: 50,
-          y: height - 50 - logoDimensions.height,
-          width: logoDimensions.width,
-          height: logoDimensions.height,
-        });
-      }
+      layout.garantirEspaco(80);
+      layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 50, width: width - (MARGEM_LATERAL * 2), height: 62, color: rgb(0.95, 0.93, 0.89) });
+      layout.page.drawText(`VENDA ${data.orcamento.numero ?? "EM ANÁLISE"}`, { x: 62, y: layout.y - 7, size: 16, font: boldFont, color: COR_MARROM });
+      layout.page.drawText(`Emissão: ${formatDate(data.orcamento.createdAt)}`, { x: 62, y: layout.y - 27, size: 9, font, color: COR_TEXTO_SECUNDARIO });
+      const estado = `Estado: ${normalizarTexto(data.orcamento.estado) || "Não informado"}`;
+      layout.page.drawText(estado, { x: width - 62 - larguraTexto(font, estado, 9), y: layout.y - 18, size: 9, font, color: COR_TEXTO_SECUNDARIO });
+      layout.mover(78);
 
-      let y = height - 55;
-
-      // Header - Company name
-      page.drawText("FK MADEIRAS", { x: headerX, y, size: 24, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      y -= 20;
-      page.drawText("Sistema de Vendas", { x: headerX, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
-
-      // Número e data da venda
-      y -= 48;
-      page.drawText(`Venda: ${data.orcamento.numero ?? "Aguardando aprovação"}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.2, 0.15, 0.05) });
-      y -= 18;
-      page.drawText(`Data: ${new Date(data.orcamento.createdAt).toLocaleDateString("pt-BR")}`, { x: 50, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-
-      // Estado
-      page.drawText(`Estado: ${data.orcamento.estado}`, { x: width - 200, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-
-      // Client info
-      y -= 40;
       if (cliente) {
-        page.drawText("DADOS DO CLIENTE", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-        y -= 16;
-        page.drawText(`Nome: ${cliente.nome}`, { x: 50, y, size: 10, font });
-        y -= 14;
-        if (cliente.contacto) { page.drawText(`Contacto: ${cliente.contacto}`, { x: 50, y, size: 10, font }); y -= 14; }
-        if (cliente.email) { page.drawText(`Email: ${cliente.email}`, { x: 50, y, size: 10, font }); y -= 14; }
-        if (cliente.morada) { page.drawText(`Morada: ${cliente.morada}`, { x: 50, y, size: 10, font }); y -= 14; }
-        if (cliente.nif) { page.drawText(`NIF: ${cliente.nif}`, { x: 50, y, size: 10, font }); y -= 14; }
+        const camposCliente = [
+          ["Nome", cliente.nome],
+          ["Contacto", cliente.contacto],
+          ["E-mail", cliente.email],
+          ["Morada", cliente.morada],
+          ["NIF", cliente.nif],
+        ].filter(([, valor]) => Boolean(normalizarTexto(valor)));
+        layout.garantirEspaco(28);
+        layout.page.drawText("DADOS DO CLIENTE", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+        layout.mover(17);
+        for (const [rotulo, valor] of camposCliente) layout.escreverParagrafo(`${rotulo}: ${valor}`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 9, { color: COR_TEXTO_SECUNDARIO }, 13);
+        layout.mover(10);
       }
 
-      // Items table
-      y -= 30;
-      page.drawText("ITENS DA VENDA", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      y -= 20;
+      const colunas = [111, 100, 34, 66, 66, 66, 68];
+      const labels = ["Madeira", "Dimensões", "Qtd.", "Preço/m³", "Preço/m.l.", "Valor/peça", "Total"];
+      const desenharTabela = (continuacao = false) => {
+        layout.garantirEspaco(42);
+        layout.page.drawText(continuacao ? "ITENS DA VENDA — CONTINUAÇÃO" : "ITENS DA VENDA", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+        layout.mover(17);
+        let x = MARGEM_LATERAL;
+        labels.forEach((label, indice) => {
+          desenharTextoAjustado(layout.page, boldFont, label, x, layout.y, colunas[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
+          x += colunas[indice];
+        });
+        layout.mover(15);
+      };
+      desenharTabela();
 
-      // Table header
-      const colWidths = [120, 100, 40, 70, 70, 70, 70];
-      const colLabels = ["Madeira", "Dimensões", "Qtd", "Preço/m³", "Preço/m.l.", "Valor/peça", "Total"];
-      let x = 50;
-      for (let i = 0; i < colLabels.length; i++) {
-        page.drawText(colLabels[i], { x, y, size: 8, font: boldFont, color: rgb(0.4, 0.4, 0.4) });
-        x += colWidths[i];
+      for (const item of data.itens ?? []) {
+        if (!layout.temEspaco(16)) {
+          layout.novaPagina(true);
+          desenharTabela(true);
+        }
+        const valores = [
+          item.madeiraNome,
+          `${formatDimensionCm(item.espessura)} × ${formatDimensionCm(item.largura)} cm × ${formatMeasurement(item.comprimento)} m`,
+          String(item.quantidade),
+          `R$ ${formatBRL(item.precoM3)}`,
+          `R$ ${formatBRL(item.precoLinear)}`,
+          `R$ ${formatBRL(item.valorPeca)}`,
+          `R$ ${formatBRL(item.valorTotal)}`,
+        ];
+        let x = MARGEM_LATERAL;
+        valores.forEach((valor, indice) => {
+          desenharTextoAjustado(layout.page, indice === valores.length - 1 ? boldFont : font, valor, x, layout.y, colunas[indice] - 4, 7.5);
+          x += colunas[indice];
+        });
+        layout.mover(16);
       }
 
-      // Espaçamento antes da primeira linha de item, sem regra horizontal.
-      y -= 16;
+      layout.garantirEspaco(126);
+      layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.8, color: COR_LINHA });
+      layout.mover(19);
+      layout.page.drawText("RESUMO", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+      layout.mover(18);
+      const resumo = [
+        [`Subtotal: R$ ${formatBRL(data.orcamento.subtotal)}`, font, undefined],
+        [`Desconto: -R$ ${formatBRL(data.orcamento.desconto)}`, font, rgb(0.7, 0.2, 0.2)],
+        [`Frete: +R$ ${formatBRL(data.orcamento.frete)}`, font, undefined],
+        [`Total: R$ ${formatBRL(data.orcamento.total)}`, boldFont, COR_MARROM],
+      ] as const;
+      resumo.forEach(([texto, fonte, cor], indice) => {
+        layout.page.drawText(texto, { x: MARGEM_LATERAL, y: layout.y, size: indice === 3 ? 13 : 9.5, font: fonte, ...(cor ? { color: cor } : {}) });
+        layout.mover(indice === 3 ? 18 : 14);
+      });
+      layout.page.drawText(`Total de peças: ${data.orcamento.totalPecas}`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
+      layout.mover(12);
+      layout.page.drawText(`Total em metros lineares: ${formatMeasurement(data.orcamento.totalMetroLinear)} m`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
+      layout.mover(12);
+      layout.page.drawText(`Volume total: ${formatMeasurement(data.orcamento.totalVolume)} m³`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
 
-      // Items
-      for (const item of data.itens) {
-        x = 50;
-        page.drawText(item.madeiraNome, { x, y, size: 8, font }); x += colWidths[0];
-        page.drawText(`${formatDimensionCm(item.espessura)}×${formatDimensionCm(item.largura)}cm×${item.comprimento}m`, { x, y, size: 8, font }); x += colWidths[1];
-        page.drawText(String(item.quantidade), { x, y, size: 8, font }); x += colWidths[2];
-        page.drawText(`R$ ${formatBRL(item.precoM3)}`, { x, y, size: 8, font }); x += colWidths[3];
-        page.drawText(`R$ ${formatBRL(item.precoLinear)}`, { x, y, size: 8, font }); x += colWidths[4];
-        page.drawText(`R$ ${formatBRL(item.valorPeca)}`, { x, y, size: 8, font }); x += colWidths[5];
-        page.drawText(`R$ ${formatBRL(item.valorTotal)}`, { x, y, size: 8, font: boldFont });
-        y -= 16;
-        if (y < 100) { const newPage = pdfDoc.addPage([595, 842]); y = newPage.getSize().height - 50; }
+      if (normalizarTexto(data.orcamento.observacoes)) {
+        layout.mover(18);
+        layout.garantirEspaco(26);
+        layout.page.drawText("OBSERVAÇÕES", { x: MARGEM_LATERAL, y: layout.y, size: 9, font: boldFont, color: COR_MARROM });
+        layout.mover(14);
+        layout.escreverParagrafo(data.orcamento.observacoes, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
       }
-
-      // Summary
-      y -= 30;
-      page.drawLine({ start: { x: 50, y }, end: { x: width - 50, y }, thickness: 1, color: rgb(0.3, 0.2, 0.1) });
-      y -= 20;
-      page.drawText("RESUMO", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      y -= 18;
-      page.drawText(`Subtotal: R$ ${formatBRL(data.orcamento.subtotal)}`, { x: 50, y, size: 10, font });
-      y -= 14;
-      page.drawText(`Desconto: -R$ ${formatBRL(data.orcamento.desconto || "0")}`, { x: 50, y, size: 10, font, color: rgb(0.7, 0.2, 0.2) });
-      y -= 14;
-      page.drawText(`Frete: +R$ ${formatBRL(data.orcamento.frete || "0")}`, { x: 50, y, size: 10, font });
-      y -= 14;
-      page.drawText(`Total: R$ ${formatBRL(data.orcamento.total)}`, { x: 50, y, size: 14, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-
-      y -= 14;
-      page.drawText(`Total de peças: ${data.orcamento.totalPecas}`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-      y -= 12;
-      page.drawText(`Total metro linear: ${formatMeasurement(data.orcamento.totalMetroLinear)} m`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-      y -= 12;
-      page.drawText(`Volume total: ${formatMeasurement(data.orcamento.totalVolume)} m³`, { x: 50, y, size: 9, font, color: rgb(0.5, 0.5, 0.5) });
-
-      if (data.orcamento.observacoes) {
-        y -= 20;
-        page.drawText("Observações:", { x: 50, y, size: 10, font: boldFont });
-        y -= 14;
-        page.drawText(data.orcamento.observacoes, { x: 50, y, size: 9, font, color: rgb(0.4, 0.4, 0.4), maxWidth: width - 100 });
-      }
-
-      // Footer
-      const footerY = 40;
-      page.drawText("FK Madeiras — Sistema de Vendas", { x: 50, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
-      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 250, y: footerY, size: 8, font, color: rgb(0.7, 0.7, 0.7) });
 
       const pdfBytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");
@@ -213,73 +343,62 @@ export async function registerPdfRoutes(app: any) {
     try {
       if (!(await requirePdfAuthentication(req, res))) return;
       const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+      if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
       const data = await getOrcamentoWithItems(id);
       if (!data) return res.status(404).json({ error: "Venda não encontrada" });
-      if (!data.orcamento.pago || !data.orcamento.pagoEm) {
-        return res.status(400).json({ error: "O recibo só está disponível para vendas quitadas" });
-      }
+      if (!data.orcamento.pago || !data.orcamento.pagoEm) return res.status(400).json({ error: "O recibo só está disponível para vendas quitadas" });
 
       const clientes = await listClientes();
       const cliente = clientes.find((item: any) => item.id === data.orcamento.clienteId);
       const pdfDoc = await PDFDocument.create();
-      const page = pdfDoc.addPage([595, 842]);
-      const { width, height } = page.getSize();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
       const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const logo = await loadCompanyLogo(pdfDoc);
-      const logoDimensions = logo?.scaleToFit(118, 54);
-      const headerX = logoDimensions ? 50 + logoDimensions.width + 16 : 50;
+      const layout = criarLayoutPdf(pdfDoc, font, boldFont, logo, "Comprovante de quitação");
+      const { width } = layout;
+      const numeroVenda = data.orcamento.numero ?? data.orcamento.id;
 
-      if (logoDimensions) {
-        page.drawImage(logo!, { x: 50, y: height - 50 - logoDimensions.height, width: logoDimensions.width, height: logoDimensions.height });
+      layout.garantirEspaco(90);
+      layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 54, width: width - (MARGEM_LATERAL * 2), height: 64, color: rgb(0.95, 0.93, 0.89) });
+      layout.page.drawText("RECIBO DE PAGAMENTO", { x: 64, y: layout.y - 4, size: 16, font: boldFont, color: COR_MARROM });
+      layout.page.drawText(`Referente à venda ${numeroVenda}`, { x: 64, y: layout.y - 24, size: 9.5, font, color: COR_TEXTO_SECUNDARIO });
+      layout.page.drawText(`Recibo nº REC-${numeroVenda}`, { x: 64, y: layout.y - 42, size: 8.5, font, color: COR_CINZA_CLARO });
+      layout.mover(92);
+
+      const nomeCliente = normalizarTexto(cliente?.nome) || "Cliente";
+      layout.page.drawText("DECLARAÇÃO DE QUITAÇÃO", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+      layout.mover(20);
+      layout.escreverParagrafo(`Recebemos de ${nomeCliente} o valor abaixo indicado, referente à venda mencionada.`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 10, {}, 15);
+      layout.mover(24);
+      layout.garantirEspaco(52);
+      layout.page.drawText("VALOR RECEBIDO", { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font: boldFont, color: COR_CINZA_CLARO });
+      layout.mover(22);
+      layout.page.drawText(`R$ ${formatBRL(data.orcamento.total)}`, { x: MARGEM_LATERAL, y: layout.y, size: 23, font: boldFont, color: rgb(0.15, 0.42, 0.26) });
+      layout.mover(52);
+
+      layout.garantirEspaco(126);
+      layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.7, color: rgb(0.82, 0.79, 0.73) });
+      layout.mover(25);
+      const dados = [
+        ["Cliente", nomeCliente],
+        ["Forma de pagamento", formatFormaPagamento(data.orcamento.formaPagamento)],
+        ["Data de pagamento", formatDate(data.orcamento.pagoEm)],
+      ];
+      for (const [rotulo, valor] of dados) {
+        layout.page.drawText(rotulo, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font: boldFont, color: COR_CINZA_CLARO });
+        desenharTextoAjustado(layout.page, font, valor, 180, layout.y, width - 180 - MARGEM_LATERAL, 9.5);
+        layout.mover(25);
       }
-
-      let y = height - 55;
-      page.drawText("FK MADEIRAS", { x: headerX, y, size: 24, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      y -= 20;
-      page.drawText("Comprovante de quitação", { x: headerX, y, size: 10, font, color: rgb(0.5, 0.5, 0.5) });
-      y -= 76;
-
-      page.drawRectangle({ x: 50, y: y - 54, width: width - 100, height: 64, color: rgb(0.95, 0.93, 0.89) });
-      page.drawText("RECIBO DE PAGAMENTO", { x: 66, y: y - 2, size: 17, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      page.drawText(`Referente à venda ${data.orcamento.numero ?? data.orcamento.id}`, { x: 66, y: y - 23, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
-      page.drawText(`Recibo nº REC-${data.orcamento.numero ?? data.orcamento.id}`, { x: 66, y: y - 41, size: 9, font, color: rgb(0.45, 0.45, 0.45) });
-      y -= 96;
-
-      page.drawText("DECLARAÇÃO DE QUITAÇÃO", { x: 50, y, size: 11, font: boldFont, color: rgb(0.3, 0.2, 0.1) });
-      y -= 24;
-      const nomeCliente = cliente?.nome ?? "Cliente";
-      page.drawText(`Recebemos de ${nomeCliente} o valor abaixo indicado, referente à venda mencionada.`, { x: 50, y, size: 10, font, maxWidth: width - 100, lineHeight: 14 });
-      y -= 62;
-
-      page.drawText("VALOR RECEBIDO", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
-      y -= 23;
-      page.drawText(`R$ ${formatBRL(data.orcamento.total)}`, { x: 50, y, size: 24, font: boldFont, color: rgb(0.15, 0.42, 0.26) });
-      y -= 54;
-
-      const dataPagamento = new Date(data.orcamento.pagoEm).toLocaleDateString("pt-BR");
-      page.drawLine({ start: { x: 50, y }, end: { x: width - 50, y }, thickness: 0.8, color: rgb(0.82, 0.79, 0.73) });
-      y -= 28;
-      page.drawText("Cliente", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
-      page.drawText(nomeCliente, { x: 180, y, size: 10, font });
-      y -= 25;
-      page.drawText("Forma de pagamento", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
-      page.drawText(formatFormaPagamento(data.orcamento.formaPagamento), { x: 180, y, size: 10, font });
-      y -= 25;
-      page.drawText("Data de pagamento", { x: 50, y, size: 9, font: boldFont, color: rgb(0.45, 0.45, 0.45) });
-      page.drawText(dataPagamento, { x: 180, y, size: 10, font });
-      y -= 68;
-
-      page.drawLine({ start: { x: 50, y }, end: { x: 270, y }, thickness: 0.8, color: rgb(0.5, 0.5, 0.5) });
-      page.drawText("FK Madeiras", { x: 50, y: y - 16, size: 9, font, color: rgb(0.45, 0.45, 0.45) });
-      page.drawText("Documento gerado eletronicamente.", { x: 50, y: 40, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
-      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 180, y: 40, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+      layout.mover(28);
+      layout.garantirEspaco(34);
+      layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: 270, y: layout.y }, thickness: 0.7, color: rgb(0.5, 0.5, 0.5) });
+      layout.mover(16);
+      layout.page.drawText("FK Madeiras", { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
 
       const pdfBytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="recibo-${data.orcamento.numero ?? data.orcamento.id}.pdf"`);
+      res.setHeader("Content-Disposition", `attachment; filename="recibo-${numeroVenda}.pdf"`);
       res.send(Buffer.from(pdfBytes));
     } catch (err: any) {
       console.error("Receipt PDF generation error:", err);
@@ -291,9 +410,10 @@ export async function registerPdfRoutes(app: any) {
     try {
       if (!(await requirePdfAuthentication(req, res))) return;
       const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+      if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
       const data = await getRomaneioProducaoComItens(id);
       if (!data) return res.status(404).json({ error: "Romaneio não encontrado" });
+
       const torasParaResumo = data.toras.length
         ? data.toras
         : [{ madeiraNome: data.romaneio.madeiraTora ?? "Não informada", volume: data.romaneio.volumeTora ?? "0" }];
@@ -309,7 +429,6 @@ export async function registerPdfRoutes(app: any) {
         return {
           ...resumo,
           volumeAproveitamento: Number(volumeAproveitamentoEssencia.toFixed(6)),
-          volumeComAproveitamento: Number((resumo.volumeProduzido + volumeAproveitamentoEssencia).toFixed(6)),
           aproveitamento: Number(aproveitamento.toFixed(2)),
           perdaVolume: Number((resumo.volumeToras - volumeParaRendimento).toFixed(6)),
           perdaPercentual: Number((100 - aproveitamento).toFixed(2)),
@@ -317,106 +436,150 @@ export async function registerPdfRoutes(app: any) {
       });
 
       const pdfDoc = await PDFDocument.create();
-      let page = pdfDoc.addPage([595, 842]);
-      const { width, height } = page.getSize();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const logo = await loadCompanyLogo(pdfDoc);
-      const logoDimensoes = logo?.scaleToFit(108, 50);
-      if (logoDimensoes) page.drawImage(logo!, { x: 48, y: height - 50 - logoDimensoes.height, width: logoDimensoes.width, height: logoDimensoes.height });
-      const cabecalhoX = logoDimensoes ? 48 + logoDimensoes.width + 14 : 48;
-      let y = height - 55;
-      page.drawText("FK MADEIRAS", { x: cabecalhoX, y, size: 22, font: bold, color: rgb(0.22, 0.16, 0.08) });
-      y -= 17;
-      page.drawText("Romaneio de produção", { x: cabecalhoX, y, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      y -= 50;
-      page.drawRectangle({ x: 48, y: y - 48, width: width - 96, height: 60, color: rgb(0.95, 0.93, 0.89) });
-      page.drawText(data.romaneio.numero, { x: 62, y: y - 6, size: 17, font: bold, color: rgb(0.22, 0.16, 0.08) });
-      page.drawText(`Produção em ${new Date(data.romaneio.dataProducao).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
-      page.drawText(`Aproveitamento: ${formatMeasurement(data.romaneio.aproveitamento ?? "0")}%`, { x: width - 212, y: y - 17, size: 11, font: bold, color: rgb(0.12, 0.42, 0.25) });
-      page.drawText(incluirAproveitamentoNoRendimento ? "Rendimento inclui aproveitamento" : "Rendimento considera apenas peças", { x: width - 212, y: y - 31, size: 7, font, color: rgb(0.35, 0.35, 0.35) });
-      y -= 78;
+      const layout = criarLayoutPdf(pdfDoc, font, boldFont, logo, "Romaneio de produção");
+      const { width } = layout;
       const torasSerradas = data.toras.length
         ? data.toras
-        : [{
-            codigo: data.romaneio.plaquetaCodigo ?? "Não informada",
-            madeiraNome: data.romaneio.madeiraTora ?? "Não informada",
-            diametro: null,
-            comprimento: data.romaneio.comprimentoTora,
-            volume: data.romaneio.volumeTora ?? "0",
-          }];
-      page.drawText(`TORAS SERRADAS (${torasSerradas.length})`, { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
-      y -= 18;
+        : [{ codigo: data.romaneio.plaquetaCodigo ?? "Não informada", madeiraNome: data.romaneio.madeiraTora ?? "Não informada", diametro: null, comprimento: data.romaneio.comprimentoTora, volume: data.romaneio.volumeTora ?? "0" }];
+
+      layout.garantirEspaco(80);
+      layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 50, width: width - (MARGEM_LATERAL * 2), height: 62, color: rgb(0.95, 0.93, 0.89) });
+      layout.page.drawText(normalizarTexto(data.romaneio.numero) || "ROMANEIO", { x: 62, y: layout.y - 7, size: 16, font: boldFont, color: COR_MARROM });
+      layout.page.drawText(`Produção em ${formatDate(data.romaneio.dataProducao, true)}`, { x: 62, y: layout.y - 27, size: 9, font, color: COR_TEXTO_SECUNDARIO });
+      const aproveitamentoTexto = `Aproveitamento: ${formatMeasurement(data.romaneio.aproveitamento)}%`;
+      layout.page.drawText(aproveitamentoTexto, { x: width - 62 - larguraTexto(boldFont, aproveitamentoTexto, 10), y: layout.y - 16, size: 10, font: boldFont, color: rgb(0.12, 0.42, 0.25) });
+      const regraRendimento = incluirAproveitamentoNoRendimento ? "Rendimento inclui aproveitamento" : "Rendimento considera apenas peças";
+      layout.page.drawText(regraRendimento, { x: width - 62 - larguraTexto(font, regraRendimento, 7), y: layout.y - 30, size: 7, font, color: COR_TEXTO_SECUNDARIO });
+      layout.mover(78);
+
+      const desenharTituloToras = (continuacao = false) => {
+        layout.garantirEspaco(32);
+        layout.page.drawText(continuacao ? `TORAS SERRADAS (${torasSerradas.length}) — CONTINUAÇÃO` : `TORAS SERRADAS (${torasSerradas.length})`, { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+        layout.mover(18);
+      };
+      desenharTituloToras();
       for (const tora of torasSerradas) {
-        page.drawText(`Plaqueta: ${tora.codigo}   •   Essência: ${tora.madeiraNome}`, { x: 48, y, size: 9, font });
-        y -= 13;
-        page.drawText(`Diâmetro: ${formatMeasurement(tora.diametro ?? "0")} cm   •   Comprimento: ${formatMeasurement(tora.comprimento ?? "0")} m   •   Volume efetivo: ${formatMeasurement(tora.volume)} m³`, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35) });
-        y -= 16;
+        const linhaIdentificacao = `Plaqueta: ${normalizarTexto(tora.codigo) || "Não informada"}   •   Essência: ${normalizarTexto(tora.madeiraNome) || "Não informada"}`;
+        const linhaMedidas = `Diâmetro: ${formatMeasurement(tora.diametro)} cm   •   Comprimento: ${formatMeasurement(tora.comprimento)} m   •   Volume efetivo: ${formatMeasurement(tora.volume)} m³`;
+        const alturaTora = (quebrarTexto(font, linhaIdentificacao, width - (MARGEM_LATERAL * 2), 8.5).length * 12) + (quebrarTexto(font, linhaMedidas, width - (MARGEM_LATERAL * 2), 8).length * 11) + 5;
+        if (!layout.temEspaco(alturaTora)) {
+          layout.novaPagina(true);
+          desenharTituloToras(true);
+        }
+        layout.escreverParagrafo(linhaIdentificacao, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, {}, 12);
+        layout.escreverParagrafo(linhaMedidas, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8, { color: COR_TEXTO_SECUNDARIO }, 11);
+        layout.mover(5);
       }
-      page.drawLine({ start: { x: 48, y }, end: { x: width - 48, y }, thickness: 0.6, color: rgb(0.72, 0.67, 0.58) });
-      y -= 16;
-      page.drawText(`Volume de toras: ${formatMeasurement(data.romaneio.volumeTora ?? "0")} m³   •   Fita/Linha: ${data.romaneio.fita ?? "Não informada"}   •   Responsável: ${data.romaneio.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
-      y -= 28;
-      page.drawText("PEÇAS PRODUZIDAS", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
-      y -= 18;
-      const colunas = [145, 92, 54, 66, 66, 62];
-      const titulos = ["Essência", "Dimensões", "Comp.", "Peças", "M. linear", "Volume"];
-      let x = 48;
-      titulos.forEach((titulo, indice) => { page.drawText(titulo, { x, y, size: 8, font: bold, color: rgb(0.42, 0.42, 0.42) }); x += colunas[indice]; });
-      y -= 14;
+
+      layout.garantirEspaco(50);
+      layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.6, color: COR_LINHA });
+      layout.mover(15);
+      layout.escreverParagrafo(`Volume de toras: ${formatMeasurement(data.romaneio.volumeTora)} m³   •   Fita/Linha: ${normalizarTexto(data.romaneio.fita) || "Não informada"}   •   Responsável: ${normalizarTexto(data.romaneio.responsavel) || "Não informado"}`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
+      layout.mover(12);
+
+      const colunas = [135, 92, 54, 60, 75, 82];
+      const labels = ["Essência", "Dimensões", "Comp.", "Peças", "M. linear", "Volume"];
+      const desenharTabelaPecas = (continuacao = false) => {
+        layout.garantirEspaco(42);
+        layout.page.drawText(continuacao ? "PEÇAS PRODUZIDAS — CONTINUAÇÃO" : "PEÇAS PRODUZIDAS", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+        layout.mover(17);
+        let x = MARGEM_LATERAL;
+        labels.forEach((label, indice) => {
+          desenharTextoAjustado(layout.page, boldFont, label, x, layout.y, colunas[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
+          x += colunas[indice];
+        });
+        layout.mover(15);
+      };
+      desenharTabelaPecas();
       let totalPecas = 0;
       let totalMetros = 0;
       let totalVolume = 0;
-      for (const item of data.itens) {
-        x = 48;
-        page.drawText(item.madeiraNome, { x, y, size: 8, font }); x += colunas[0];
-        page.drawText(`${formatMeasurement(item.espessura)} × ${formatMeasurement(item.largura)} cm`, { x, y, size: 8, font }); x += colunas[1];
-        page.drawText(`${formatMeasurement(item.comprimento)} m`, { x, y, size: 8, font }); x += colunas[2];
-        page.drawText(String(item.quantidade), { x, y, size: 8, font }); x += colunas[3];
-        page.drawText(`${formatMeasurement(item.metrosLineares)} m`, { x, y, size: 8, font }); x += colunas[4];
-        page.drawText(`${formatMeasurement(item.volume)} m³`, { x, y, size: 8, font: bold });
-        totalPecas += item.quantidade;
-        totalMetros += Number(item.metrosLineares);
-        totalVolume += Number(item.volume);
-        y -= 16;
+      for (const item of data.itens ?? []) {
+        if (!layout.temEspaco(16)) {
+          layout.novaPagina(true);
+          desenharTabelaPecas(true);
+        }
+        const valores = [
+          item.madeiraNome,
+          `${formatMeasurement(item.espessura)} × ${formatMeasurement(item.largura)} cm`,
+          `${formatMeasurement(item.comprimento)} m`,
+          String(item.quantidade),
+          `${formatMeasurement(item.metrosLineares)} m`,
+          `${formatMeasurement(item.volume)} m³`,
+        ];
+        let x = MARGEM_LATERAL;
+        valores.forEach((valor, indice) => {
+          desenharTextoAjustado(layout.page, indice === valores.length - 1 ? boldFont : font, valor, x, layout.y, colunas[indice] - 4, 7.5);
+          x += colunas[indice];
+        });
+        totalPecas += Number(item.quantidade ?? 0);
+        totalMetros += Number(item.metrosLineares ?? 0);
+        totalVolume += Number(item.volume ?? 0);
+        layout.mover(16);
       }
-      y -= 12;
-      page.drawLine({ start: { x: 48, y }, end: { x: width - 48, y }, thickness: 0.8, color: rgb(0.72, 0.67, 0.58) });
-      y -= 18;
-      page.drawText(`Total de peças: ${totalPecas}`, { x: 48, y, size: 10, font: bold });
-      page.drawText(`Metros lineares: ${formatMeasurement(String(totalMetros))} m`, { x: 210, y, size: 10, font: bold });
-      page.drawText(`Peças romaneadas: ${formatMeasurement(String(totalVolume))} m³`, { x: 385, y, size: 10, font: bold });
-      y -= 16;
-      page.drawText(`Aproveitamento manual: ${formatMeasurement(String(volumeAproveitamento))} m³`, { x: 48, y, size: 9, font, color: rgb(0.55, 0.33, 0.05) });
-      page.drawText(`Produção total: ${formatMeasurement(String(totalVolume + volumeAproveitamento))} m³`, { x: 290, y, size: 9, font: bold, color: rgb(0.12, 0.42, 0.25) });
+
+      layout.garantirEspaco(84);
+      layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.8, color: COR_LINHA });
+      layout.mover(17);
+      layout.page.drawText(`Total de peças: ${totalPecas}`, { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: boldFont });
+      layout.page.drawText(`Metros lineares: ${formatMeasurement(totalMetros)} m`, { x: 210, y: layout.y, size: 9.5, font: boldFont });
+      layout.page.drawText(`Peças romaneadas: ${formatMeasurement(totalVolume)} m³`, { x: 370, y: layout.y, size: 9.5, font: boldFont });
+      layout.mover(16);
+      layout.page.drawText(`Aproveitamento manual: ${formatMeasurement(volumeAproveitamento)} m³`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: rgb(0.55, 0.33, 0.05) });
+      layout.page.drawText(`Produção total: ${formatMeasurement(totalVolume + volumeAproveitamento)} m³`, { x: 290, y: layout.y, size: 8.5, font: boldFont, color: rgb(0.12, 0.42, 0.25) });
       if (aproveitamentosManuais.length) {
-        y -= 20;
-        page.drawText(`Aproveitamento por essência: ${aproveitamentosManuais.map((item: any) => `${item.madeiraNome} ${formatMeasurement(item.volume)} m³`).join(" · ")}`, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 });
+        layout.mover(18);
+        layout.escreverParagrafo(`Aproveitamento por essência: ${aproveitamentosManuais.map((item: any) => `${item.madeiraNome} ${formatMeasurement(item.volume)} m³`).join(" · ")}`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8, { color: COR_TEXTO_SECUNDARIO }, 11);
       }
+
+      const colunasResumo = [148, 70, 76, 80, 83];
+      const labelsResumo = ["Essência", "Toras", "Produção", "Aproveit.", "Perda"];
+      const desenharResumoEssencia = (continuacao = false) => {
+        layout.garantirEspaco(42);
+        layout.page.drawText(continuacao ? "APROVEITAMENTO POR ESSÊNCIA — CONTINUAÇÃO" : "APROVEITAMENTO POR ESSÊNCIA", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+        layout.mover(17);
+        let x = MARGEM_LATERAL;
+        labelsResumo.forEach((label, indice) => {
+          desenharTextoAjustado(layout.page, boldFont, label, x, layout.y, colunasResumo[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
+          x += colunasResumo[indice];
+        });
+        layout.mover(15);
+      };
       if (resumoPorEssencia.length) {
-        if (y < 170) { page = pdfDoc.addPage([595, 842]); y = height - 58; }
-        y -= 32;
-        page.drawText("APROVEITAMENTO POR ESSÊNCIA", { x: 48, y, size: 10, font: bold, color: rgb(0.22, 0.16, 0.08) });
-        y -= 16;
-        const colunasResumo = [150, 70, 78, 82, 80];
-        const titulosResumo = ["Essência", "Toras", "Produção", "Aproveit.", "Perda"];
-        let xResumo = 48;
-        titulosResumo.forEach((titulo, indice) => { page.drawText(titulo, { x: xResumo, y, size: 8, font: bold, color: rgb(0.42, 0.42, 0.42) }); xResumo += colunasResumo[indice]; });
-        y -= 14;
+        desenharResumoEssencia();
         for (const resumo of resumoPorEssencia) {
-          if (y < 78) { page = pdfDoc.addPage([595, 842]); y = height - 58; }
-          xResumo = 48;
-          page.drawText(resumo.essencia, { x: xResumo, y, size: 8, font, maxWidth: colunasResumo[0] - 6 }); xResumo += colunasResumo[0];
-          page.drawText(`${formatMeasurement(String(resumo.volumeToras))} m³`, { x: xResumo, y, size: 8, font }); xResumo += colunasResumo[1];
-          page.drawText(`${formatMeasurement(String(resumo.volumeProduzido))} m³`, { x: xResumo, y, size: 8, font }); xResumo += colunasResumo[2];
-          page.drawText(`${formatMeasurement(String(resumo.aproveitamento))}%`, { x: xResumo, y, size: 8, font: bold, color: rgb(0.12, 0.42, 0.25) }); xResumo += colunasResumo[3];
-          page.drawText(`${formatMeasurement(String(resumo.perdaVolume))} m³ (${formatMeasurement(String(resumo.perdaPercentual))}%)`, { x: xResumo, y, size: 8, font, color: rgb(0.66, 0.38, 0.04), maxWidth: colunasResumo[4] - 4 });
-          y -= 15;
+          if (!layout.temEspaco(16)) {
+            layout.novaPagina(true);
+            desenharResumoEssencia(true);
+          }
+          const valores = [
+            resumo.essencia,
+            `${formatMeasurement(resumo.volumeToras)} m³`,
+            `${formatMeasurement(resumo.volumeProduzido)} m³`,
+            `${formatMeasurement(resumo.aproveitamento)}%`,
+            `${formatMeasurement(resumo.perdaVolume)} m³ (${formatMeasurement(resumo.perdaPercentual)}%)`,
+          ];
+          let x = MARGEM_LATERAL;
+          valores.forEach((valor, indice) => {
+            const cor = indice === 3 ? rgb(0.12, 0.42, 0.25) : indice === 4 ? rgb(0.66, 0.38, 0.04) : undefined;
+            desenharTextoAjustado(layout.page, indice === 3 ? boldFont : font, valor, x, layout.y, colunasResumo[indice] - 4, 7.5, cor ? { color: cor } : {});
+            x += colunasResumo[indice];
+          });
+          layout.mover(16);
         }
       }
-      if (data.romaneio.observacoes) { y -= 30; page.drawText("Observações", { x: 48, y, size: 9, font: bold }); y -= 14; page.drawText(data.romaneio.observacoes, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 }); }
-      page.drawText("FK Madeiras — Romaneio gerado eletronicamente", { x: 48, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
-      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 155, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+
+      if (normalizarTexto(data.romaneio.observacoes)) {
+        layout.mover(12);
+        layout.garantirEspaco(26);
+        layout.page.drawText("OBSERVAÇÕES", { x: MARGEM_LATERAL, y: layout.y, size: 9, font: boldFont, color: COR_MARROM });
+        layout.mover(14);
+        layout.escreverParagrafo(data.romaneio.observacoes, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
+      }
+
       const bytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="romaneio-${data.romaneio.numero}.pdf"`);
@@ -431,76 +594,95 @@ export async function registerPdfRoutes(app: any) {
     try {
       if (!(await requirePdfAuthentication(req, res))) return;
       const id = parseInt(req.params.id);
-      if (isNaN(id)) return res.status(400).json({ error: "ID inválido" });
+      if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
       const data = await getRomaneioCargaComPlaquetas(id);
       if (!data) return res.status(404).json({ error: "Romaneio de carga não encontrado" });
+
       const volumeCarga = Number(data.carga.volumeTotal ?? 0);
       const freteTotal = Number(data.carga.frete ?? 0);
       const fretePorMetroCubico = Number(data.carga.fretePorMetroCubico ?? 0) || (volumeCarga ? freteTotal / volumeCarga : 0);
-
       const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
-      const bold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+      const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
       const logo = await loadCompanyLogo(pdfDoc);
-      const adicionarPagina = () => pdfDoc.addPage([595, 842]);
-      let page = adicionarPagina();
-      const { width, height } = page.getSize();
-      const logoDimensoes = logo?.scaleToFit(108, 50);
-      const desenharCabecalho = (continuacao = false) => {
-        if (logoDimensoes) page.drawImage(logo!, { x: 48, y: height - 50 - logoDimensoes.height, width: logoDimensoes.width, height: logoDimensoes.height });
-        const cabecalhoX = logoDimensoes ? 48 + logoDimensoes.width + 14 : 48;
-        page.drawText("FK MADEIRAS", { x: cabecalhoX, y: height - 55, size: 22, font: bold, color: rgb(0.22, 0.16, 0.08) });
-        page.drawText(continuacao ? `Romaneio de carga ${data.carga.numero} — continuação` : "Romaneio de carga", { x: cabecalhoX, y: height - 72, size: 10, font, color: rgb(0.4, 0.4, 0.4) });
-      };
-      desenharCabecalho();
-      let y = height - 125;
-      page.drawRectangle({ x: 48, y: y - 48, width: width - 96, height: 60, color: rgb(0.95, 0.93, 0.89) });
-      page.drawText(data.carga.numero, { x: 62, y: y - 6, size: 17, font: bold, color: rgb(0.22, 0.16, 0.08) });
-      page.drawText(`Recebimento em ${new Date(data.carga.dataCarga).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
-      page.drawText(`Volume: ${formatMeasurement(data.carga.volumeTotal)} m³`, { x: width - 190, y: y - 15, size: 10, font: bold, color: rgb(0.12, 0.42, 0.25) });
-      page.drawText(`Frete: R$ ${formatBRL(String(fretePorMetroCubico))}/m³`, { x: width - 190, y: y - 30, size: 8, font, color: rgb(0.35, 0.35, 0.35) });
-      y -= 78;
-      page.drawText(`Origem: ${data.carga.origem ?? "Não informada"}   •   Responsável: ${data.carga.responsavel ?? "Não informado"}`, { x: 48, y, size: 9, font, color: rgb(0.35, 0.35, 0.35) });
-      y -= 30;
+      const layout = criarLayoutPdf(pdfDoc, font, boldFont, logo, "Romaneio de carga");
+      const { width } = layout;
+
+      layout.garantirEspaco(80);
+      layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 50, width: width - (MARGEM_LATERAL * 2), height: 62, color: rgb(0.95, 0.93, 0.89) });
+      layout.page.drawText(normalizarTexto(data.carga.numero) || "ROMANEIO", { x: 62, y: layout.y - 7, size: 16, font: boldFont, color: COR_MARROM });
+      layout.page.drawText(`Recebimento em ${formatDate(data.carga.dataCarga, true)}`, { x: 62, y: layout.y - 27, size: 9, font, color: COR_TEXTO_SECUNDARIO });
+      const volumeTexto = `Volume: ${formatMeasurement(data.carga.volumeTotal)} m³`;
+      layout.page.drawText(volumeTexto, { x: width - 62 - larguraTexto(boldFont, volumeTexto, 9.5), y: layout.y - 15, size: 9.5, font: boldFont, color: rgb(0.12, 0.42, 0.25) });
+      const freteTexto = `Frete: R$ ${formatBRL(fretePorMetroCubico)}/m³`;
+      layout.page.drawText(freteTexto, { x: width - 62 - larguraTexto(font, freteTexto, 8), y: layout.y - 30, size: 8, font, color: COR_TEXTO_SECUNDARIO });
+      layout.mover(78);
+      layout.escreverParagrafo(`Origem: ${normalizarTexto(data.carga.origem) || "Não informada"}   •   Responsável: ${normalizarTexto(data.carga.responsavel) || "Não informado"}`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
+      layout.mover(12);
 
       const colunas = [76, 92, 56, 61, 65, 73, 74];
-      const titulos = ["Código", "Essência", "Diâm.", "Comp.", "Volume", "R$/m³", "Valor"];
-      const desenharCabecalhoTabela = () => {
-        let x = 48;
-        titulos.forEach((titulo, indice) => { page.drawText(titulo, { x, y, size: 8, font: bold, color: rgb(0.42, 0.42, 0.42) }); x += colunas[indice]; });
-        y -= 15;
-      };
-      desenharCabecalhoTabela();
-      for (const plaqueta of data.plaquetas) {
-        if (y < 80) {
-          page = adicionarPagina();
-          desenharCabecalho(true);
-          y = height - 108;
-          desenharCabecalhoTabela();
+      const labels = ["Código", "Essência", "Diâm.", "Comp.", "Volume", "R$/m³", "Valor"];
+      const desenharTabelaCarga = (continuacao = false) => {
+        layout.garantirEspaco(28);
+        if (continuacao) {
+          layout.page.drawText("PLAQUETAS — CONTINUAÇÃO", { x: MARGEM_LATERAL, y: layout.y, size: 9, font: boldFont, color: COR_MARROM });
+          layout.mover(15);
         }
-        let x = 48;
-        page.drawText(etiquetaPlaqueta(plaqueta), { x, y, size: 8, font }); x += colunas[0];
-        page.drawText(plaqueta.madeiraNome, { x, y, size: 8, font, maxWidth: colunas[1] - 5 }); x += colunas[1];
-        page.drawText(`${formatMeasurement(plaqueta.diametro ?? "0")} cm`, { x, y, size: 8, font }); x += colunas[2];
-        page.drawText(`${formatMeasurement(plaqueta.comprimento ?? "0")} m`, { x, y, size: 8, font }); x += colunas[3];
-        page.drawText(`${formatMeasurement(plaqueta.volumeInicial)} m³`, { x, y, size: 8, font }); x += colunas[4];
-        page.drawText(`R$ ${formatBRL(plaqueta.valorMetroCubico)}`, { x, y, size: 8, font }); x += colunas[5];
-        page.drawText(`R$ ${formatBRL(plaqueta.valorTotal)}`, { x, y, size: 8, font: bold });
-        y -= 16;
+        let x = MARGEM_LATERAL;
+        labels.forEach((label, indice) => {
+          desenharTextoAjustado(layout.page, boldFont, label, x, layout.y, colunas[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
+          x += colunas[indice];
+        });
+        layout.mover(15);
+      };
+      layout.garantirEspaco(28);
+      layout.page.drawText(`PLAQUETAS (${data.plaquetas.length})`, { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+      layout.mover(17);
+      desenharTabelaCarga();
+
+      for (const plaqueta of data.plaquetas ?? []) {
+        if (!layout.temEspaco(16)) {
+          layout.novaPagina(true);
+          desenharTabelaCarga(true);
+        }
+        // A identificação interna pode ser longa quando a tora chegou sem plaqueta física.
+        // Ela é truncada dentro da sua célula, preservando a leitura das demais medidas.
+        const valores = [
+          etiquetaPlaqueta(plaqueta),
+          plaqueta.madeiraNome,
+          `${formatMeasurement(plaqueta.diametro)} cm`,
+          `${formatMeasurement(plaqueta.comprimento)} m`,
+          `${formatMeasurement(plaqueta.volumeInicial)} m³`,
+          `R$ ${formatBRL(plaqueta.valorMetroCubico)}`,
+          `R$ ${formatBRL(plaqueta.valorTotal)}`,
+        ];
+        let x = MARGEM_LATERAL;
+        valores.forEach((valor, indice) => {
+          desenharTextoAjustado(layout.page, indice === valores.length - 1 ? boldFont : font, valor, x, layout.y, colunas[indice] - 4, 7.5);
+          x += colunas[indice];
+        });
+        layout.mover(16);
       }
-      if (y < 135) { page = adicionarPagina(); desenharCabecalho(true); y = height - 110; }
-      page.drawLine({ start: { x: 48, y }, end: { x: width - 48, y }, thickness: 0.8, color: rgb(0.72, 0.67, 0.58) });
-      y -= 22;
-      page.drawText(`Plaquetas: ${data.carga.totalPlaquetas}`, { x: 48, y, size: 10, font: bold });
-      page.drawText(`Toras: R$ ${formatBRL(data.carga.valorProdutos ?? "0")}`, { x: 190, y, size: 10, font: bold });
-      page.drawText(`Frete/m³: R$ ${formatBRL(String(fretePorMetroCubico))}`, { x: 350, y, size: 10, font: bold });
-      y -= 18;
-      page.drawText(`Frete total: R$ ${formatBRL(String(freteTotal))}`, { x: 350, y, size: 9, font });
-      y -= 23;
-      page.drawText(`VALOR TOTAL DA CARGA: R$ ${formatBRL(data.carga.valorTotal)}`, { x: 48, y, size: 14, font: bold, color: rgb(0.12, 0.42, 0.25) });
-      if (data.carga.observacoes) { y -= 30; page.drawText("Observações", { x: 48, y, size: 9, font: bold }); y -= 14; page.drawText(data.carga.observacoes, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 }); }
-      page.drawText("FK Madeiras — Romaneio de carga gerado eletronicamente", { x: 48, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
-      page.drawText(`Gerado em ${new Date().toLocaleDateString("pt-BR")}`, { x: width - 155, y: 38, size: 8, font, color: rgb(0.55, 0.55, 0.55) });
+
+      layout.garantirEspaco(96);
+      layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.8, color: COR_LINHA });
+      layout.mover(19);
+      layout.page.drawText(`Plaquetas: ${data.carga.totalPlaquetas}`, { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: boldFont });
+      layout.page.drawText(`Toras: R$ ${formatBRL(data.carga.valorProdutos)}`, { x: 190, y: layout.y, size: 9.5, font: boldFont });
+      layout.page.drawText(`Frete/m³: R$ ${formatBRL(fretePorMetroCubico)}`, { x: 350, y: layout.y, size: 9.5, font: boldFont });
+      layout.mover(18);
+      layout.page.drawText(`Frete total: R$ ${formatBRL(freteTotal)}`, { x: 350, y: layout.y, size: 8.5, font });
+      layout.mover(23);
+      layout.page.drawText(`VALOR TOTAL DA CARGA: R$ ${formatBRL(data.carga.valorTotal)}`, { x: MARGEM_LATERAL, y: layout.y, size: 13, font: boldFont, color: rgb(0.12, 0.42, 0.25) });
+
+      if (normalizarTexto(data.carga.observacoes)) {
+        layout.mover(22);
+        layout.garantirEspaco(26);
+        layout.page.drawText("OBSERVAÇÕES", { x: MARGEM_LATERAL, y: layout.y, size: 9, font: boldFont, color: COR_MARROM });
+        layout.mover(14);
+        layout.escreverParagrafo(data.carga.observacoes, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
+      }
+
       const bytes = await pdfDoc.save();
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `attachment; filename="romaneio-carga-${data.carga.numero}.pdf"`);

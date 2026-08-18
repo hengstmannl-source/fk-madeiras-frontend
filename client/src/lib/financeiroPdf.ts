@@ -74,34 +74,49 @@ export async function exportarListaFinanceiraPdf(input: {
   const documento = await PDFDocument.create();
   const fonte = await documento.embedFont(StandardFonts.Helvetica);
   const fonteNegrito = await documento.embedFont(StandardFonts.HelveticaBold);
-  let pagina = documento.addPage([842, 595]);
   const margem = 36;
-  const larguraUtil = pagina.getWidth() - (margem * 2);
+  const alturaPagina = 595;
+  const larguraPagina = 842;
+  const larguraUtil = larguraPagina - (margem * 2);
+  const limiteInferior = 58;
   const colunas = [250, 150, 105, 115, 100];
-  let y = pagina.getHeight() - 42;
+  let pagina: any;
+  let y = 0;
 
+  const larguraTexto = (texto: string, tamanho: number) => fonte.widthOfTextAtSize(texto, tamanho);
   const escrever = (texto: string, x: number, linhaY: number, tamanho = 8, negrito = false, cor = rgb(0.12, 0.16, 0.2)) => {
     pagina.drawText(texto, { x, y: linhaY, size: tamanho, font: negrito ? fonteNegrito : fonte, color: cor });
   };
   const truncar = (texto: string, limite: number, tamanho = 8) => {
-    if (fonte.widthOfTextAtSize(texto, tamanho) <= limite) return texto;
+    if (larguraTexto(texto, tamanho) <= limite) return texto;
     let resultado = texto;
-    while (resultado.length > 1 && fonte.widthOfTextAtSize(`${resultado}…`, tamanho) > limite) resultado = resultado.slice(0, -1);
+    while (resultado.length > 1 && larguraTexto(`${resultado}…`, tamanho) > limite) resultado = resultado.slice(0, -1);
     return `${resultado}…`;
   };
-  const novaPagina = () => {
-    pagina = documento.addPage([842, 595]);
-    y = pagina.getHeight() - 42;
+  const quebrar = (texto: string, limite: number, tamanho = 8) => {
+    const palavras = texto.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+    const linhas: string[] = [];
+    let linha = "";
+    for (const palavra of palavras) {
+      const candidata = linha ? `${linha} ${palavra}` : palavra;
+      if (linha && larguraTexto(candidata, tamanho) > limite) {
+        linhas.push(linha);
+        linha = palavra;
+      } else {
+        linha = candidata;
+      }
+    }
+    if (linha) linhas.push(linha);
+    return linhas;
   };
-
-  escrever("FK MADEIRAS", margem, y, 16, true, rgb(0.08, 0.28, 0.2));
-  escrever(relatorio.titulo, margem, y - 22, 11, true);
-  escrever(`Emitido em ${new Intl.DateTimeFormat("pt-BR").format(new Date())}`, margem, y - 36, 8, false, rgb(0.35, 0.4, 0.45));
-  y -= 56;
-  escrever(`Filtros: ${relatorio.filtros.join(" · ")}`, margem, y, 8, false, rgb(0.35, 0.4, 0.45));
-  y -= 18;
-
-  const desenharCabecalho = () => {
+  const desenharRodape = () => {
+    pagina.drawLine({ start: { x: margem, y: 42 }, end: { x: larguraPagina - margem, y: 42 }, thickness: 0.45, color: rgb(0.77, 0.8, 0.78) });
+    escrever("FK Madeiras — Relatório financeiro", margem, 27, 7.5, false, rgb(0.35, 0.4, 0.45));
+    const numero = `Página ${documento.getPageCount()}`;
+    escrever(numero, larguraPagina - margem - larguraTexto(numero, 7.5), 27, 7.5, false, rgb(0.35, 0.4, 0.45));
+  };
+  const desenharCabecalhoTabela = () => {
+    if (y - 25 < limiteInferior) novaPagina(false);
     pagina.drawRectangle({ x: margem, y: y - 14, width: larguraUtil, height: 19, color: rgb(0.08, 0.28, 0.2) });
     ["Descrição", "Contraparte", "Vencimento", "Valor", "Estado"].forEach((cabecalho, indice) => {
       const x = margem + colunas.slice(0, indice).reduce((soma, largura) => soma + largura, 0) + 5;
@@ -109,13 +124,34 @@ export async function exportarListaFinanceiraPdf(input: {
     });
     y -= 24;
   };
-  desenharCabecalho();
+  const novaPagina = (inicial: boolean) => {
+    pagina = documento.addPage([larguraPagina, alturaPagina]);
+    y = alturaPagina - 42;
+    escrever("FK MADEIRAS", margem, y, 16, true, rgb(0.08, 0.28, 0.2));
+    escrever(inicial ? relatorio.titulo : `${relatorio.titulo} — continuação`, margem, y - 22, 11, true);
+    if (inicial) {
+      escrever(`Emitido em ${new Intl.DateTimeFormat("pt-BR").format(new Date())}`, margem, y - 36, 8, false, rgb(0.35, 0.4, 0.45));
+      y -= 56;
+      const filtros = quebrar(`Filtros: ${relatorio.filtros.join(" · ")}`, larguraUtil, 8);
+      filtros.forEach((linha) => {
+        escrever(linha, margem, y, 8, false, rgb(0.35, 0.4, 0.45));
+        y -= 12;
+      });
+      y -= 6;
+    } else {
+      y -= 46;
+    }
+    desenharRodape();
+  };
+
+  novaPagina(true);
+  desenharCabecalhoTabela();
 
   for (let indice = 0; indice < relatorio.linhas.length; indice += 1) {
     const linha = relatorio.linhas[indice];
-    if (y < 58) {
-      novaPagina();
-      desenharCabecalho();
+    if (y - 17 < limiteInferior) {
+      novaPagina(false);
+      desenharCabecalhoTabela();
     }
     if (indice % 2 === 0) pagina.drawRectangle({ x: margem, y: y - 11, width: larguraUtil, height: 17, color: rgb(0.96, 0.97, 0.96) });
     const valores = [linha.descricao, linha.contraparte, linha.vencimento, linha.valor, linha.estado];
@@ -126,7 +162,7 @@ export async function exportarListaFinanceiraPdf(input: {
     y -= 17;
   }
 
-  if (y < 54) novaPagina();
+  if (y - 34 < limiteInferior) novaPagina(false);
   pagina.drawLine({ start: { x: margem, y: y - 2 }, end: { x: margem + larguraUtil, y: y - 2 }, thickness: 0.6, color: rgb(0.7, 0.74, 0.72) });
   escrever(`Total de ${relatorio.linhas.length} título(s)`, margem, y - 16, 9, true);
   const total = `Total: ${formatCurrency(relatorio.total)}`;

@@ -3,22 +3,30 @@ import * as db from "./db";
 import { registerPdfRoutes } from "./pdfRouter";
 import { sdk } from "./_core/sdk";
 
-const pdfCanvas = vi.hoisted(() => ({ drawText: vi.fn() }));
+const pdfCanvas = vi.hoisted(() => ({
+  drawText: vi.fn(),
+  pages: [] as any[],
+}));
 
 vi.mock("pdf-lib", async (importOriginal) => {
   const original = await importOriginal<typeof import("pdf-lib")>();
-  const page = () => ({
-    getSize: () => ({ width: 595, height: 842 }),
-    drawText: (texto: string) => pdfCanvas.drawText(texto),
-    drawRectangle: vi.fn(),
-    drawLine: vi.fn(),
-    drawImage: vi.fn(),
-  });
+  const page = () => {
+    const target = {
+      getSize: () => ({ width: 595, height: 842 }),
+      drawText: (texto: string, options: Record<string, unknown> = {}) => pdfCanvas.drawText(texto, options, target),
+      drawRectangle: vi.fn(),
+      drawLine: vi.fn(),
+      drawImage: vi.fn(),
+    };
+    pdfCanvas.pages.push(target);
+    return target;
+  };
   return {
     ...original,
     PDFDocument: {
       create: vi.fn(async () => ({
         addPage: vi.fn(page),
+        getPageCount: () => pdfCanvas.pages.length,
         embedFont: vi.fn(async () => ({})),
         save: vi.fn(async () => new Uint8Array([37, 80, 68, 70])),
       })),
@@ -37,6 +45,17 @@ function createResponse() {
   };
 }
 
+function textosDoPdf() {
+  return pdfCanvas.drawText.mock.calls.map(([texto]) => texto).join(" ");
+}
+
+function validarAreaSeguraDoRodape() {
+  const textosForaDaArea = pdfCanvas.drawText.mock.calls
+    .filter(([, options]) => typeof options?.y === "number" && options.y < 50 && options.y !== 35)
+    .map(([texto]) => texto);
+  expect(textosForaDaArea).toEqual([]);
+}
+
 describe("rotas de PDF protegidas", () => {
   const routes: Record<string, Handler> = {};
 
@@ -44,6 +63,7 @@ describe("rotas de PDF protegidas", () => {
     Object.keys(routes).forEach((key) => delete routes[key]);
     vi.restoreAllMocks();
     pdfCanvas.drawText.mockClear();
+    pdfCanvas.pages.splice(0, pdfCanvas.pages.length);
     await registerPdfRoutes({ get: (path: string, handler: Handler) => { routes[path] = handler; } });
   });
 
@@ -82,7 +102,7 @@ describe("rotas de PDF protegidas", () => {
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
     vi.spyOn(db, "getRomaneioCargaComPlaquetas").mockResolvedValue({
       carga: { numero: "CARGA-000007", dataCarga: new Date("2026-08-12T12:00:00.000Z"), origem: "Fazenda Norte", responsavel: "João", volumeTotal: "1.500000", totalPlaquetas: 2, valorProdutos: "1350.00", fretePorMetroCubico: "100.00", frete: "150.00", valorTotal: "1500.00", observacoes: "Carga conferida" },
-      plaquetas: [{ codigo: "TOR-0100", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeInicial: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70" }],
+      plaquetas: [{ id: 1, codigo: "TOR-0100", codigoFisico: "TOR-0100", situacaoIdentificacao: "identificada", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeInicial: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70" }],
     } as any);
     const res = createResponse();
 
@@ -91,12 +111,73 @@ describe("rotas de PDF protegidas", () => {
     expect(res.setHeader).toHaveBeenCalledWith("Content-Type", "application/pdf");
     expect(res.setHeader).toHaveBeenCalledWith("Content-Disposition", expect.stringContaining("romaneio-carga-CARGA-000007.pdf"));
     expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
-    const textos = pdfCanvas.drawText.mock.calls.map(([texto]) => texto).join(" ");
+    const textos = textosDoPdf();
     expect(textos).toContain("CARGA-000007");
     expect(textos).toContain("Toras: R$ 1.350,00");
     expect(textos).toContain("Frete/m³: R$ 100,00");
     expect(textos).toContain("Frete total: R$ 150,00");
     expect(textos).toContain("VALOR TOTAL DA CARGA: R$ 1.500,00");
+    validarAreaSeguraDoRodape();
+  });
+
+  it("mantém o código interno longo de plaqueta sem referência dentro da primeira coluna", async () => {
+    const codigoInterno = "SEM-PLQ-OPERADOR-IDENTIFICADOR-MUITO-LONGO-0001";
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "getRomaneioCargaComPlaquetas").mockResolvedValue({
+      carga: { numero: "CARGA-000008", dataCarga: new Date(), origem: "Origem", responsavel: "Responsável", volumeTotal: "1", totalPlaquetas: 1, valorProdutos: "900", fretePorMetroCubico: "0", frete: "0", valorTotal: "900", observacoes: null },
+      plaquetas: [{ id: 2, codigo: codigoInterno, codigoFisico: null, situacaoIdentificacao: "sem_plaqueta", madeiraNome: "Madeira de nome comprido", diametro: "30", comprimento: "5", volumeInicial: "0.353", valorMetroCubico: "900", valorTotal: "317.7" }],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/romaneio-carga/:id"]!({ params: { id: "8" } }, res);
+
+    const codigoDesenhado = pdfCanvas.drawText.mock.calls.map(([texto]) => texto).find((texto) => String(texto).startsWith("SEM-PLQ"));
+    expect(codigoDesenhado).toMatch(/…$/);
+    expect(String(codigoDesenhado).length).toBeLessThan(codigoInterno.length);
+    const chamadaEssencia = pdfCanvas.drawText.mock.calls.find(([texto]) => String(texto).startsWith("Madeira de") && String(texto).endsWith("…"));
+    expect(chamadaEssencia?.[1]).toEqual(expect.objectContaining({ x: 124 }));
+    validarAreaSeguraDoRodape();
+  });
+
+  it("repete cabeçalhos e cria páginas seguras para uma venda com muitos itens", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "listClientes").mockResolvedValue([{ id: 5, nome: "Cliente de Teste", contacto: null, email: null, morada: null, nif: null }] as any);
+    vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
+      orcamento: { id: 1, numero: "VEN-000001", clienteId: 5, createdAt: new Date(), estado: "aprovado", subtotal: "1000", desconto: "0", frete: "0", total: "1000", totalPecas: 100, totalMetroLinear: "500", totalVolume: "10", observacoes: "Observação extensa mas dentro da área de impressão." },
+      itens: Array.from({ length: 90 }, (_, indice) => ({ madeiraNome: `Cedrinho selecionado ${indice + 1}`, espessura: "23", largura: "50", comprimento: "3", quantidade: 1, precoM3: "900", precoLinear: "90", valorPeca: "12", valorTotal: "12" })),
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/orcamento/:id"]!({ params: { id: "1" } }, res);
+
+    expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
+    expect(pdfCanvas.pages.length).toBeGreaterThan(1);
+    expect(textosDoPdf()).toContain("ITENS DA VENDA — CONTINUAÇÃO");
+    validarAreaSeguraDoRodape();
+  });
+
+  it("pagina toras e peças no romaneio de produção sem desenhar linhas no rodapé", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "getRomaneioProducaoComItens").mockResolvedValue({
+      romaneio: { numero: "ROM-000021", dataProducao: new Date("2026-08-12T12:00:00.000Z"), aproveitamento: "60.00", volumeTora: "20.000000", volumeAproveitamento: "0.200000", incluirAproveitamentoNoRendimento: true, fita: "1", responsavel: "Adilson", observacoes: "Registro de produção com muitas linhas para verificar a paginação.", plaquetaCodigo: "PLA-001", madeiraTora: "Cedrinho", comprimentoTora: "5.00" },
+      toras: Array.from({ length: 30 }, (_, indice) => ({ codigo: `PLA-${String(indice + 1).padStart(3, "0")}`, madeiraNome: "Cedrinho de nome longo", diametro: "30.00", comprimento: "5.00", volume: "0.666667" })),
+      itens: Array.from({ length: 72 }, (_, indice) => ({ madeiraNome: "Cedrinho de nome longo", espessura: "2.30", largura: "10.00", comprimento: String((indice % 8) + 2), quantidade: 11, metrosLineares: "33.0000", volume: "0.100000" })),
+      aproveitamentos: [{ madeiraNome: "Cedrinho de nome longo", volume: "0.200000" }],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/romaneio/:id"]!({ params: { id: "21" } }, res);
+
+    const textos = textosDoPdf();
+    expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
+    expect(pdfCanvas.pages.length).toBeGreaterThan(2);
+    expect(textos).toContain("TORAS SERRADAS (30) — CONTINUAÇÃO");
+    expect(textos).toContain("PEÇAS PRODUZIDAS — CONTINUAÇÃO");
+    expect(textos).toContain("APROVEITAMENTO POR ESSÊNCIA");
+    validarAreaSeguraDoRodape();
   });
 
   it("gera PDF de produção com várias toras e aproveitamento consolidado", async () => {
@@ -115,7 +196,7 @@ describe("rotas de PDF protegidas", () => {
 
     await routes["/api/pdf/romaneio/:id"]!({ params: { id: "21" } }, res);
 
-    const textos = pdfCanvas.drawText.mock.calls.map(([texto]) => texto).join(" ");
+    const textos = textosDoPdf();
     expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
     expect(textos).toContain("TORAS SERRADAS (2)");
     expect(textos).toContain("Plaqueta: PLA-001");

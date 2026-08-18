@@ -420,3 +420,6 @@
 - [x] Permitir selecionar e baixar o estoque identificado de aproveitamento diretamente na tela de Vendas
 - [x] Preservar a rastreabilidade e o estorno do aproveitamento entregue em cada venda
 - [x] Permitir selecionar e incluir aproveitamento identificado diretamente no romaneio de itens da Venda
+- [x] Auditar todos os relatórios PDF gerados pelo ERP quanto a cortes, sobreposições e quebras de página
+- [x] Corrigir paginação, cabeçalhos de tabela e identificações longas nos PDFs de Vendas, Estoque, Produção, Serragem, Financeiro e Recibos
+- [x] Criar testes e renderizações de regressão para os cenários críticos de relatórios PDF
