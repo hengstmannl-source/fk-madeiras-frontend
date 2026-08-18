@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
 import {
   ArrowLeft, FileText, Download, Send, CheckCircle2, XCircle, Clock, Loader2,
   Mail, Phone, MapPin, Package,
@@ -38,6 +39,7 @@ export default function OrcamentoEdit() {
   const utils = trpc.useUtils();
   const [dataVencimento, setDataVencimento] = useState("");
   const [competencia, setCompetencia] = useState("");
+  const [pdfAberto, setPdfAberto] = useState(false);
 
   // Fetch cliente details
   const clientes = trpc.cliente.list.useQuery();
@@ -59,9 +61,7 @@ export default function OrcamentoEdit() {
     });
   };
 
-  const downloadPdf = () => {
-    window.open(`/api/pdf/orcamento/${orcamentoId}`, "_blank");
-  };
+  const visualizarPdf = () => setPdfAberto(true);
 
   const handleAtualizarDatas = () => {
     if (!dataVencimento || !competencia) {
@@ -106,7 +106,7 @@ export default function OrcamentoEdit() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={downloadPdf}><Download className="h-4 w-4 mr-2" />PDF</Button>
+          <Button variant="outline" onClick={visualizarPdf}><Download className="h-4 w-4 mr-2" />PDF</Button>
           {orcamento.estado !== "aprovado" && (
             <Button variant="outline" onClick={() => handleEstado("enviado")} className="text-blue-600 border-blue-200"><Send className="h-4 w-4 mr-2" />Enviar</Button>
           )}
@@ -117,6 +117,7 @@ export default function OrcamentoEdit() {
         </div>
       </div>
 
+      <PdfPreviewDialog open={pdfAberto} onOpenChange={setPdfAberto} url={pdfAberto ? `/api/pdf/orcamento/${orcamentoId}` : null} title={`Venda ${orcamento.numero ?? orcamentoId}`} description="Confira a venda antes de confirmar o download do PDF." />
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">
           {/* Cliente */}

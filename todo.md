@@ -423,3 +423,7 @@
 - [x] Auditar todos os relatórios PDF gerados pelo ERP quanto a cortes, sobreposições e quebras de página
 - [x] Corrigir paginação, cabeçalhos de tabela e identificações longas nos PDFs de Vendas, Estoque, Produção, Serragem, Financeiro e Recibos
 - [x] Criar testes e renderizações de regressão para os cenários críticos de relatórios PDF
+- [x] Criar pré-visualização de PDF no navegador com confirmação explícita antes do download
+- [x] Reestruturar o relatório de Produção Diária em grade compacta por bitola e comprimento
+- [x] Exibir por bitola o total de peças, volume e participação percentual na produção serrada
+- [x] Cobrir a pré-visualização e a grade de produção no PDF com testes automatizados e validação visual

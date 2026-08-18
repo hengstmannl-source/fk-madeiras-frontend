@@ -41,7 +41,7 @@ describe("exportação de relatório financeiro em PDF", () => {
   });
 
   it("repete o cabeçalho em páginas posteriores e preserva a área do rodapé", async () => {
-    await exportarListaFinanceiraPdf({
+    const resultado = await exportarListaFinanceiraPdf({
       titulo: "Contas a receber filtradas",
       filtros: {
         descricao: "Venda de madeira para cliente com descrição longa",
@@ -64,6 +64,8 @@ describe("exportação de relatório financeiro em PDF", () => {
     expect(pdfCanvas.texts.filter(({ texto }) => texto === "Descrição").length).toBeGreaterThan(1);
     const textosAbaixoDoConteudo = pdfCanvas.texts.filter(({ texto, options }) => typeof options.y === "number" && options.y < 42 && !texto.startsWith("FK Madeiras") && !texto.startsWith("Página"));
     expect(textosAbaixoDoConteudo).toEqual([]);
-    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:relatorio");
+    expect(resultado).toEqual(expect.objectContaining({ url: "blob:relatorio" }));
+    expect(resultado.nomeArquivo).toMatch(/^contas-a-receber-filtradas-\d{4}-\d{2}-\d{2}\.pdf$/);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
   });
 });

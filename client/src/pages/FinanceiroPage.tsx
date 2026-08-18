@@ -3,6 +3,7 @@ import { useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { formatCurrency, formatReceivableSaleReference } from "@/lib/utils";
 import { exportarListaFinanceiraPdf } from "@/lib/financeiroPdf";
+import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -157,6 +158,7 @@ export default function FinanceiroPage() {
   const [anexosLancamento, setAnexosLancamento] = useState<File[]>([]);
   const [codigoBoletoLancamento, setCodigoBoletoLancamento] = useState("");
   const [anexoParaVisualizar, setAnexoParaVisualizar] = useState<{ nomeArquivo: string; url: string; mimeType: string } | null>(null);
+  const [relatorioPdfParaVisualizar, setRelatorioPdfParaVisualizar] = useState<{ url: string; nomeArquivo: string } | null>(null);
 
   const copiarCodigoBoleto = async (codigo: string) => {
     try {
@@ -680,12 +682,13 @@ export default function FinanceiroPage() {
       return;
     }
     try {
-      await exportarListaFinanceiraPdf({
+      const relatorioPdf = await exportarListaFinanceiraPdf({
         titulo: tituloLancamentos.label,
         filtros: filtrosFinanceiros,
         titulos: titulosExibidos,
       });
-      toast.success("PDF financeiro gerado");
+      setRelatorioPdfParaVisualizar(relatorioPdf);
+      toast.success("PDF financeiro pronto para conferência");
     } catch (erro) {
       toast.error(erro instanceof Error ? erro.message : "Não foi possível gerar o PDF");
     }
@@ -699,6 +702,12 @@ export default function FinanceiroPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
+      <PdfPreviewDialog open={Boolean(relatorioPdfParaVisualizar)} onOpenChange={(aberto) => {
+        if (!aberto && relatorioPdfParaVisualizar) {
+          URL.revokeObjectURL(relatorioPdfParaVisualizar.url);
+          setRelatorioPdfParaVisualizar(null);
+        }
+      }} url={relatorioPdfParaVisualizar?.url ?? null} title="Relatório financeiro" description="Confira a relação filtrada antes de confirmar o download." downloadFileName={relatorioPdfParaVisualizar?.nomeArquivo} />
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-2"><div className="rounded-lg bg-primary/10 p-2"><WalletCards className="h-5 w-5 text-primary" /></div><h1 className="text-2xl font-bold tracking-tight text-foreground">Financeiro</h1></div>

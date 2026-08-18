@@ -173,9 +173,9 @@ describe("rotas de PDF protegidas", () => {
 
     const textos = textosDoPdf();
     expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
-    expect(pdfCanvas.pages.length).toBeGreaterThan(2);
+    expect(pdfCanvas.pages.length).toBeGreaterThan(1);
     expect(textos).toContain("TORAS SERRADAS (30) — CONTINUAÇÃO");
-    expect(textos).toContain("PEÇAS PRODUZIDAS — CONTINUAÇÃO");
+    expect(textos).toContain("GRADE DE PRODUÇÃO POR BITOLA");
     expect(textos).toContain("APROVEITAMENTO POR ESSÊNCIA");
     validarAreaSeguraDoRodape();
   });
@@ -189,7 +189,11 @@ describe("rotas de PDF protegidas", () => {
         { codigo: "PLA-001", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volume: "1.000000" },
         { codigo: "PLA-002", madeiraNome: "Cedrinho", diametro: "28.00", comprimento: "5.00", volume: "1.000000" },
       ],
-      itens: [{ madeiraNome: "Cedrinho", espessura: "2.00", largura: "10.00", comprimento: "3.00", quantidade: 116, metrosLineares: "348.0000", volume: "1.000000" }],
+      itens: [
+        { madeiraNome: "Cedrinho", espessura: "2.00", largura: "10.00", comprimento: "3.00", quantidade: 116, metrosLineares: "348.0000", volume: "1.000000" },
+        { madeiraNome: "Piqui", espessura: "2.00", largura: "10.00", comprimento: "4.00", quantidade: 50, metrosLineares: "200.0000", volume: "0.500000" },
+        { madeiraNome: "Garapeira", espessura: "3.00", largura: "5.00", comprimento: "3.00", quantidade: 30, metrosLineares: "90.0000", volume: "0.500000" },
+      ],
       aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.200000" }],
     } as any);
     const res = createResponse();
@@ -204,9 +208,14 @@ describe("rotas de PDF protegidas", () => {
     expect(textos).toContain("Volume de toras: 2 m³");
     expect(textos).toContain("Aproveitamento: 60%");
     expect(textos).toContain("Rendimento inclui aproveitamento");
-    expect(textos).toContain("Peças romaneadas: 1 m³");
+    expect(textos).toContain("GRADE DE PRODUÇÃO POR BITOLA");
+    expect(textos).toContain("Bitola / essência");
+    expect(textos).toContain("2 × 10 cm");
+    expect(textos).toContain("166");
+    expect(textos).toContain("75%");
+    expect(textos).toContain("Peças romaneadas: 2 m³");
     expect(textos).toContain("Aproveitamento manual: 0,2 m³");
-    expect(textos).toContain("Produção total: 1,2 m³");
+    expect(textos).toContain("Produção total: 2,2 m³");
   });
 
   it("rejeita recibo de venda ainda não quitada", async () => {

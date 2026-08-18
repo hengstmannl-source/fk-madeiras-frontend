@@ -64,7 +64,7 @@ export function prepararRelatorioFinanceiroPdf(input: {
   };
 }
 
-/** Gera e descarrega a relação exatamente como filtrada na tela financeira. */
+/** Gera a relação exatamente como filtrada na tela financeira para pré-visualização. */
 export async function exportarListaFinanceiraPdf(input: {
   titulo: string;
   filtros: FiltrosFinanceirosParaPdf;
@@ -171,11 +171,8 @@ export async function exportarListaFinanceiraPdf(input: {
   const bytes = await documento.save();
   const dadosPdf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const url = URL.createObjectURL(new Blob([dadosPdf], { type: "application/pdf" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${input.titulo.toLocaleLowerCase("pt-BR").replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/(^-|-$)/g, "")}-${new Date().toISOString().slice(0, 10)}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
+  return {
+    url,
+    nomeArquivo: `${input.titulo.toLocaleLowerCase("pt-BR").replaceAll(/[^a-z0-9]+/g, "-").replaceAll(/(^-|-$)/g, "")}-${new Date().toISOString().slice(0, 10)}.pdf`,
+  };
 }

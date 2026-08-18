@@ -229,7 +229,6 @@ describe("ProducaoPage", () => {
 
   it("adiciona a tora por digitação da plaqueta, permite conferir o resultado consolidado e disponibiliza o PDF", async () => {
     const user = userEvent.setup();
-    const abrirJanela = vi.spyOn(window, "open").mockImplementation(() => null);
     render(<ProducaoPage />);
 
     await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
@@ -244,8 +243,8 @@ describe("ProducaoPage", () => {
 
     await user.keyboard("{Escape}");
     await user.click(screen.getAllByRole("button", { name: "PDF" })[0]);
-    expect(abrirJanela).toHaveBeenCalledWith("/api/pdf/romaneio/14", "_blank", "noopener,noreferrer");
-    abrirJanela.mockRestore();
+    expect(screen.getByRole("heading", { name: "Romaneio de Produção ROM-000014" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
   });
 
   it("abre um romaneio confirmado para editar as peças e os dados operacionais", async () => {

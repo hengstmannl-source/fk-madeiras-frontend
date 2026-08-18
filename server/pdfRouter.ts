@@ -117,6 +117,15 @@ async function requirePdfAuthentication(req: any, res: any) {
   return false;
 }
 
+/** Mantém o documento inline para a pré-visualização e usa anexo somente após confirmação do utilizador. */
+function responderPdf(req: any, res: any, bytes: Uint8Array, nomeArquivo: string) {
+  const baixar = String(req.query?.download ?? "") === "1";
+  const nomeSeguro = nomeArquivo.replace(/[\\"\r\n]/g, "-");
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `${baixar ? "attachment" : "inline"}; filename="${nomeSeguro}"`);
+  res.send(Buffer.from(bytes));
+}
+
 async function loadCompanyLogo(pdfDoc: PDFDocument, empresaId = 1) {
   const configuracao = await getEmpresaConfiguracao(empresaId);
   if (!configuracao?.logoKey || !configuracao.logoMimeType) return undefined;
@@ -330,9 +339,7 @@ export async function registerPdfRoutes(app: any) {
       }
 
       const pdfBytes = await pdfDoc.save();
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="venda-${data.orcamento.numero ?? data.orcamento.id}.pdf"`);
-      res.send(Buffer.from(pdfBytes));
+      responderPdf(req, res, pdfBytes, `venda-${data.orcamento.numero ?? data.orcamento.id}.pdf`);
     } catch (err: any) {
       console.error("PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar PDF" });
@@ -397,9 +404,7 @@ export async function registerPdfRoutes(app: any) {
       layout.page.drawText("FK Madeiras", { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
 
       const pdfBytes = await pdfDoc.save();
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="recibo-${numeroVenda}.pdf"`);
-      res.send(Buffer.from(pdfBytes));
+      responderPdf(req, res, pdfBytes, `recibo-${numeroVenda}.pdf`);
     } catch (err: any) {
       console.error("Receipt PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar recibo de pagamento" });
@@ -480,51 +485,78 @@ export async function registerPdfRoutes(app: any) {
       layout.escreverParagrafo(`Volume de toras: ${formatMeasurement(data.romaneio.volumeTora)} m³   •   Fita/Linha: ${normalizarTexto(data.romaneio.fita) || "Não informada"}   •   Responsável: ${normalizarTexto(data.romaneio.responsavel) || "Não informado"}`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
       layout.mover(12);
 
-      const colunas = [135, 92, 54, 60, 75, 82];
-      const labels = ["Essência", "Dimensões", "Comp.", "Peças", "M. linear", "Volume"];
-      const desenharTabelaPecas = (continuacao = false) => {
-        layout.garantirEspaco(42);
-        layout.page.drawText(continuacao ? "PEÇAS PRODUZIDAS — CONTINUAÇÃO" : "PEÇAS PRODUZIDAS", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+      const totalPecas = (data.itens ?? []).reduce((total: number, item: any) => total + Number(item.quantidade ?? 0), 0);
+      const totalMetros = (data.itens ?? []).reduce((total: number, item: any) => total + Number(item.metrosLineares ?? 0), 0);
+      const totalVolume = (data.itens ?? []).reduce((total: number, item: any) => total + Number(item.volume ?? 0), 0);
+      const gruposPorBitola = Array.from((data.itens ?? []).reduce((grupos: Map<string, any>, item: any) => {
+        const essencia = normalizarTexto(item.madeiraNome) || "Não informada";
+        const espessura = Number(item.espessura ?? 0);
+        const largura = Number(item.largura ?? 0);
+        const chave = `${espessura}|${largura}`;
+        const grupo = grupos.get(chave) ?? { essencias: new Set<string>(), espessura, largura, comprimentos: new Map<number, number>(), totalPecas: 0, volume: 0 };
+        grupo.essencias.add(essencia);
+        const comprimento = Number(item.comprimento ?? 0);
+        grupo.comprimentos.set(comprimento, (grupo.comprimentos.get(comprimento) ?? 0) + Number(item.quantidade ?? 0));
+        grupo.totalPecas += Number(item.quantidade ?? 0);
+        grupo.volume += Number(item.volume ?? 0);
+        grupos.set(chave, grupo);
+        return grupos;
+      }, new Map<string, any>()).values()).sort((a: any, b: any) => a.espessura - b.espessura || a.largura - b.largura);
+      const comprimentosDaGrade = Array.from(new Set((data.itens ?? []).map((item: any) => Number(item.comprimento ?? 0)).filter(Number.isFinite))).sort((a, b) => a - b);
+      const maximoColunasGrade = 9;
+      const colunasGrade = comprimentosDaGrade.length > maximoColunasGrade
+        ? [...comprimentosDaGrade.slice(0, maximoColunasGrade - 1), -1]
+        : comprimentosDaGrade;
+      const larguraGrade = width - (MARGEM_LATERAL * 2);
+      const larguraResumoBitola = 147;
+      const larguraTotalBitola = 49;
+      const larguraPercentualBitola = 49;
+      const larguraComprimento = Math.max(30, (larguraGrade - larguraResumoBitola - larguraTotalBitola - larguraPercentualBitola) / Math.max(colunasGrade.length, 1));
+      const desenharGradePecas = (continuacao = false) => {
+        layout.garantirEspaco(50);
+        layout.page.drawText(continuacao ? "GRADE DE PRODUÇÃO POR BITOLA — CONTINUAÇÃO" : "GRADE DE PRODUÇÃO POR BITOLA", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
         layout.mover(17);
+        const cabecalhos = ["Bitola / essência", ...colunasGrade.map((comprimento) => comprimento < 0 ? "+" : `${formatMeasurement(comprimento)} m`), "Peças", "% prod."];
+        const larguras = [larguraResumoBitola, ...colunasGrade.map(() => larguraComprimento), larguraTotalBitola, larguraPercentualBitola];
         let x = MARGEM_LATERAL;
-        labels.forEach((label, indice) => {
-          desenharTextoAjustado(layout.page, boldFont, label, x, layout.y, colunas[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
-          x += colunas[indice];
+        cabecalhos.forEach((cabecalho, indice) => {
+          layout.page.drawRectangle({ x, y: layout.y - 11, width: larguras[indice], height: 16, color: rgb(0.91, 0.89, 0.84) });
+          desenharTextoAjustado(layout.page, boldFont, cabecalho, x + 3, layout.y - 1, larguras[indice] - 6, 7, { color: COR_MARROM });
+          x += larguras[indice];
         });
-        layout.mover(15);
+        layout.mover(19);
       };
-      desenharTabelaPecas();
-      let totalPecas = 0;
-      let totalMetros = 0;
-      let totalVolume = 0;
-      for (const item of data.itens ?? []) {
-        if (!layout.temEspaco(16)) {
+      desenharGradePecas();
+      gruposPorBitola.forEach((grupo: any, indice: number) => {
+        if (!layout.temEspaco(18)) {
           layout.novaPagina(true);
-          desenharTabelaPecas(true);
+          desenharGradePecas(true);
         }
+        const quantidadesVisiveis = colunasGrade.map((comprimento) => comprimento < 0
+          ? (Array.from(grupo.comprimentos.entries()) as Array<[number, number]>).filter(([valor]) => !comprimentosDaGrade.slice(0, maximoColunasGrade - 1).includes(valor)).reduce((total, [, quantidade]) => total + quantidade, 0)
+          : (grupo.comprimentos.get(comprimento) ?? 0));
+        const percentual = totalVolume > 0 ? (grupo.volume / totalVolume) * 100 : 0;
         const valores = [
-          item.madeiraNome,
-          `${formatMeasurement(item.espessura)} × ${formatMeasurement(item.largura)} cm`,
-          `${formatMeasurement(item.comprimento)} m`,
-          String(item.quantidade),
-          `${formatMeasurement(item.metrosLineares)} m`,
-          `${formatMeasurement(item.volume)} m³`,
+          `${formatMeasurement(grupo.espessura)} × ${formatMeasurement(grupo.largura)} cm\n${Array.from(grupo.essencias).join(" · ")}`,
+          ...quantidadesVisiveis.map((quantidade) => quantidade ? formatMeasurement(quantidade) : "—"),
+          formatMeasurement(grupo.totalPecas),
+          `${formatMeasurement(percentual)}%`,
         ];
+        const larguras = [larguraResumoBitola, ...colunasGrade.map(() => larguraComprimento), larguraTotalBitola, larguraPercentualBitola];
+        if (indice % 2 === 0) layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 12, width: larguraGrade, height: 17, color: rgb(0.975, 0.97, 0.94) });
         let x = MARGEM_LATERAL;
-        valores.forEach((valor, indice) => {
-          desenharTextoAjustado(layout.page, indice === valores.length - 1 ? boldFont : font, valor, x, layout.y, colunas[indice] - 4, 7.5);
-          x += colunas[indice];
+        valores.forEach((valor, posicao) => {
+          const primeiraLinha = String(valor).split("\n");
+          primeiraLinha.forEach((linha, linhaIndice) => desenharTextoAjustado(layout.page, posicao >= valores.length - 2 ? boldFont : font, linha, x + 3, layout.y - 1 - (linhaIndice * 8), larguras[posicao] - 6, linhaIndice === 0 && posicao === 0 ? 7.5 : 7, posicao === valores.length - 1 ? { color: rgb(0.12, 0.42, 0.25) } : {}));
+          x += larguras[posicao];
         });
-        totalPecas += Number(item.quantidade ?? 0);
-        totalMetros += Number(item.metrosLineares ?? 0);
-        totalVolume += Number(item.volume ?? 0);
-        layout.mover(16);
-      }
+        layout.mover(18);
+      });
 
-      layout.garantirEspaco(84);
+      layout.garantirEspaco(78);
       layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.8, color: COR_LINHA });
       layout.mover(17);
-      layout.page.drawText(`Total de peças: ${totalPecas}`, { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: boldFont });
+      layout.page.drawText(`Total de peças: ${formatMeasurement(totalPecas)}`, { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: boldFont });
       layout.page.drawText(`Metros lineares: ${formatMeasurement(totalMetros)} m`, { x: 210, y: layout.y, size: 9.5, font: boldFont });
       layout.page.drawText(`Peças romaneadas: ${formatMeasurement(totalVolume)} m³`, { x: 370, y: layout.y, size: 9.5, font: boldFont });
       layout.mover(16);
@@ -581,9 +613,7 @@ export async function registerPdfRoutes(app: any) {
       }
 
       const bytes = await pdfDoc.save();
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="romaneio-${data.romaneio.numero}.pdf"`);
-      res.send(Buffer.from(bytes));
+      responderPdf(req, res, bytes, `romaneio-${data.romaneio.numero}.pdf`);
     } catch (err) {
       console.error("Romaneio PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar PDF do romaneio" });
@@ -684,9 +714,7 @@ export async function registerPdfRoutes(app: any) {
       }
 
       const bytes = await pdfDoc.save();
-      res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename="romaneio-carga-${data.carga.numero}.pdf"`);
-      res.send(Buffer.from(bytes));
+      responderPdf(req, res, bytes, `romaneio-carga-${data.carga.numero}.pdf`);
     } catch (err) {
       console.error("Carga PDF generation error:", err);
       res.status(500).json({ error: "Erro ao gerar PDF do romaneio de carga" });

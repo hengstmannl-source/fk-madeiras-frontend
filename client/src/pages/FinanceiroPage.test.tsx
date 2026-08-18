@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   estornar: vi.fn(),
   importar: vi.fn(),
   invalidar: vi.fn(),
-  exportarPdf: vi.fn().mockResolvedValue(undefined),
+  exportarPdf: vi.fn().mockResolvedValue({ url: "blob:relatorio-financeiro", nomeArquivo: "contas-a-pagar-2026-08-18.pdf" }),
   fluxo: {
     saldoAbertura: 100,
     entradas: 50,
@@ -141,7 +141,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     state.importar.mockReset();
     state.invalidar.mockReset();
     state.exportarPdf.mockReset();
-    state.exportarPdf.mockResolvedValue(undefined);
+    state.exportarPdf.mockResolvedValue({ url: "blob:relatorio-financeiro", nomeArquivo: "contas-a-pagar-2026-08-18.pdf" });
     state.anexos = [{
       id: 91,
       tituloId: 13,
@@ -438,5 +438,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
         titulos: [expect.objectContaining({ descricao: "Carga de toras RC-001" })],
       }));
     });
+    expect(await screen.findByTitle("Pré-visualização: Relatório financeiro")).toHaveAttribute("src", "blob:relatorio-financeiro");
+    expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
   });
 });

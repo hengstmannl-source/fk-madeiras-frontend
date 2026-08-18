@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, Download, Eye, FileText, Loader2, LockKeyhole, PackageCheck, RotateCcw, Search, Truck } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
 
 const FORMAS_PAGAMENTO = [
   ["pix", "PIX"],
@@ -100,6 +101,7 @@ export default function OrcamentosAprovadosPage() {
   const [dataFinal, setDataFinal] = useState("");
   const [pagamentoAlvo, setPagamentoAlvo] = useState<AlvoVenda | null>(null);
   const [entregaAlvo, setEntregaAlvo] = useState<AlvoVenda | null>(null);
+  const [reciboParaVisualizar, setReciboParaVisualizar] = useState<AlvoVenda | null>(null);
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("pix");
   const [dataPagamento, setDataPagamento] = useState(dataLocalDeHoje);
   const [dataEntrega, setDataEntrega] = useState(dataLocalDeHoje);
@@ -245,7 +247,7 @@ export default function OrcamentosAprovadosPage() {
                     <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver venda" onClick={() => setLocation(`/orcamentos/${venda.id}`)}><Eye className="h-4 w-4" /></Button>
                     {!venda.pago && <Button size="sm" className="h-8 bg-emerald-700 text-white hover:bg-emerald-800" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo(alvo)}><CircleDollarSign className="mr-1.5 h-4 w-4" />Registrar pagamento</Button>}
                     {!venda.entregue && <Button size="sm" className="h-8 bg-sky-700 text-white hover:bg-sky-800" disabled={entregarFisicamente.isPending} onClick={() => abrirEntrega(alvo)}><Truck className="mr-1.5 h-4 w-4" />Registrar entrega</Button>}
-                    {venda.pago && <Button variant="outline" size="sm" className="h-8" onClick={() => window.open(`/api/pdf/recibo/${venda.id}`, "_blank", "noopener,noreferrer")}><Download className="mr-1.5 h-4 w-4" />Recibo</Button>}
+                    {venda.pago && <Button variant="outline" size="sm" className="h-8" onClick={() => setReciboParaVisualizar(alvo)}><Download className="mr-1.5 h-4 w-4" />Recibo</Button>}
                     {venda.pago && venda.entregue && <CheckCircle2 className="mx-1 h-4 w-4 text-emerald-600" aria-label="Venda concluída" />}
                   </div></TableCell>
                 </TableRow>;
@@ -268,6 +270,7 @@ export default function OrcamentosAprovadosPage() {
           <DialogFooter><Button variant="outline" onClick={() => setEntregaAlvo(null)} disabled={entregarFisicamente.isPending}>Voltar</Button><Button className="bg-sky-700 hover:bg-sky-800" onClick={confirmarEntrega} disabled={entregarFisicamente.isPending}>{entregarFisicamente.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar entrega e baixa</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+      <PdfPreviewDialog open={Boolean(reciboParaVisualizar)} onOpenChange={(aberto) => { if (!aberto) setReciboParaVisualizar(null); }} url={reciboParaVisualizar ? `/api/pdf/recibo/${reciboParaVisualizar.id}` : null} title={reciboParaVisualizar ? `Recibo da Venda ${reciboParaVisualizar.numero}` : "Recibo de Pagamento"} description="Confira o recibo antes de confirmar o download." />
     </div>
   );
 }
