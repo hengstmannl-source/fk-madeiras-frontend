@@ -330,6 +330,13 @@
       "when": 1787083553822,
       "tag": "0046_pink_morgan_stark",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1787084730142,
+      "tag": "0047_complex_kitty_pryde",
+      "breakpoints": true
     }
   ]
 }

@@ -294,11 +294,18 @@ export async function registerPdfRoutes(app: any) {
       desenharTabela();
 
       for (const item of data.itens ?? []) {
+        const tipoComercializacao = item.tipoComercializacao ?? "metro_cubico";
+        const componentesPacote = item.componentesPacote ?? [];
+        const composicaoPacote = componentesPacote.map((componente: any) => {
+          const medidas = componente.espessura && componente.largura && componente.comprimento
+            ? ` (${formatDimensionCm(componente.espessura)} × ${formatDimensionCm(componente.largura)} cm × ${formatMeasurement(componente.comprimento)} m)`
+            : "";
+          return `${componente.quantidadePorPacote} × ${normalizarTexto(componente.descricao) || normalizarTexto(componente.madeiraNome) || "item"}${medidas}`;
+        }).join(" · ");
         if (!layout.temEspaco(16)) {
           layout.novaPagina(true);
           desenharTabela(true);
         }
-        const tipoComercializacao = item.tipoComercializacao ?? "metro_cubico";
         const valores = [
           item.madeiraNome,
           tipoComercializacao === "metro_cubico" ? `${formatDimensionCm(item.espessura)} × ${formatDimensionCm(item.largura)} cm × ${formatMeasurement(item.comprimento)} m` : tipoComercializacao === "unidade" ? "Venda por unidade" : "Venda por pacote",
@@ -314,6 +321,10 @@ export async function registerPdfRoutes(app: any) {
           x += colunas[indice];
         });
         layout.mover(16);
+        if (tipoComercializacao === "pacote" && composicaoPacote) {
+          layout.escreverParagrafo(`Composição por pacote: ${composicaoPacote}`, MARGEM_LATERAL + 8, width - (MARGEM_LATERAL * 2) - 8, 7.4, { color: COR_TEXTO_SECUNDARIO }, 10);
+          layout.mover(4);
+        }
       }
 
       layout.garantirEspaco(126);

@@ -443,3 +443,12 @@
 - [x] Manter a baixa e a disponibilidade de estoque físico restritas aos itens vendidos por metragem, sem movimentar automaticamente itens por unidade ou pacote
 - [x] Atualizar romaneios, recibos e documentos de Venda para apresentar corretamente a unidade comercial
 - [x] Cobrir os três tipos de comercialização em cálculos, estoque e formulários com testes de regressão
+- [x] Permitir definir a composição exata de cada pacote comercial, com itens, medidas e quantidades incluídos
+- [x] Exibir a composição detalhada dos pacotes na Venda e no respectivo PDF, preservando o total comercial do pacote
+- [x] Criar cadastro de produtos comerciais recorrentes para reutilização rápida em Novas Vendas
+- [x] Permitir incluir um produto comercial cadastrado, inclusive pacotes, diretamente no romaneio de itens da Venda
+- [x] Permitir alterar o nome e demais informações operacionais de fornecedores existentes
+- [x] Permitir selecionar vários romaneios de entrada e atualizar em lote os dados de cabeçalho autorizados
+- [x] Permitir selecionar várias Produções Diárias e atualizar em lote seus dados de cabeçalho autorizados
+- [x] Permitir selecionar várias Serragens de Terceiros e atualizar em lote seus dados de cabeçalho autorizados
+- [x] Cobrir pacotes, produtos recorrentes, fornecedores e edições em lote com testes de regressão

@@ -105,7 +105,7 @@ vi.mock("@/lib/trpc", () => {
           },
         },
         categorias: { list: queryVazia, create: mutationInerte },
-        fornecedores: { list: queryVazia, create: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
+        fornecedores: { list: queryVazia, create: mutationInerte, update: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
         anexos: {
           upload: mutationInerte,
           atualizarBoleto: mutationInerte,

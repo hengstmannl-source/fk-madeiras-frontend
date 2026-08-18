@@ -24,6 +24,7 @@ export const rotulosTipoComercializacaoVenda: Record<TipoComercializacaoVenda, s
 export type ItemVendaCalculado = {
   madeiraId: number | null;
   bitolaId: number | null;
+  produtoComercialId: number | null;
   madeiraNome: string;
   bitolaDescricao: string;
   espessura: string;
@@ -36,6 +37,16 @@ export type ItemVendaCalculado = {
   precoLinear: string;
   valorPeca: string;
   valorTotal: string;
+  componentesPacote: ComponentePacoteVenda[];
+};
+
+export type ComponentePacoteVenda = {
+  descricao: string;
+  madeiraNome?: string | null;
+  espessura?: string | null;
+  largura?: string | null;
+  comprimento?: string | null;
+  quantidade: number;
 };
 
 export function criarLinhasComprimentoVazias(inicio = 1, quantidade = 4): LinhaComprimentoVenda[] {
@@ -90,6 +101,7 @@ export function criarItensVendaPorMedida(input: {
       return {
         madeiraId: input.madeiraId ?? null,
         bitolaId: null,
+        produtoComercialId: null,
         madeiraNome,
         bitolaDescricao: `${formatDimensionCm(espessura)}×${formatDimensionCm(largura)} cm`,
         espessura: String(espessura),
@@ -102,6 +114,7 @@ export function criarItensVendaPorMedida(input: {
         precoLinear: String(parseFloat(precoLinear.toFixed(4))),
         valorPeca: String(parseFloat(valorPeca.toFixed(2))),
         valorTotal: String(parseFloat(valorTotal.toFixed(2))),
+        componentesPacote: [],
       };
     }),
   };
@@ -117,6 +130,8 @@ export function criarItemVendaComercial(input: {
   tipoComercializacao: Exclude<TipoComercializacaoVenda, "metro_cubico">;
   quantidade: string;
   precoComercial: string;
+  produtoComercialId?: number | null;
+  componentesPacote?: ComponentePacoteVenda[];
 }): { item?: ItemVendaCalculado; erro?: string } {
   const madeiraNome = input.madeiraNome.trim();
   if (madeiraNome.length < 2) return { erro: "Informe o produto ou a madeira" };
@@ -124,12 +139,15 @@ export function criarItemVendaComercial(input: {
   if (!Number.isInteger(quantidade) || quantidade <= 0) return { erro: "Informe uma quantidade inteira positiva" };
   const precoComercial = parseDecimalInput(input.precoComercial);
   if (!Number.isFinite(precoComercial) || precoComercial < 0) return { erro: "Informe um preço comercial válido" };
+  const componentesPacote = input.componentesPacote ?? [];
+  if (input.tipoComercializacao === "pacote" && !componentesPacote.length) return { erro: "Informe a composição do pacote" };
 
   const unidade = input.tipoComercializacao === "unidade" ? "unidade" : "pacote";
   return {
     item: {
       madeiraId: null,
       bitolaId: null,
+      produtoComercialId: input.produtoComercialId ?? null,
       madeiraNome,
       bitolaDescricao: `Venda por ${unidade}`,
       espessura: "0",
@@ -137,11 +155,12 @@ export function criarItemVendaComercial(input: {
       comprimento: "0",
       quantidade,
       tipoComercializacao: input.tipoComercializacao,
-      unidadesPorComercializacao: 0,
+      unidadesPorComercializacao: input.tipoComercializacao === "pacote" ? componentesPacote.reduce((total, componente) => total + componente.quantidade, 0) : 1,
       precoM3: String(precoComercial),
       precoLinear: "0",
       valorPeca: String(parseFloat(precoComercial.toFixed(2))),
       valorTotal: String(parseFloat((precoComercial * quantidade).toFixed(2))),
+      componentesPacote,
     },
   };
 }

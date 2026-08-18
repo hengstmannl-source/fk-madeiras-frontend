@@ -65,15 +65,17 @@ describe("lançamento agrupado de itens de venda", () => {
       madeiraNome: "Portal",
       tipoComercializacao: "unidade",
       quantidade: 3,
-      unidadesPorComercializacao: 0,
+      unidadesPorComercializacao: 1,
       valorPeca: "180.5",
       valorTotal: "541.5",
     });
   });
 
   it("calcula o total de um pacote e rejeita quantidade comercial inválida", () => {
-    expect(criarItemVendaComercial({ madeiraNome: "Pacote de cedrinho", tipoComercializacao: "pacote", quantidade: "2", precoComercial: "750" }).item)
+    expect(criarItemVendaComercial({ madeiraNome: "Pacote de cedrinho", tipoComercializacao: "pacote", quantidade: "2", precoComercial: "750", componentesPacote: [{ descricao: "Tábua de cedrinho", quantidade: 6 }] }).item)
       .toMatchObject({ tipoComercializacao: "pacote", quantidade: 2, valorTotal: "1500" });
+    expect(criarItemVendaComercial({ madeiraNome: "Pacote sem composição", tipoComercializacao: "pacote", quantidade: "1", precoComercial: "750" }))
+      .toMatchObject({ erro: expect.stringMatching(/composição/i) });
     expect(criarItemVendaComercial({ madeiraNome: "Pacote", tipoComercializacao: "pacote", quantidade: "0", precoComercial: "750" }))
       .toMatchObject({ erro: expect.stringMatching(/quantidade/i) });
   });

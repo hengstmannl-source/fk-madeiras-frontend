@@ -143,6 +143,20 @@ const SerragemTerceirosSchema = z.object({
   itens: z.array(ItemRomaneioSchema).min(1, "Adicione ao menos uma peça serrada").max(500),
 }).refine((valor) => valor.dataVencimento >= valor.dataProducao, "O vencimento não pode ser anterior à data do serviço");
 
+const IdsRomaneioLoteSchema = z.array(z.number().int().positive()).min(1, "Selecione ao menos um romaneio").max(100).refine((ids) => new Set(ids).size === ids.length, "Não repita romaneios na seleção");
+const CabecalhoCargaLoteSchema = z.object({
+  ids: IdsRomaneioLoteSchema,
+  dataCarga: DataSchema.optional(), dataVencimento: DataSchema.optional(), origem: z.string().trim().max(200).nullable().optional(), fornecedorId: z.number().int().positive().nullable().optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(),
+}).refine((dados) => dados.dataCarga !== undefined || dados.dataVencimento !== undefined || dados.origem !== undefined || dados.fornecedorId !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
+const CabecalhoProducaoLoteSchema = z.object({
+  ids: IdsRomaneioLoteSchema,
+  dataProducao: DataSchema.optional(), fita: z.string().trim().max(100).nullable().optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(),
+}).refine((dados) => dados.dataProducao !== undefined || dados.fita !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
+const CabecalhoSerragemLoteSchema = z.object({
+  ids: IdsRomaneioLoteSchema,
+  clienteId: z.number().int().positive().optional(), dataProducao: DataSchema.optional(), dataVencimento: DataSchema.optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(),
+}).refine((dados) => dados.clienteId !== undefined || dados.dataProducao !== undefined || dados.dataVencimento !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
+
 const RetiradaSerragemTerceirosSchema = z.object({
   serragemId: z.number().int().positive(),
   dataRetirada: DataSchema,
@@ -179,6 +193,12 @@ export const producaoRouter = router({
       dataCarga: dataLocal(input.dataCarga),
       dataVencimento: dataLocal(input.dataVencimento ?? input.dataCarga),
     })),
+    atualizarCabecalhoEmLote: protectedProcedure.input(CabecalhoCargaLoteSchema).mutation(({ ctx, input }) => db.atualizarCabecalhoCargasEmLote({
+      ...input,
+      dataCarga: input.dataCarga ? dataLocal(input.dataCarga) : undefined,
+      dataVencimento: input.dataVencimento ? dataLocal(input.dataVencimento) : undefined,
+      empresaId: ctx.empresaAtiva!.empresa.id,
+    })),
     excluir: adminProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.excluirRomaneioCargaToras(input.id, ctx.user.id)),
   }),
   plaquetas: router({
@@ -212,6 +232,11 @@ export const producaoRouter = router({
       atualizadoPor: ctx.user.id,
       empresaId: ctx.empresaAtiva!.empresa.id,
     })),
+    atualizarCabecalhoEmLote: protectedProcedure.input(CabecalhoProducaoLoteSchema).mutation(({ ctx, input }) => db.atualizarCabecalhoProducaoEmLote({
+      ...input,
+      dataProducao: input.dataProducao ? dataLocal(input.dataProducao) : undefined,
+      empresaId: ctx.empresaAtiva!.empresa.id,
+    })),
     excluir: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => db.excluirRomaneioProducao(input.id, ctx.empresaAtiva!.empresa.id)),
   }),
   serragemTerceiros: router({
@@ -233,6 +258,12 @@ export const producaoRouter = router({
       dataProducao: dataLocal(input.dataProducao),
       dataVencimento: dataLocal(input.dataVencimento),
       atualizadoPor: ctx.user.id,
+      empresaId: ctx.empresaAtiva!.empresa.id,
+    })),
+    atualizarCabecalhoEmLote: protectedProcedure.input(CabecalhoSerragemLoteSchema).mutation(({ ctx, input }) => db.atualizarCabecalhoSerragensEmLote({
+      ...input,
+      dataProducao: input.dataProducao ? dataLocal(input.dataProducao) : undefined,
+      dataVencimento: input.dataVencimento ? dataLocal(input.dataVencimento) : undefined,
       empresaId: ctx.empresaAtiva!.empresa.id,
     })),
     registrarRetirada: protectedProcedure.input(RetiradaSerragemTerceirosSchema).mutation(({ ctx, input }) => db.registrarRetiradaSerragemTerceiros({

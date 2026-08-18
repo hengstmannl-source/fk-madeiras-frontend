@@ -204,6 +204,7 @@ export const itensOrcamento = mysqlTable("itensOrcamento", {
   largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),
   comprimento: decimal("comprimento", { precision: 8, scale: 2 }).notNull(),
   quantidade: int("quantidade").notNull(),
+  produtoComercialId: int("produtoComercialId"),
   /** Forma como o item foi negociado, sem alterar a medida física usada pelo estoque quando ela existir. */
   tipoComercializacao: mysqlEnum("tipoComercializacao", ["metro_cubico", "unidade", "pacote"]).notNull().default("metro_cubico"),
   /** Quantidade de peças físicas representadas por uma unidade comercial; zero indica item sem baixa no estoque serrado. */
@@ -216,6 +217,57 @@ export const itensOrcamento = mysqlTable("itensOrcamento", {
 
 export type ItemOrcamento = typeof itensOrcamento.$inferSelect;
 export type InsertItemOrcamento = typeof itensOrcamento.$inferInsert;
+
+/** Componentes físicos que formam um pacote negociado em uma Venda. */
+export const componentesPacoteOrcamento = mysqlTable("componentesPacoteOrcamento", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  itemOrcamentoId: int("itemOrcamentoId").notNull(),
+  descricao: varchar("descricao", { length: 240 }).notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }),
+  espessura: decimal("espessura", { precision: 8, scale: 2 }),
+  largura: decimal("largura", { precision: 8, scale: 2 }),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }),
+  quantidadePorPacote: int("quantidadePorPacote").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ComponentePacoteOrcamento = typeof componentesPacoteOrcamento.$inferSelect;
+export type InsertComponentePacoteOrcamento = typeof componentesPacoteOrcamento.$inferInsert;
+
+/** Catálogo reutilizável de produtos vendidos por unidade ou pacote. */
+export const produtosComerciais = mysqlTable("produtosComerciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  nome: varchar("nome", { length: 200 }).notNull(),
+  tipoComercializacao: mysqlEnum("tipoComercializacao", ["unidade", "pacote"]).notNull(),
+  precoPadrao: decimal("precoPadrao", { precision: 12, scale: 2 }).notNull(),
+  ativo: boolean("ativo").notNull().default(true),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => [index("produtosComerciais_empresa_ativo_idx").on(table.empresaId, table.ativo)]);
+
+export type ProdutoComercial = typeof produtosComerciais.$inferSelect;
+export type InsertProdutoComercial = typeof produtosComerciais.$inferInsert;
+
+/** Itens que compõem um produto comercial do tipo pacote. */
+export const componentesProdutoComercial = mysqlTable("componentesProdutoComercial", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  produtoComercialId: int("produtoComercialId").notNull(),
+  descricao: varchar("descricao", { length: 240 }).notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }),
+  espessura: decimal("espessura", { precision: 8, scale: 2 }),
+  largura: decimal("largura", { precision: 8, scale: 2 }),
+  comprimento: decimal("comprimento", { precision: 8, scale: 2 }),
+  quantidade: int("quantidade").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type ComponenteProdutoComercial = typeof componentesProdutoComercial.$inferSelect;
+export type InsertComponenteProdutoComercial = typeof componentesProdutoComercial.$inferInsert;
 
 /** Aproveitamentos volumétricos reservados no romaneio comercial antes da baixa física na entrega. */
 export const aproveitamentosOrcamento = mysqlTable("aproveitamentosOrcamento", {

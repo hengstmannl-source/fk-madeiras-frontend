@@ -5,6 +5,7 @@ import * as db from "../db";
 export const ItemSchema = z.object({
   madeiraId: z.number().nullable().optional(),
   bitolaId: z.number().nullable().optional(),
+  produtoComercialId: z.number().int().positive().nullable().optional(),
   madeiraNome: z.string(),
   bitolaDescricao: z.string(),
   espessura: z.string(),
@@ -17,7 +18,19 @@ export const ItemSchema = z.object({
   precoLinear: z.string(),
   valorPeca: z.string(),
   valorTotal: z.string(),
+  componentesPacote: z.array(z.object({
+    descricao: z.string().trim().min(2, "Informe a descrição da peça").max(240),
+    madeiraNome: z.string().trim().max(200).nullable().optional(),
+    espessura: z.string().trim().max(30).nullable().optional(),
+    largura: z.string().trim().max(30).nullable().optional(),
+    comprimento: z.string().trim().max(30).nullable().optional(),
+    quantidade: z.number().int().positive("Informe a quantidade da peça"),
+  })).max(60).default([]),
   orcamentoId: z.number().optional(),
+}).superRefine((item, ctx) => {
+  if (item.tipoComercializacao === "pacote" && item.componentesPacote.length === 0) {
+    ctx.addIssue({ code: "custom", path: ["componentesPacote"], message: "Informe ao menos uma peça que compõe o pacote" });
+  }
 });
 
 export const FormaPagamentoSchema = z.enum([
@@ -60,6 +73,25 @@ export const RegistroEntregaFisicaSchema = z.object({
 
 const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
 const LinhaModeloSchema = z.object({ comprimento: z.string().trim().min(1), quantidade: z.string().trim().min(1) });
+const ComponenteProdutoSchema = z.object({
+  descricao: z.string().trim().min(2, "Informe a descrição da peça").max(240),
+  madeiraNome: z.string().trim().max(200).nullable().optional(),
+  espessura: z.string().trim().max(30).nullable().optional(),
+  largura: z.string().trim().max(30).nullable().optional(),
+  comprimento: z.string().trim().max(30).nullable().optional(),
+  quantidade: z.number().int().positive("Informe a quantidade da peça"),
+});
+const ProdutoComercialSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome do produto").max(200),
+  tipoComercializacao: z.enum(["unidade", "pacote"]),
+  precoPadrao: z.union([z.string(), z.number()]).transform((valor) => String(valor).replace(",", ".")).refine((valor) => Number(valor) >= 0, "Informe um preço válido"),
+  observacoes: z.string().trim().max(4000).nullable().optional(),
+  componentes: z.array(ComponenteProdutoSchema).max(60).default([]),
+}).superRefine((produto, ctx) => {
+  if (produto.tipoComercializacao === "pacote" && produto.componentes.length === 0) {
+    ctx.addIssue({ code: "custom", path: ["componentes"], message: "Informe ao menos uma peça que compõe o pacote" });
+  }
+});
 
 function parseDataFinanceira(data: string) {
   const [ano, mes, dia] = data.split("-").map(Number);
@@ -73,6 +105,32 @@ async function garantirVendaDaEmpresa(id: number, empresaId: number) {
 }
 
 export const orcamentoRouter = router({
+  produtosComerciais: router({
+    list: protectedProcedure.input(z.object({ incluirInativos: z.boolean().default(false) }).optional())
+      .query(({ ctx, input }) => db.listProdutosComerciais(ctx.empresaAtiva!.empresa.id, input?.incluirInativos ?? false)),
+    create: protectedProcedure.input(ProdutoComercialSchema).mutation(({ ctx, input }) => (
+      db.createProdutoComercial({
+        empresaId: ctx.empresaAtiva!.empresa.id,
+        nome: input.nome,
+        tipoComercializacao: input.tipoComercializacao,
+        precoPadrao: input.precoPadrao,
+        observacoes: input.observacoes ?? null,
+        ativo: true,
+        criadoPor: ctx.user.id,
+      }, input.componentes)
+    )),
+    update: protectedProcedure.input(ProdutoComercialSchema.partial().extend({
+      id: z.number().int().positive(),
+      componentes: z.array(ComponenteProdutoSchema).max(60).optional(),
+    })).mutation(({ ctx, input }) => {
+      const { id, componentes, ...dados } = input;
+      return db.updateProdutoComercial(id, dados, componentes, ctx.empresaAtiva!.empresa.id);
+    }),
+    archive: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => (
+      db.updateProdutoComercial(input.id, { ativo: false }, undefined, ctx.empresaAtiva!.empresa.id)
+    )),
+  }),
+
   list: protectedProcedure
     .input(z.object({
       estado: z.string().optional(),
@@ -113,6 +171,12 @@ export const orcamentoRouter = router({
     .mutation(async ({ ctx, input }) => {
       const now = new Date();
       const estadoInicial = input.estado === "aprovado" ? "rascunho" : input.estado;
+      const itensComComposicaoNormalizada = input.itens.map((item) => ({
+        ...item,
+        unidadesPorComercializacao: item.tipoComercializacao === "pacote"
+          ? item.componentesPacote.reduce((total, componente) => total + componente.quantidade, 0)
+          : item.tipoComercializacao === "unidade" ? 1 : 0,
+      }));
       const orcamento = await db.createOrcamento(
         {
           numero: null,
@@ -132,7 +196,7 @@ export const orcamentoRouter = router({
           dataVencimento: input.dataVencimento ? parseDataFinanceira(input.dataVencimento) : now,
           competencia: input.competencia ? parseDataFinanceira(input.competencia) : now,
         },
-        input.itens,
+        itensComComposicaoNormalizada,
         input.aproveitamentos,
       );
       if (input.estado === "aprovado") {

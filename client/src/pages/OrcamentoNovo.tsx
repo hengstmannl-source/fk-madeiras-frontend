@@ -17,7 +17,7 @@ import {
   formatCurrency,
   formatMeasurement,
 } from "@/lib/utils";
-import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias, rotulosTipoComercializacaoVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
+import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias, rotulosTipoComercializacaoVenda, type ComponentePacoteVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
 import { disponibilidadeEstoqueVenda, prepararModeloMedida } from "@/lib/vendaMedidas";
 import {
   Dialog,
@@ -29,6 +29,7 @@ import {
 interface ItemOrcamento {
   madeiraId: number | null;
   bitolaId: number | null;
+  produtoComercialId: number | null;
   madeiraNome: string;
   bitolaDescricao: string;
   espessura: string;
@@ -41,6 +42,7 @@ interface ItemOrcamento {
   precoLinear: string;
   valorPeca: string;
   valorTotal: string;
+  componentesPacote: ComponentePacoteVenda[];
 }
 
 interface AproveitamentoVenda {
@@ -76,6 +78,12 @@ export default function OrcamentoNovo() {
   const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(() => criarLinhasComprimentoVazias());
   const [tipoComercializacao, setTipoComercializacao] = useState<TipoComercializacaoVenda>("metro_cubico");
   const [itemComercial, setItemComercial] = useState({ madeiraNome: "", quantidade: "", precoComercial: "" });
+  const [produtoComercialId, setProdutoComercialId] = useState("");
+  const [componentesPacote, setComponentesPacote] = useState<ComponentePacoteVenda[]>([]);
+  const produtosComerciais = trpc.orcamento.produtosComerciais.list.useQuery();
+  const criarProdutoComercial = trpc.orcamento.produtosComerciais.create.useMutation();
+  const [produtoComercialOpen, setProdutoComercialOpen] = useState(false);
+  const [produtoForm, setProdutoForm] = useState({ nome: "", tipoComercializacao: "unidade" as "unidade" | "pacote", precoPadrao: "", observacoes: "", componentes: [] as ComponentePacoteVenda[] });
   const madeiras = trpc.madeira.list.useQuery();
   const estoqueSerrado = trpc.producao.estoque.resumo.useQuery();
   const createMadeira = trpc.madeira.create.useMutation();
@@ -149,11 +157,40 @@ export default function OrcamentoNovo() {
 
   const adicionarItemComercial = () => {
     if (tipoComercializacao === "metro_cubico") return;
-    const resultado = criarItemVendaComercial({ ...itemComercial, tipoComercializacao });
+    const resultado = criarItemVendaComercial({ ...itemComercial, tipoComercializacao, produtoComercialId: produtoComercialId ? Number(produtoComercialId) : null, componentesPacote: tipoComercializacao === "pacote" ? componentesPacote : [] });
     if (resultado.erro || !resultado.item) { toast.error(resultado.erro ?? "Não foi possível adicionar o item"); return; }
     setItens((itensAtuais) => [...itensAtuais, resultado.item!]);
     setItemComercial({ madeiraNome: "", quantidade: "", precoComercial: "" });
+    setProdutoComercialId("");
+    setComponentesPacote([]);
     toast.success(`${tipoComercializacao === "unidade" ? "Unidade" : "Pacote"} adicionado à venda`);
+  };
+
+  const adicionarComponentePacote = () => setComponentesPacote((atual) => [...atual, { descricao: "", madeiraNome: "", espessura: "", largura: "", comprimento: "", quantidade: 1 }]);
+  const atualizarComponentePacote = (indice: number, campo: keyof ComponentePacoteVenda, valor: string | number) => setComponentesPacote((atual) => atual.map((componente, index) => index === indice ? { ...componente, [campo]: valor } : componente));
+  const removerComponentePacote = (indice: number) => setComponentesPacote((atual) => atual.filter((_, index) => index !== indice));
+  const selecionarProdutoComercial = (id: string) => {
+    setProdutoComercialId(id);
+    const produto = produtosComerciais.data?.find((item) => item.id === Number(id));
+    if (!produto) return;
+    setTipoComercializacao(produto.tipoComercializacao as TipoComercializacaoVenda);
+    setItemComercial((item) => ({ ...item, madeiraNome: produto.nome, precoComercial: String(produto.precoPadrao) }));
+    setComponentesPacote(produto.componentes.map((componente) => ({ descricao: componente.descricao, madeiraNome: componente.madeiraNome, espessura: componente.espessura, largura: componente.largura, comprimento: componente.comprimento, quantidade: componente.quantidade })));
+  };
+  const adicionarComponenteProduto = () => setProdutoForm((form) => ({ ...form, componentes: [...form.componentes, { descricao: "", madeiraNome: "", espessura: "", largura: "", comprimento: "", quantidade: 1 }] }));
+  const atualizarComponenteProduto = (indice: number, campo: keyof ComponentePacoteVenda, valor: string | number) => setProdutoForm((form) => ({ ...form, componentes: form.componentes.map((componente, index) => index === indice ? { ...componente, [campo]: valor } : componente) }));
+  const removerComponenteProduto = (indice: number) => setProdutoForm((form) => ({ ...form, componentes: form.componentes.filter((_, index) => index !== indice) }));
+  const salvarProdutoComercial = () => {
+    criarProdutoComercial.mutate({ ...produtoForm, observacoes: produtoForm.observacoes || null }, {
+      onSuccess: async (produto) => {
+        await utils.orcamento.produtosComerciais.list.invalidate();
+        setProdutoComercialOpen(false);
+        setProdutoForm({ nome: "", tipoComercializacao: "unidade", precoPadrao: "", observacoes: "", componentes: [] });
+        selecionarProdutoComercial(String(produto.id));
+        toast.success("Produto comercial cadastrado e selecionado");
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
   };
 
   const removeItem = (index: number) => setItens(itens.filter((_, i) => i !== index));
@@ -391,11 +428,16 @@ export default function OrcamentoNovo() {
                   <Plus className="h-4 w-4 mr-2" />Adicionar comprimentos à venda
                 </Button>
               </div> : <div className="space-y-4 rounded-lg border border-primary/15 bg-primary/[0.03] p-4">
+                <div className="flex flex-col gap-3 rounded-md border border-dashed border-primary/30 bg-background/70 p-3 sm:flex-row sm:items-end">
+                  <div className="min-w-0 flex-1 space-y-2"><Label>Produto comercial recorrente</Label><select aria-label="Selecionar produto comercial recorrente" value={produtoComercialId} onChange={(e) => selecionarProdutoComercial(e.target.value)} className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"><option value="">Preencher manualmente</option>{(produtosComerciais.data ?? []).map((produto) => <option key={produto.id} value={produto.id}>{produto.nome} · {produto.tipoComercializacao === "pacote" ? "Pacote" : "Unidade"} · {formatCurrency(produto.precoPadrao)}</option>)}</select></div>
+                  <Button type="button" variant="outline" onClick={() => setProdutoComercialOpen(true)}><Plus className="mr-1.5 h-4 w-4" />Cadastrar produto</Button>
+                </div>
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                   <div className="space-y-2"><Label>{tipoComercializacao === "unidade" ? "Produto / item *" : "Madeira ou produto do pacote *"}</Label><Input value={itemComercial.madeiraNome} onChange={(e) => setItemComercial((item) => ({ ...item, madeiraNome: e.target.value }))} placeholder={tipoComercializacao === "unidade" ? "Ex.: Portal" : "Ex.: Pacote de cedrinho"} className="bg-white" /></div>
                   <div className="space-y-2"><Label>Quantidade de {tipoComercializacao === "unidade" ? "unidades" : "pacotes"} *</Label><Input value={itemComercial.quantidade} onChange={(e) => setItemComercial((item) => ({ ...item, quantidade: e.target.value }))} type="number" min="1" step="1" placeholder="1" className="bg-white" /></div>
                   <div className="space-y-2"><Label>Preço por {tipoComercializacao === "unidade" ? "unidade" : "pacote"} (R$) *</Label><Input value={itemComercial.precoComercial} onChange={(e) => setItemComercial((item) => ({ ...item, precoComercial: e.target.value }))} inputMode="decimal" placeholder="0,00" className="bg-white" /></div>
                 </div>
+                {tipoComercializacao === "pacote" && <div className="space-y-3 rounded-md border border-primary/20 bg-white/70 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-medium">Composição do pacote</p><p className="text-xs text-muted-foreground">Detalhe cada peça incluída em um pacote. Esta composição ficará vinculada à Venda.</p></div><Button type="button" size="sm" variant="outline" onClick={adicionarComponentePacote}><Plus className="mr-1 h-3.5 w-3.5" />Peça</Button></div>{componentesPacote.length === 0 ? <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">Adicione as peças que formam este pacote.</p> : <div className="space-y-2">{componentesPacote.map((componente, indice) => <div key={indice} className="grid grid-cols-1 gap-2 rounded-md border border-border/60 p-2 sm:grid-cols-[1.5fr_.9fr_.7fr_.7fr_.7fr_auto]"><Input aria-label={`Descrição da peça ${indice + 1}`} value={componente.descricao} onChange={(e) => atualizarComponentePacote(indice, "descricao", e.target.value)} placeholder="Descrição da peça" className="h-9 bg-white" /><Input aria-label={`Madeira da peça ${indice + 1}`} value={componente.madeiraNome ?? ""} onChange={(e) => atualizarComponentePacote(indice, "madeiraNome", e.target.value)} placeholder="Madeira" className="h-9 bg-white" /><Input aria-label={`Espessura da peça ${indice + 1}`} value={componente.espessura ?? ""} onChange={(e) => atualizarComponentePacote(indice, "espessura", e.target.value)} placeholder="Esp." className="h-9 bg-white" /><Input aria-label={`Largura da peça ${indice + 1}`} value={componente.largura ?? ""} onChange={(e) => atualizarComponentePacote(indice, "largura", e.target.value)} placeholder="Larg." className="h-9 bg-white" /><Input aria-label={`Comprimento da peça ${indice + 1}`} value={componente.comprimento ?? ""} onChange={(e) => atualizarComponentePacote(indice, "comprimento", e.target.value)} placeholder="Comp." className="h-9 bg-white" /><div className="flex gap-1"><Input aria-label={`Quantidade da peça ${indice + 1}`} value={componente.quantidade} onChange={(e) => atualizarComponentePacote(indice, "quantidade", Number(e.target.value))} type="number" min="1" className="h-9 w-16 bg-white" /><Button type="button" size="icon" variant="ghost" aria-label={`Remover peça ${indice + 1}`} onClick={() => removerComponentePacote(indice)} className="h-9 w-9 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></div></div>)}</div>}</div>}
                 <p className="text-xs text-muted-foreground">Itens por unidade e pacote usam preço direto e não exigem metragem cúbica. Eles não movimentam automaticamente o estoque de madeira serrada.</p>
                 <Button type="button" onClick={adicionarItemComercial} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="mr-2 h-4 w-4" />Adicionar {tipoComercializacao === "unidade" ? "unidade" : "pacote"} à venda</Button>
               </div>}
@@ -429,6 +471,7 @@ export default function OrcamentoNovo() {
                         <p className="text-xs text-muted-foreground">
                           {item.quantidade} {item.tipoComercializacao === "unidade" ? "un." : item.tipoComercializacao === "pacote" ? "pacote(s)" : "pcs"} × {formatCurrency(item.valorPeca)} = {formatCurrency(item.valorTotal)}
                         </p>
+                        {item.tipoComercializacao === "pacote" && item.componentesPacote.length > 0 && <p className="mt-1 text-xs text-primary">Composição: {item.componentesPacote.map((componente) => `${componente.quantidade}× ${componente.descricao}`).join(" · ")}</p>}
                       </div>
                       <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(idx)}>
                         <Trash2 className="h-3.5 w-3.5" />
@@ -501,6 +544,23 @@ export default function OrcamentoNovo() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Guardar modelo de medida</DialogTitle></DialogHeader>
           <div className="space-y-4 pt-1"><p className="text-sm text-muted-foreground">O modelo guardará a madeira, o preço, a bitola, a largura e todos os comprimentos preenchidos neste romaneio.</p><div className="space-y-2"><Label>Nome do modelo *</Label><Input value={nomeModelo} onChange={(e) => setNomeModelo(e.target.value)} placeholder="Ex.: Cedrinho 2 × 5" className="bg-white" autoFocus /></div><Button type="button" onClick={salvarModeloMedida} disabled={criarModeloMedida.isPending} className="w-full">{criarModeloMedida.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Guardar modelo</Button><div className="border-t pt-3"><p className="mb-2 text-xs font-medium text-muted-foreground">Modelos guardados</p><div className="max-h-36 space-y-1 overflow-y-auto">{modelosMedida.data?.length ? modelosMedida.data.map((modelo) => <div key={modelo.id} className="flex items-center justify-between rounded border px-2 py-1.5 text-sm"><span className="truncate">{modelo.nome}</span><Button type="button" size="sm" variant="ghost" className="h-7 text-destructive" onClick={() => excluirModeloMedida.mutate({ id: modelo.id }, { onSuccess: () => utils.orcamento.modelosMedida.list.invalidate() })}>Excluir</Button></div>) : <p className="text-xs text-muted-foreground">Nenhum modelo guardado.</p>}</div></div></div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={produtoComercialOpen} onOpenChange={setProdutoComercialOpen}>
+        <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+          <DialogHeader><DialogTitle>Cadastrar produto comercial recorrente</DialogTitle></DialogHeader>
+          <div className="space-y-4 pt-1">
+            <p className="text-sm text-muted-foreground">Cadastre produtos por unidade ou pacotes para reutilizá-los no preenchimento rápido de novas vendas.</p>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="space-y-2 sm:col-span-2"><Label>Nome do produto *</Label><Input value={produtoForm.nome} onChange={(e) => setProdutoForm((form) => ({ ...form, nome: e.target.value }))} placeholder="Ex.: Portal padrão 80 cm" className="bg-white" autoFocus /></div>
+              <div className="space-y-2"><Label>Tipo *</Label><select aria-label="Tipo do produto comercial" value={produtoForm.tipoComercializacao} onChange={(e) => setProdutoForm((form) => ({ ...form, tipoComercializacao: e.target.value as "unidade" | "pacote", componentes: e.target.value === "unidade" ? [] : form.componentes }))} className="h-10 w-full rounded-md border border-input bg-white px-3 text-sm"><option value="unidade">Por unidade</option><option value="pacote">Por pacote</option></select></div>
+              <div className="space-y-2"><Label>Preço padrão (R$) *</Label><Input value={produtoForm.precoPadrao} onChange={(e) => setProdutoForm((form) => ({ ...form, precoPadrao: e.target.value }))} inputMode="decimal" placeholder="0,00" className="bg-white" /></div>
+              <div className="space-y-2 sm:col-span-2"><Label>Observações</Label><Input value={produtoForm.observacoes} onChange={(e) => setProdutoForm((form) => ({ ...form, observacoes: e.target.value }))} placeholder="Opcional" className="bg-white" /></div>
+            </div>
+            {produtoForm.tipoComercializacao === "pacote" && <div className="space-y-3 rounded-md border border-primary/20 bg-primary/[0.03] p-3"><div className="flex items-center justify-between"><div><p className="text-sm font-medium">Peças incluídas no pacote</p><p className="text-xs text-muted-foreground">Registre a composição que será copiada para cada Venda.</p></div><Button type="button" size="sm" variant="outline" onClick={adicionarComponenteProduto}><Plus className="mr-1 h-3.5 w-3.5" />Peça</Button></div>{produtoForm.componentes.length === 0 ? <p className="rounded-md border border-dashed bg-white px-3 py-2 text-xs text-muted-foreground">Inclua ao menos uma peça para definir este pacote.</p> : produtoForm.componentes.map((componente, indice) => <div key={indice} className="grid grid-cols-1 gap-2 rounded-md border border-border/60 bg-white p-2 sm:grid-cols-[1.5fr_.9fr_.7fr_.7fr_.7fr_auto]"><Input aria-label={`Descrição do componente do produto ${indice + 1}`} value={componente.descricao} onChange={(e) => atualizarComponenteProduto(indice, "descricao", e.target.value)} placeholder="Descrição" className="h-9" /><Input aria-label={`Madeira do componente do produto ${indice + 1}`} value={componente.madeiraNome ?? ""} onChange={(e) => atualizarComponenteProduto(indice, "madeiraNome", e.target.value)} placeholder="Madeira" className="h-9" /><Input aria-label={`Espessura do componente do produto ${indice + 1}`} value={componente.espessura ?? ""} onChange={(e) => atualizarComponenteProduto(indice, "espessura", e.target.value)} placeholder="Esp." className="h-9" /><Input aria-label={`Largura do componente do produto ${indice + 1}`} value={componente.largura ?? ""} onChange={(e) => atualizarComponenteProduto(indice, "largura", e.target.value)} placeholder="Larg." className="h-9" /><Input aria-label={`Comprimento do componente do produto ${indice + 1}`} value={componente.comprimento ?? ""} onChange={(e) => atualizarComponenteProduto(indice, "comprimento", e.target.value)} placeholder="Comp." className="h-9" /><div className="flex gap-1"><Input aria-label={`Quantidade do componente do produto ${indice + 1}`} value={componente.quantidade} onChange={(e) => atualizarComponenteProduto(indice, "quantidade", Number(e.target.value))} type="number" min="1" className="h-9 w-16" /><Button type="button" size="icon" variant="ghost" aria-label={`Remover componente do produto ${indice + 1}`} onClick={() => removerComponenteProduto(indice)} className="h-9 w-9 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></div></div>)}</div>}
+            <Button type="button" onClick={salvarProdutoComercial} disabled={criarProdutoComercial.isPending} className="w-full">{criarProdutoComercial.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Cadastrar e usar na Venda</Button>
+          </div>
         </DialogContent>
       </Dialog>
 

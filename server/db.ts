@@ -2,13 +2,13 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
-  orcamentos, itensOrcamento, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
+  orcamentos, itensOrcamento, componentesPacoteOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
-  type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
+  type InsertOrcamento, type InsertItemOrcamento, type InsertComponentePacoteOrcamento, type InsertProdutoComercial, type InsertComponenteProdutoComercial, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
@@ -454,6 +454,182 @@ export async function deleteModeloMedidaVenda(id: number, userId: number, empres
   await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId), eq(modelosMedidaVenda.empresaId, empresaId)));
 }
 
+export type ComponenteComercialInput = {
+  descricao: string;
+  madeiraNome?: string | null;
+  espessura?: string | null;
+  largura?: string | null;
+  comprimento?: string | null;
+  quantidade: number;
+};
+
+export async function listProdutosComerciais(empresaId = 1, incluirInativos = false) {
+  const db = await getDb();
+  if (!db) return [];
+  const condicao = incluirInativos
+    ? eq(produtosComerciais.empresaId, empresaId)
+    : and(eq(produtosComerciais.empresaId, empresaId), eq(produtosComerciais.ativo, true));
+  const produtos = await db.select().from(produtosComerciais).where(condicao).orderBy(asc(produtosComerciais.nome));
+  if (!produtos.length) return [];
+  const componentes = await db.select().from(componentesProdutoComercial)
+    .where(and(eq(componentesProdutoComercial.empresaId, empresaId), inArray(componentesProdutoComercial.produtoComercialId, produtos.map((produto) => produto.id))))
+    .orderBy(asc(componentesProdutoComercial.id));
+  return produtos.map((produto) => ({
+    ...produto,
+    componentes: componentes.filter((componente) => componente.produtoComercialId === produto.id),
+  }));
+}
+
+export async function createProdutoComercial(data: InsertProdutoComercial, componentes: ComponenteComercialInput[]) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const resultado = await db.insert(produtosComerciais).values(data);
+  const produtoId = Number(resultado[0].insertId);
+  if (componentes.length) {
+    await db.insert(componentesProdutoComercial).values(componentes.map((componente): InsertComponenteProdutoComercial => ({
+      empresaId: data.empresaId,
+      produtoComercialId: produtoId,
+      descricao: componente.descricao,
+      madeiraNome: componente.madeiraNome ?? null,
+      espessura: componente.espessura ?? null,
+      largura: componente.largura ?? null,
+      comprimento: componente.comprimento ?? null,
+      quantidade: componente.quantidade,
+    })));
+  }
+  return { id: produtoId };
+}
+
+export async function updateProdutoComercial(
+  id: number,
+  data: Partial<InsertProdutoComercial>,
+  componentes: ComponenteComercialInput[] | undefined,
+  empresaId = 1,
+) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const existente = await db.select({ id: produtosComerciais.id }).from(produtosComerciais)
+    .where(and(eq(produtosComerciais.id, id), eq(produtosComerciais.empresaId, empresaId))).limit(1);
+  if (!existente[0]) throw new Error("Produto comercial não encontrado");
+  if (Object.keys(data).length) await db.update(produtosComerciais).set(data).where(eq(produtosComerciais.id, id));
+  if (componentes !== undefined) {
+    await db.delete(componentesProdutoComercial).where(and(eq(componentesProdutoComercial.produtoComercialId, id), eq(componentesProdutoComercial.empresaId, empresaId)));
+    if (componentes.length) await db.insert(componentesProdutoComercial).values(componentes.map((componente): InsertComponenteProdutoComercial => ({
+      empresaId,
+      produtoComercialId: id,
+      descricao: componente.descricao,
+      madeiraNome: componente.madeiraNome ?? null,
+      espessura: componente.espessura ?? null,
+      largura: componente.largura ?? null,
+      comprimento: componente.comprimento ?? null,
+      quantidade: componente.quantidade,
+    })));
+  }
+  return { success: true };
+}
+
+function normalizarTextoCabecalho(valor: string | null | undefined) {
+  return valor === undefined ? undefined : valor?.trim() || null;
+}
+
+export async function atualizarCabecalhoCargasEmLote(data: {
+  ids: number[]; dataCarga?: Date; dataVencimento?: Date; origem?: string | null; fornecedorId?: number | null;
+  responsavel?: string | null; observacoes?: string | null; empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const cargas = await tx.select().from(romaneiosCargaToras).where(and(eq(romaneiosCargaToras.empresaId, data.empresaId), inArray(romaneiosCargaToras.id, data.ids)));
+    if (cargas.length !== data.ids.length) throw new Error("Um ou mais romaneios de carga não foram encontrados");
+    let fornecedorNovo: any = null;
+    if (data.fornecedorId) {
+      fornecedorNovo = (await tx.select().from(fornecedores).where(and(eq(fornecedores.id, data.fornecedorId), eq(fornecedores.empresaId, data.empresaId))).limit(1))[0];
+      if (!fornecedorNovo) throw new Error("Fornecedor não encontrado");
+    }
+    for (const carga of cargas) {
+      const dataCarga = data.dataCarga ?? carga.dataCarga;
+      const dataVencimento = data.dataVencimento ?? carga.dataVencimento;
+      if (dataVencimento < dataCarga) throw new Error(`O vencimento não pode ser anterior à data da carga ${carga.numero}`);
+      const titulo = carga.tituloFinanceiroId ? (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, carga.tituloFinanceiroId), eq(titulosFinanceiros.empresaId, data.empresaId))).limit(1))[0] : null;
+      const alteraFinanceiro = data.dataCarga !== undefined || data.dataVencimento !== undefined || data.fornecedorId !== undefined;
+      if (titulo && alteraFinanceiro && (decimalParaNumero(titulo.valorBaixado) > 0 || titulo.estado === "quitado" || titulo.estado === "cancelado")) throw new Error(`A carga ${carga.numero} possui conta financeira movimentada e não pode ser alterada em lote`);
+      const cabecalho: any = {};
+      if (data.dataCarga) cabecalho.dataCarga = dataCarga;
+      if (data.dataVencimento) cabecalho.dataVencimento = dataVencimento;
+      if (data.origem !== undefined) cabecalho.origem = normalizarTextoCabecalho(data.origem);
+      if (data.fornecedorId !== undefined) cabecalho.fornecedorId = data.fornecedorId;
+      if (data.responsavel !== undefined) cabecalho.responsavel = normalizarTextoCabecalho(data.responsavel);
+      if (data.observacoes !== undefined) cabecalho.observacoes = normalizarTextoCabecalho(data.observacoes);
+      await tx.update(romaneiosCargaToras).set(cabecalho).where(eq(romaneiosCargaToras.id, carga.id));
+      if (titulo && alteraFinanceiro) await tx.update(titulosFinanceiros).set({
+        fornecedorId: data.fornecedorId === undefined ? titulo.fornecedorId : data.fornecedorId,
+        contraparteNome: data.fornecedorId === undefined ? titulo.contraparteNome : fornecedorNovo?.nome ?? carga.origem,
+        dataEmissao: dataCarga, competencia: dataCarga, dataVencimento,
+        estado: calcularEstadoTitulo({ valorOriginal: titulo.valorOriginal, dataVencimento }),
+      }).where(eq(titulosFinanceiros.id, titulo.id));
+    }
+    return { atualizados: cargas.length };
+  });
+}
+
+export async function atualizarCabecalhoProducaoEmLote(data: {
+  ids: number[]; dataProducao?: Date; fita?: string | null; responsavel?: string | null; observacoes?: string | null; empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const romaneios = await db.select({ id: romaneiosProducao.id }).from(romaneiosProducao).where(and(eq(romaneiosProducao.empresaId, data.empresaId), inArray(romaneiosProducao.id, data.ids)));
+  if (romaneios.length !== data.ids.length) throw new Error("Um ou mais romaneios de produção não foram encontrados");
+  const cabecalho: any = {};
+  if (data.dataProducao) cabecalho.dataProducao = data.dataProducao;
+  if (data.fita !== undefined) cabecalho.fita = normalizarTextoCabecalho(data.fita);
+  if (data.responsavel !== undefined) cabecalho.responsavel = normalizarTextoCabecalho(data.responsavel);
+  if (data.observacoes !== undefined) cabecalho.observacoes = normalizarTextoCabecalho(data.observacoes);
+  await db.update(romaneiosProducao).set(cabecalho).where(and(eq(romaneiosProducao.empresaId, data.empresaId), inArray(romaneiosProducao.id, data.ids)));
+  return { atualizados: romaneios.length };
+}
+
+export async function atualizarCabecalhoSerragensEmLote(data: {
+  ids: number[]; clienteId?: number; dataProducao?: Date; dataVencimento?: Date; responsavel?: string | null; observacoes?: string | null; empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx: any) => {
+    const servicos = await tx.select().from(serragensTerceiros).where(and(eq(serragensTerceiros.empresaId, data.empresaId), inArray(serragensTerceiros.id, data.ids)));
+    if (servicos.length !== data.ids.length) throw new Error("Uma ou mais serragens não foram encontradas");
+    const clienteNovo = data.clienteId ? (await tx.select().from(clientes).where(and(eq(clientes.id, data.clienteId), eq(clientes.empresaId, data.empresaId))).limit(1))[0] : null;
+    if (data.clienteId && !clienteNovo) throw new Error("Cliente não encontrado");
+    for (const servico of servicos) {
+      const dataProducao = data.dataProducao ?? servico.dataProducao;
+      const dataVencimento = data.dataVencimento ?? servico.dataVencimento;
+      if (dataVencimento < dataProducao) throw new Error(`O vencimento não pode ser anterior à data do serviço ${servico.numero}`);
+      const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.serragemTerceirosId, servico.id), eq(titulosFinanceiros.empresaId, data.empresaId))).limit(1))[0];
+      const alteraFinanceiro = data.clienteId !== undefined || data.dataProducao !== undefined || data.dataVencimento !== undefined;
+      if (titulo && alteraFinanceiro && (decimalParaNumero(titulo.valorBaixado) > 0 || titulo.estado === "quitado" || titulo.estado === "cancelado")) throw new Error(`O serviço ${servico.numero} possui cobrança movimentada e não pode ser alterado em lote`);
+      if (data.clienteId && data.clienteId !== servico.clienteId) {
+        const lotes = await tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.serragemTerceirosId, servico.id), eq(lotesPecasSerradas.empresaId, data.empresaId)));
+        for (const lote of lotes) {
+          const movimentoPosterior = await tx.select({ id: movimentacoesEstoqueSerrado.id }).from(movimentacoesEstoqueSerrado).where(and(eq(movimentacoesEstoqueSerrado.loteId, lote.id), ne(movimentacoesEstoqueSerrado.tipo, "entrada_producao"))).limit(1);
+          if (movimentoPosterior[0] || lote.quantidadeDisponivel !== lote.quantidadeProduzida) throw new Error(`O serviço ${servico.numero} possui peças movimentadas e não pode alterar o cliente em lote`);
+        }
+        await tx.update(lotesPecasSerradas).set({ clienteProprietarioId: data.clienteId }).where(and(eq(lotesPecasSerradas.serragemTerceirosId, servico.id), eq(lotesPecasSerradas.empresaId, data.empresaId)));
+      }
+      const cabecalho: any = {};
+      if (data.clienteId) cabecalho.clienteId = data.clienteId;
+      if (data.dataProducao) cabecalho.dataProducao = dataProducao;
+      if (data.dataVencimento) cabecalho.dataVencimento = dataVencimento;
+      if (data.responsavel !== undefined) cabecalho.responsavel = normalizarTextoCabecalho(data.responsavel);
+      if (data.observacoes !== undefined) cabecalho.observacoes = normalizarTextoCabecalho(data.observacoes);
+      await tx.update(serragensTerceiros).set(cabecalho).where(eq(serragensTerceiros.id, servico.id));
+      if (titulo && alteraFinanceiro) await tx.update(titulosFinanceiros).set({
+        clienteId: data.clienteId ?? titulo.clienteId, contraparteNome: data.clienteId ? clienteNovo!.nome : titulo.contraparteNome,
+        dataEmissao: dataProducao, competencia: dataProducao, dataVencimento,
+        estado: calcularEstadoTitulo({ valorOriginal: titulo.valorOriginal, dataVencimento }),
+      }).where(eq(titulosFinanceiros.id, titulo.id));
+    }
+    return { atualizados: servicos.length };
+  });
+}
+
 export type CategoriaOperacionalVenda = "aprovadas" | "pagas" | "entregues" | "concluidas";
 
 export function classificarCategoriaOperacionalVenda(pago: boolean, entregue: boolean): CategoriaOperacionalVenda {
@@ -495,8 +671,15 @@ export async function getOrcamentoWithItems(id: number, empresaId = 1) {
   const orc = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
   if (orc.length === 0) return undefined;
   const itens = await db.select().from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, id));
+  const componentes = itens.length
+    ? await db.select().from(componentesPacoteOrcamento).where(and(eq(componentesPacoteOrcamento.empresaId, empresaId), inArray(componentesPacoteOrcamento.itemOrcamentoId, itens.map((item) => item.id))))
+    : [];
   const aproveitamentos = await db.select().from(aproveitamentosOrcamento).where(and(eq(aproveitamentosOrcamento.orcamentoId, id), eq(aproveitamentosOrcamento.empresaId, empresaId)));
-  return { orcamento: orc[0], itens, aproveitamentos };
+  return {
+    orcamento: orc[0],
+    itens: itens.map((item) => ({ ...item, componentesPacote: componentes.filter((componente) => componente.itemOrcamentoId === item.id) })),
+    aproveitamentos,
+  };
 }
 
 export function podeAlterarOrcamentoPago(pago: boolean, confirmacaoDupla: boolean) {
@@ -524,7 +707,7 @@ async function validarAlteracaoOrcamento(id: number, confirmacaoDupla = false, d
 
 export async function createOrcamento(
   data: InsertOrcamento,
-  itens: Partial<InsertItemOrcamento>[],
+  itens: Array<Partial<InsertItemOrcamento> & { componentesPacote?: ComponenteComercialInput[] }>,
   aproveitamentos: Array<{ madeiraNome: string; volume: string; precoM3: string }> = [],
 ) {
   const db = await getDb();
@@ -543,6 +726,7 @@ export async function createOrcamento(
       largura: i.largura!,
       comprimento: i.comprimento!,
       quantidade: i.quantidade!,
+      produtoComercialId: i.produtoComercialId ?? null,
       tipoComercializacao: i.tipoComercializacao ?? "metro_cubico",
       unidadesPorComercializacao: i.unidadesPorComercializacao ?? 1,
       precoM3: i.precoM3!,
@@ -550,7 +734,22 @@ export async function createOrcamento(
       valorPeca: i.valorPeca!,
       valorTotal: i.valorTotal!,
     }));
-    await db.insert(itensOrcamento).values(itensWithOrcId);
+    for (let indice = 0; indice < itensWithOrcId.length; indice += 1) {
+      const item = itensWithOrcId[indice];
+      const resultadoItem = await db.insert(itensOrcamento).values(item);
+      const componentes = itens[indice].componentesPacote ?? [];
+      if (!componentes.length) continue;
+      await db.insert(componentesPacoteOrcamento).values(componentes.map((componente): InsertComponentePacoteOrcamento => ({
+        empresaId: data.empresaId,
+        itemOrcamentoId: Number(resultadoItem[0].insertId),
+        descricao: componente.descricao,
+        madeiraNome: componente.madeiraNome ?? null,
+        espessura: componente.espessura ?? null,
+        largura: componente.largura ?? null,
+        comprimento: componente.comprimento ?? null,
+        quantidadePorPacote: componente.quantidade,
+      })));
+    }
   }
   if (aproveitamentos.length > 0) {
     await db.insert(aproveitamentosOrcamento).values(aproveitamentos.map((item) => {

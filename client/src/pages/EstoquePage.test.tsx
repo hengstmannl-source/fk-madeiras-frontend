@@ -40,6 +40,7 @@ vi.mock("@/lib/trpc", () => {
           modeloPlaquetasCsv: { useQuery: () => ({ refetch: vi.fn() }) },
           create: { useMutation: () => ({ mutate: criarCargaMutate, isPending: false }) },
           update: mutation,
+          atualizarCabecalhoEmLote: mutation,
           excluir: { useMutation: () => ({ mutate: excluirMutate, isPending: false }) },
           importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) },
         },
@@ -243,6 +244,19 @@ describe("EstoquePage", () => {
     fireEvent.change(screen.getByLabelText("Filtrar por origem"), { target: { value: "Norte" } });
     expect(cargasListQuery).toHaveBeenLastCalledWith({ dataInicial: "2026-08-01", dataFinal: "2026-08-31", origem: "Norte" });
     expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeEnabled();
+  });
+
+  it("permite abrir a alteração coletiva de cabeçalho para romaneios de carga selecionados", async () => {
+    const user = userEvent.setup();
+    render(<EstoquePage />);
+
+    await user.click(screen.getByLabelText("Selecionar romaneio CAR-000001"));
+    await user.click(screen.getByRole("button", { name: "Alterar cabeçalho em lote" }));
+
+    expect(screen.getByRole("heading", { name: "Alterar cabeçalho de romaneios de carga" })).toBeInTheDocument();
+    expect(screen.getByText(/plaquetas, volumes, valores e fretes das cargas não serão modificados/i)).toBeInTheDocument();
+    expect(screen.getByText("Data da carga")).toBeInTheDocument();
+    expect(screen.getAllByText("Origem")).not.toHaveLength(0);
   });
 
   it("pesquisa plaquetas e navega em blocos de dez itens", async () => {

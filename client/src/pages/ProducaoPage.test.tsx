@@ -47,9 +47,9 @@ vi.mock("@/lib/trpc", () => {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
         plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
-        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
+        romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, atualizarCabecalhoEmLote: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
-        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
+        serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, atualizarCabecalhoEmLote: mutationInerte, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
       },
       cliente: { list: { useQuery: () => ({ data: [{ id: 1, nome: "Marcenaria Silva", telefone: "(67) 99999-0000" }], isLoading: false }) }, create: mutationInerte },
     },
@@ -356,5 +356,18 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/devolve as plaquetas ao estoque/i)).toBeInTheDocument();
     expect(screen.getByText(/já tiver sido entregue, inventariada ou ajustada/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Remover produção" })).toBeInTheDocument();
+  });
+
+  it("permite selecionar romaneios e abrir a alteração coletiva somente de cabeçalho", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getAllByLabelText("Selecionar romaneio ROM-000014")[0]);
+    await user.click(screen.getAllByRole("button", { name: "Alterar cabeçalho em lote" })[0]);
+
+    expect(screen.getByRole("heading", { name: "Alterar cabeçalho de Produções" })).toBeInTheDocument();
+    expect(screen.getByText(/itens, toras, peças e totais não serão modificados/i)).toBeInTheDocument();
+    expect(screen.getByText("Data da produção")).toBeInTheDocument();
+    expect(screen.getByText("Responsável")).toBeInTheDocument();
   });
 });

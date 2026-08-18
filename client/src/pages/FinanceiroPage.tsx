@@ -128,6 +128,7 @@ export default function FinanceiroPage() {
   const [lancamentoAberto, setLancamentoAberto] = useState(false);
   const [baixaAberta, setBaixaAberta] = useState(false);
   const [fornecedorAberto, setFornecedorAberto] = useState(false);
+  const [fornecedorEditando, setFornecedorEditando] = useState<any>(null);
   const [categoriaAberta, setCategoriaAberta] = useState(false);
   const [contaAberta, setContaAberta] = useState(false);
   const [clienteAberto, setClienteAberto] = useState(false);
@@ -221,6 +222,7 @@ export default function FinanceiroPage() {
   const atualizarTitulo = trpc.financeiro.titulos.update.useMutation();
   const registrarBaixa = trpc.financeiro.titulos.baixar.useMutation();
   const criarFornecedor = trpc.financeiro.fornecedores.create.useMutation();
+  const atualizarFornecedor = trpc.financeiro.fornecedores.update.useMutation();
   const criarCategoria = trpc.financeiro.categorias.create.useMutation();
   const criarConta = trpc.financeiro.contas.create.useMutation();
   const excluirConta = trpc.financeiro.contas.delete.useMutation();
@@ -640,10 +642,26 @@ export default function FinanceiroPage() {
     });
   };
 
-  const salvarFornecedor = () => criarFornecedor.mutate({ ...fornecedor, email: fornecedor.email || null, contacto: fornecedor.contacto || null, documento: fornecedor.documento || null, endereco: fornecedor.endereco || null, observacoes: fornecedor.observacoes || null }, {
-    onSuccess: (criado) => { toast.success("Fornecedor cadastrado"); utils.financeiro.fornecedores.list.invalidate(); selecionarEntidadeCriada("fornecedor", criado.id); setFornecedorAberto(false); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); },
-    onError: (erro) => toast.error(erro.message),
-  });
+  const salvarFornecedor = () => {
+    const dados = { ...fornecedor, email: fornecedor.email || null, contacto: fornecedor.contacto || null, documento: fornecedor.documento || null, endereco: fornecedor.endereco || null, observacoes: fornecedor.observacoes || null };
+    if (fornecedorEditando) {
+      atualizarFornecedor.mutate({ id: fornecedorEditando.id, ...dados }, {
+        onSuccess: () => { toast.success("Fornecedor atualizado"); utils.financeiro.fornecedores.list.invalidate(); setFornecedorAberto(false); setFornecedorEditando(null); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); },
+        onError: (erro) => toast.error(erro.message),
+      });
+      return;
+    }
+    criarFornecedor.mutate(dados, {
+      onSuccess: (criado) => { toast.success("Fornecedor cadastrado"); utils.financeiro.fornecedores.list.invalidate(); selecionarEntidadeCriada("fornecedor", criado.id); setFornecedorAberto(false); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const abrirEdicaoFornecedor = (item: any) => {
+    setFornecedorEditando(item);
+    setFornecedor({ nome: item.nome ?? "", contacto: item.contacto ?? "", email: item.email ?? "", documento: item.documento ?? "", endereco: item.endereco ?? "", observacoes: item.observacoes ?? "" });
+    setFornecedorAberto(true);
+  };
 
   const salvarCategoria = () => criarCategoria.mutate(categoria, {
     onSuccess: (criada) => { toast.success("Categoria criada"); utils.financeiro.categorias.list.invalidate(); selecionarEntidadeCriada("categoria", criada.id); setCategoriaAberta(false); setCategoria({ nome: "", tipo: "ambos" }); },
@@ -759,7 +777,7 @@ export default function FinanceiroPage() {
         </section>
       )}
 
-      {aba === "fornecedores" && <CadastroTabela titulo="Fornecedores" descricao="Cadastre ou importe os fornecedores utilizados em contas a pagar." icone={<Building2 className="h-5 w-5" />} botao="Novo fornecedor" aoCriar={() => setFornecedorAberto(true)} acaoSecundaria={<Button size="sm" variant="outline" onClick={() => setImportacaoFornecedoresAberta(true)}><Upload className="mr-1.5 h-3.5 w-3.5" />Importar planilha</Button>} colunas={["Fornecedor", "Contato", "E-mail", "Documento"]} linhas={(fornecedores.data ?? []).map((item: any) => [item.nome, item.contacto || "—", item.email || "—", item.documento || "—"])} vazio="Nenhum fornecedor cadastrado" />}
+      {aba === "fornecedores" && <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><Building2 className="h-5 w-5" /></div><div><h2 className="font-semibold">Fornecedores</h2><p className="mt-0.5 text-xs text-muted-foreground">Cadastre, importe e mantenha atualizados os fornecedores utilizados em contas a pagar.</p></div></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setImportacaoFornecedoresAberta(true)}><Upload className="mr-1.5 h-3.5 w-3.5" />Importar planilha</Button><Button size="sm" onClick={() => { setFornecedorEditando(null); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); setFornecedorAberto(true); }}><Plus className="mr-1.5 h-3.5 w-3.5" />Novo fornecedor</Button></div></div>{fornecedores.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Fornecedor</TableHead><TableHead>Contato</TableHead><TableHead>E-mail</TableHead><TableHead>Documento</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{fornecedores.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.nome}</TableCell><TableCell>{item.contacto || "—"}</TableCell><TableCell>{item.email || "—"}</TableCell><TableCell>{item.documento || "—"}</TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" onClick={() => abrirEdicaoFornecedor(item)}><Pencil className="mr-1.5 h-3.5 w-3.5" />Editar</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EstadoVazio icon={<Building2 className="h-8 w-8" />} texto="Nenhum fornecedor cadastrado" acao={() => { setFornecedorEditando(null); setFornecedorAberto(true); }} labelAcao="Novo fornecedor" />}</section>}
       {aba === "categorias" && <CadastroTabela titulo="Categorias financeiras" descricao="Classifique receitas e despesas para os relatórios financeiros." icone={<Tags className="h-5 w-5" />} botao="Nova categoria" aoCriar={() => setCategoriaAberta(true)} colunas={["Categoria", "Aplicação"]} linhas={(categorias.data ?? []).map((item: any) => [item.nome, item.tipo === "ambos" ? "Receita e despesa" : item.tipo === "receita" ? "Receita" : "Despesa"])} vazio="Nenhuma categoria cadastrada" />}
       {aba === "contas" && <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><Landmark className="h-5 w-5" /></div><div><h2 className="font-semibold">Contas financeiras</h2><p className="mt-0.5 text-xs text-muted-foreground">Defina onde os valores entram e saem: caixa, bancos e carteiras.</p></div></div><Button size="sm" onClick={() => setContaAberta(true)}><Plus className="mr-1.5 h-3.5 w-3.5" />Nova conta</Button></div>{contas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Conta</TableHead><TableHead>Tipo</TableHead><TableHead className="text-right">Saldo inicial</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{contas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.nome}</TableCell><TableCell className="capitalize">{item.tipo.replace("_", " ")}</TableCell><TableCell className="text-right">{formatCurrency(item.saldoInicial)}</TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setContaParaExcluir(item)}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Excluir</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EstadoVazio icon={<Landmark className="h-8 w-8" />} texto="Nenhuma conta financeira cadastrada" acao={() => setContaAberta(true)} labelAcao="Nova conta" />}</section>}
 
@@ -846,7 +864,7 @@ export default function FinanceiroPage() {
 
       <Dialog open={Boolean(contaParaExcluir)} onOpenChange={(aberto) => !aberto && setContaParaExcluir(null)}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Excluir conta financeira</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950"><p className="font-medium">{contaParaExcluir?.nome}</p><p className="mt-1">A exclusão só será concluída se a conta não possuir baixas, cheques, extratos, movimentações ou recorrências vinculadas.</p></div><p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita. Deseja continuar?</p><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setContaParaExcluir(null)} disabled={excluirConta.isPending}>Voltar</Button><Button variant="destructive" onClick={confirmarExclusaoConta} disabled={excluirConta.isPending}>{excluirConta.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Excluir conta</Button></div></div></DialogContent></Dialog>
 
-      <Dialog open={fornecedorAberto} onOpenChange={setFornecedorAberto}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Novo fornecedor</DialogTitle></DialogHeader><div className="space-y-3"><Campo label="Nome *" value={fornecedor.nome} onChange={(valor) => setFornecedor({ ...fornecedor, nome: valor })} /><div className="grid grid-cols-2 gap-3"><Campo label="Contato" value={fornecedor.contacto} onChange={(valor) => setFornecedor({ ...fornecedor, contacto: valor })} /><Campo label="Documento" value={fornecedor.documento} onChange={(valor) => setFornecedor({ ...fornecedor, documento: valor })} /></div><Campo label="E-mail" type="email" value={fornecedor.email} onChange={(valor) => setFornecedor({ ...fornecedor, email: valor })} /><Campo label="Endereço" value={fornecedor.endereco} onChange={(valor) => setFornecedor({ ...fornecedor, endereco: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={fornecedor.observacoes} onChange={(e) => setFornecedor({ ...fornecedor, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarFornecedor} disabled={criarFornecedor.isPending}>Salvar fornecedor</Button></div></DialogContent></Dialog>
+      <Dialog open={fornecedorAberto} onOpenChange={(aberto) => { setFornecedorAberto(aberto); if (!aberto) setFornecedorEditando(null); }}><DialogContent className="max-w-lg"><DialogHeader><DialogTitle>{fornecedorEditando ? "Editar fornecedor" : "Novo fornecedor"}</DialogTitle></DialogHeader><div className="space-y-3"><Campo label="Nome *" value={fornecedor.nome} onChange={(valor) => setFornecedor({ ...fornecedor, nome: valor })} /><div className="grid grid-cols-2 gap-3"><Campo label="Contato" value={fornecedor.contacto} onChange={(valor) => setFornecedor({ ...fornecedor, contacto: valor })} /><Campo label="Documento" value={fornecedor.documento} onChange={(valor) => setFornecedor({ ...fornecedor, documento: valor })} /></div><Campo label="E-mail" type="email" value={fornecedor.email} onChange={(valor) => setFornecedor({ ...fornecedor, email: valor })} /><Campo label="Endereço" value={fornecedor.endereco} onChange={(valor) => setFornecedor({ ...fornecedor, endereco: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={fornecedor.observacoes} onChange={(e) => setFornecedor({ ...fornecedor, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarFornecedor} disabled={criarFornecedor.isPending || atualizarFornecedor.isPending}>{(criarFornecedor.isPending || atualizarFornecedor.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{fornecedorEditando ? "Salvar alterações" : "Salvar fornecedor"}</Button></div></DialogContent></Dialog>
 
       <Dialog open={clienteAberto} onOpenChange={setClienteAberto}>
         <DialogContent className="max-w-lg">
