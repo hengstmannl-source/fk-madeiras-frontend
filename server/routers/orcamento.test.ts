@@ -60,7 +60,8 @@ describe("fluxos independentes de pagamento e entrega", () => {
       modalidadeEntrega: "entrega",
       responsavelEntrega: "João da Silva",
       observacoesEntrega: "Recebido no pátio do cliente.",
-    })).toMatchObject({ modalidadeEntrega: "entrega", responsavelEntrega: "João da Silva" });
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0,250" }],
+    })).toMatchObject({ modalidadeEntrega: "entrega", responsavelEntrega: "João da Silva", aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.250" }] });
 
     expect(() => RegistroEntregaFisicaSchema.parse({
       id: 12,
@@ -68,5 +69,13 @@ describe("fluxos independentes de pagamento e entrega", () => {
       modalidadeEntrega: "retirada",
       responsavelEntrega: "J",
     })).toThrow("Informe o responsável pela entrega");
+
+    expect(() => RegistroEntregaFisicaSchema.parse({
+      id: 12,
+      entregueEm: "2026-08-14",
+      modalidadeEntrega: "retirada",
+      responsavelEntrega: "João da Silva",
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0" }],
+    })).toThrow("Informe um volume de aproveitamento positivo");
   });
 });

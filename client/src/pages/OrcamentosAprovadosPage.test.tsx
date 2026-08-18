@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   invalidar: vi.fn(),
   localizacao: "/vendas/aprovadas",
   navegar: vi.fn(),
+  estoque: [] as Array<{ madeiraNome: string; volumeDisponivel: string }>,
 }));
 
 vi.mock("wouter", () => ({ useLocation: () => [state.localizacao, state.navegar] }));
@@ -26,9 +27,10 @@ vi.mock("@/lib/trpc", () => ({
         list: { useQuery: () => ({ data: [state.venda], isLoading: false }) },
         resumoFilas: { useQuery: () => ({ data: { aprovadas: 3, pagas: 2, entregues: 1, concluidas: 4 }, isLoading: false }) },
       registrarPagamento: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
-      entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; entregueEm: string; modalidadeEntrega: "retirada" | "entrega"; responsavelEntrega: string; observacoesEntrega?: string }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2 }); } }) },
+      entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; entregueEm: string; modalidadeEntrega: "retirada" | "entrega"; responsavelEntrega: string; observacoesEntrega?: string; aproveitamentos?: Array<{ madeiraNome: string; volume: string }> }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number; aproveitamentoEntregue?: number; aproveitamentoSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2, aproveitamentoEntregue: 0, aproveitamentoSemEstoque: 0 }); } }) },
       estornarEntrega: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; motivo: string }, callbacks: { onSuccess?: (resultado: { pecasDevolvidas: number }) => void }) => { state.estornar(input); callbacks.onSuccess?.({ pecasDevolvidas: 4 }); } }) },
     },
+    producao: { estoque: { resumo: { useQuery: () => ({ data: state.estoque }) } } },
   },
 }));
 
@@ -42,6 +44,7 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
     state.invalidar.mockReset();
     state.navegar.mockReset();
     state.localizacao = "/vendas/aprovadas";
+    state.estoque = [];
     state.venda = {
       id: 25,
       numero: "VND-000025",
@@ -84,6 +87,23 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
     expect(screen.getByText("Em aberto")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Registrar entrega" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Registrar pagamento" })).toBeInTheDocument();
+  });
+
+  it("permite baixar aproveitamento por essência junto à entrega física", async () => {
+    const user = userEvent.setup();
+    state.estoque = [{ madeiraNome: "Aproveitamento de Cedrinho", volumeDisponivel: "1.250" }];
+    render(<OrcamentosAprovadosPage />);
+
+    await user.click(screen.getByRole("button", { name: "Registrar entrega" }));
+    expect(screen.getByText("Baixar aproveitamento (m³)")).toBeInTheDocument();
+    expect(screen.getByText("Disponível: 1,250 m³")).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Aproveitamento de Cedrinho em m³"), "0,250");
+    await user.type(screen.getByLabelText("Responsável pela entrega *"), "João da Silva");
+    await user.click(screen.getByRole("button", { name: "Confirmar entrega e baixa" }));
+
+    expect(state.entregar).toHaveBeenCalledWith(expect.objectContaining({
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.250" }],
+    }));
   });
 
   it("retorna de Pagas para Aprovadas pela rota da fila, sem interpretar a categoria como uma venda", async () => {

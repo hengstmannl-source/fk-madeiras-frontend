@@ -417,3 +417,5 @@
 - [x] Permitir lançar o aproveitamento manual em m³ por essência na Produção Diária e registrá-lo como estoque identificado
 - [x] Exibir produção de peças romaneadas e produção total com aproveitamento em valores separados
 - [x] Permitir incluir opcionalmente o aproveitamento manual no percentual de produção, mantendo-o fora do cálculo por padrão
+- [x] Permitir selecionar e baixar o estoque identificado de aproveitamento diretamente na tela de Vendas
+- [x] Preservar a rastreabilidade e o estorno do aproveitamento entregue em cada venda

@@ -34,12 +34,20 @@ export const RegistroPagamentoSchema = z.object({
   pagoEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data de pagamento válida").default(() => new Date().toISOString().slice(0, 10)),
 });
 
+const BaixaAproveitamentoSchema = z.object({
+  madeiraNome: z.string().trim().min(2, "Informe a essência do aproveitamento").max(200),
+  volume: z.union([z.string(), z.number()])
+    .transform((valor) => String(valor).replace(",", "."))
+    .refine((valor) => Number(valor) > 0, "Informe um volume de aproveitamento positivo"),
+});
+
 export const RegistroEntregaFisicaSchema = z.object({
   id: z.number().int().positive(),
   entregueEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida"),
   modalidadeEntrega: z.enum(["retirada", "entrega"]),
   responsavelEntrega: z.string().trim().min(2, "Informe o responsável pela entrega").max(200),
   observacoesEntrega: z.string().trim().max(4000).optional(),
+  aproveitamentos: z.array(BaixaAproveitamentoSchema).max(30).default([]),
 });
 
 const DataFinanceiraSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
@@ -178,6 +186,7 @@ export const orcamentoRouter = router({
         modalidadeEntrega: input.modalidadeEntrega,
         responsavelEntrega: input.responsavelEntrega,
         observacoesEntrega: input.observacoesEntrega,
+        aproveitamentos: input.aproveitamentos,
       });
     }),
 

@@ -91,6 +91,7 @@ export default function OrcamentosAprovadosPage() {
   const vendas = trpc.orcamento.list.useQuery({ estado: "aprovado", categoria });
   const resumoFilas = trpc.orcamento.resumoFilas.useQuery();
   const clientes = trpc.cliente.list.useQuery();
+  const estoqueSerrado = trpc.producao.estoque.resumo.useQuery();
   const registrarPagamento = trpc.orcamento.registrarPagamento.useMutation();
   const entregarFisicamente = trpc.orcamento.entregarFisicamente.useMutation();
   const utils = trpc.useUtils();
@@ -105,6 +106,7 @@ export default function OrcamentosAprovadosPage() {
   const [modalidadeEntrega, setModalidadeEntrega] = useState<ModalidadeEntrega>("retirada");
   const [responsavelEntrega, setResponsavelEntrega] = useState("");
   const [observacoesEntrega, setObservacoesEntrega] = useState("");
+  const [aproveitamentosEntrega, setAproveitamentosEntrega] = useState<Record<string, string>>({});
 
   const clienteMap = useMemo(() => new Map(clientes.data?.map((cliente) => [cliente.id, cliente.nome]) ?? []), [clientes.data]);
   const vendasFiltradas = useMemo(() => {
@@ -132,8 +134,13 @@ export default function OrcamentosAprovadosPage() {
     setModalidadeEntrega("retirada");
     setResponsavelEntrega("");
     setObservacoesEntrega("");
+    setAproveitamentosEntrega({});
     setEntregaAlvo(venda);
   };
+
+  const aproveitamentosDisponiveis = useMemo(() => (estoqueSerrado.data ?? [])
+    .filter((item) => item.madeiraNome.startsWith("Aproveitamento de ") && Number(item.volumeDisponivel) > 0)
+    .map((item) => ({ essencia: item.madeiraNome.replace(/^Aproveitamento de\s+/i, ""), volumeDisponivel: Number(item.volumeDisponivel) })), [estoqueSerrado.data]);
 
   const invalidarVendas = () => {
     utils.orcamento.list.invalidate();
@@ -166,11 +173,16 @@ export default function OrcamentosAprovadosPage() {
       modalidadeEntrega,
       responsavelEntrega: responsavelEntrega.trim(),
       observacoesEntrega: observacoesEntrega.trim() || undefined,
+      aproveitamentos: Object.entries(aproveitamentosEntrega)
+        .filter(([, volume]) => Number(String(volume).replace(",", ".")) > 0)
+        .map(([madeiraNome, volume]) => ({ madeiraNome, volume: String(volume).replace(",", ".") })),
     }, {
       onSuccess: (resultado) => {
         const avisoDeficit = resultado.pecasSemEstoque ? ` ${resultado.pecasSemEstoque} peça(s) ficaram em saldo negativo para regularização.` : "";
+        const avisoAproveitamento = resultado.aproveitamentoEntregue > 0 ? ` ${resultado.aproveitamentoEntregue.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m³ de aproveitamento foram baixados.` : "";
+        const avisoDeficitAproveitamento = resultado.aproveitamentoSemEstoque > 0 ? ` ${resultado.aproveitamentoSemEstoque.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m³ ficaram negativos para regularização.` : "";
         const destino = entregaAlvo.pago ? "Concluídas" : "Entregues";
-        toast.success(`Entrega registrada: ${resultado.pecasEntregues} peça(s) baixada(s) do estoque. A venda foi movida para ${destino}.${avisoDeficit}`);
+        toast.success(`Entrega registrada: ${resultado.pecasEntregues} peça(s) baixada(s) do estoque.${avisoAproveitamento} A venda foi movida para ${destino}.${avisoDeficit}${avisoDeficitAproveitamento}`);
         setEntregaAlvo(null);
         invalidarVendas();
       },
@@ -251,7 +263,7 @@ export default function OrcamentosAprovadosPage() {
 
       <Dialog open={Boolean(entregaAlvo)} onOpenChange={(aberto) => !aberto && setEntregaAlvo(null)}>
         <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Registrar entrega física</DialogTitle><DialogDescription>A baixa de estoque de {entregaAlvo?.numero ?? ""} será registada agora, mesmo que o pagamento ainda esteja em aberto.</DialogDescription></DialogHeader>
-          <div className="grid gap-4 py-2 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="data-entrega">Data da entrega *</Label><Input id="data-entrega" type="date" value={dataEntrega} onChange={(event) => setDataEntrega(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="modalidade-entrega">Modalidade *</Label><Select value={modalidadeEntrega} onValueChange={(valor) => setModalidadeEntrega(valor as ModalidadeEntrega)}><SelectTrigger id="modalidade-entrega"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="retirada">Retirada pelo cliente</SelectItem><SelectItem value="entrega">Entrega</SelectItem></SelectContent></Select></div><div className="space-y-2 sm:col-span-2"><Label htmlFor="responsavel-entrega">Responsável pela entrega *</Label><Input id="responsavel-entrega" value={responsavelEntrega} onChange={(event) => setResponsavelEntrega(event.target.value)} placeholder="Nome de quem realizou ou recebeu a entrega" /></div><div className="space-y-2 sm:col-span-2"><Label htmlFor="observacoes-entrega">Observações</Label><Textarea id="observacoes-entrega" value={observacoesEntrega} onChange={(event) => setObservacoesEntrega(event.target.value)} placeholder="Ex.: retirado pelo cliente no pátio" rows={3} /></div></div>
+          <div className="grid gap-4 py-2 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="data-entrega">Data da entrega *</Label><Input id="data-entrega" type="date" value={dataEntrega} onChange={(event) => setDataEntrega(event.target.value)} /></div><div className="space-y-2"><Label htmlFor="modalidade-entrega">Modalidade *</Label><Select value={modalidadeEntrega} onValueChange={(valor) => setModalidadeEntrega(valor as ModalidadeEntrega)}><SelectTrigger id="modalidade-entrega"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="retirada">Retirada pelo cliente</SelectItem><SelectItem value="entrega">Entrega</SelectItem></SelectContent></Select></div><div className="space-y-2 sm:col-span-2"><Label htmlFor="responsavel-entrega">Responsável pela entrega *</Label><Input id="responsavel-entrega" value={responsavelEntrega} onChange={(event) => setResponsavelEntrega(event.target.value)} placeholder="Nome de quem realizou ou recebeu a entrega" /></div><div className="space-y-2 sm:col-span-2"><Label>Baixar aproveitamento (m³)</Label><div className="rounded-lg border border-amber-200 bg-amber-50/50 p-3"><p className="mb-2 text-xs text-amber-900">Opcional: informe o volume de aproveitamento entregue por essência. A baixa é rastreada e será devolvida se esta entrega for estornada.</p>{aproveitamentosDisponiveis.length > 0 ? <div className="space-y-2">{aproveitamentosDisponiveis.map((aproveitamento) => <div key={aproveitamento.essencia} className="grid grid-cols-[1fr_10rem] items-center gap-3"><div><p className="text-sm font-medium">{aproveitamento.essencia}</p><p className="text-xs text-muted-foreground">Disponível: {aproveitamento.volumeDisponivel.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 })} m³</p></div><Input aria-label={`Aproveitamento de ${aproveitamento.essencia} em m³`} inputMode="decimal" value={aproveitamentosEntrega[aproveitamento.essencia] ?? ""} onChange={(event) => setAproveitamentosEntrega((atual) => ({ ...atual, [aproveitamento.essencia]: event.target.value }))} placeholder="0,000" /></div>)}</div> : <p className="text-sm text-muted-foreground">Não há aproveitamentos positivos disponíveis no estoque.</p>}</div></div><div className="space-y-2 sm:col-span-2"><Label htmlFor="observacoes-entrega">Observações</Label><Textarea id="observacoes-entrega" value={observacoesEntrega} onChange={(event) => setObservacoesEntrega(event.target.value)} placeholder="Ex.: retirado pelo cliente no pátio" rows={3} /></div></div>
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Se faltar alguma medida, a entrega continua registada e o estoque exibirá saldo negativo para regularização. O título financeiro permanece em aberto enquanto não houver pagamento.</div>
           <DialogFooter><Button variant="outline" onClick={() => setEntregaAlvo(null)} disabled={entregarFisicamente.isPending}>Voltar</Button><Button className="bg-sky-700 hover:bg-sky-800" onClick={confirmarEntrega} disabled={entregarFisicamente.isPending}>{entregarFisicamente.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar entrega e baixa</Button></DialogFooter>
         </DialogContent>

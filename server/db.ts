@@ -3476,6 +3476,7 @@ export type DadosEntregaFisica = {
   modalidadeEntrega: "retirada" | "entrega";
   observacoesEntrega?: string | null;
   responsavelEntrega: string;
+  aproveitamentos?: Array<{ madeiraNome: string; volume: string }>;
 };
 
 export async function entregarVendaFisicamente(vendaId: number, userId: number, dadosEntrega: DadosEntregaFisica, dependencias?: { database?: any }) {
@@ -3494,7 +3495,7 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
     const itensParaEstoque = itens.map(converterDimensoesVendaParaEstoque);
     const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itensParaEstoque, lotes);
     const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
-    const movimentacoes: Array<{ itemVendaId: number; loteId: number; quantidade: number }> = [];
+    const movimentacoes: Array<{ itemVendaId?: number; loteId: number; quantidade: number; volume?: number }> = [];
     for (const alocacao of alocacoes) {
       const lote = lotesPorId.get(alocacao.loteId);
       if (!lote) throw new Error("Lote de peças não encontrado durante a entrega");
@@ -3502,10 +3503,13 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       if (saldo < 0) throw new Error("O saldo do lote foi alterado durante a confirmação. Revise o estoque e tente novamente.");
       await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: saldo === 0 ? "esgotado" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
       await tx.insert(movimentacoesEstoqueSerrado).values({
+        empresaId: venda.empresaId,
         loteId: lote.id,
         itemVendaId: alocacao.itemVendaId,
+        orcamentoId: vendaId,
         tipo: "saida_entrega",
         quantidade: alocacao.quantidade,
+        volume: "0",
         motivo: `Entrega física da venda ${venda.numero ?? venda.id}`,
         criadoPor: userId,
       });
@@ -3534,14 +3538,87 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       });
       const loteId = getInsertedId(insercao as MysqlInsertResult);
       await tx.insert(movimentacoesEstoqueSerrado).values({
+        empresaId: venda.empresaId,
         loteId,
         itemVendaId: deficit.itemVendaId,
+        orcamentoId: vendaId,
         tipo: "saida_entrega",
         quantidade: deficit.quantidade,
+        volume: "0",
         motivo: `Entrega física sem saldo da venda ${venda.numero ?? venda.id}`,
         criadoPor: userId,
       });
       movimentacoes.push({ itemVendaId: deficit.itemVendaId, loteId, quantidade: deficit.quantidade });
+    }
+    const aproveitamentosSolicitados = new Map<string, number>();
+    for (const aproveitamento of dadosEntrega.aproveitamentos ?? []) {
+      const essencia = aproveitamento.madeiraNome.trim().toLocaleUpperCase("pt-BR");
+      aproveitamentosSolicitados.set(essencia, Number(((aproveitamentosSolicitados.get(essencia) ?? 0) + Number(aproveitamento.volume)).toFixed(6)));
+    }
+    let aproveitamentoEntregue = 0;
+    let aproveitamentoSemEstoque = 0;
+    for (const [essencia, volumeSolicitado] of Array.from(aproveitamentosSolicitados.entries())) {
+      let restante = volumeSolicitado;
+      const lotesAproveitamento = lotes
+        .filter((lote: any) => lote.tipo === "aproveitamento" && lote.madeiraNome.trim().toLocaleUpperCase("pt-BR") === `APROVEITAMENTO DE ${essencia}`)
+        .sort((a: any, b: any) => a.id - b.id);
+      for (const lote of lotesAproveitamento) {
+        if (restante <= 0) break;
+        const saldoVolume = Math.max(0, Number(lote.volume));
+        const volumeBaixado = Math.min(saldoVolume, restante);
+        if (volumeBaixado <= 0) continue;
+        const novoVolume = Number((saldoVolume - volumeBaixado).toFixed(6));
+        await tx.update(lotesPecasSerradas).set({
+          volume: novoVolume.toFixed(6),
+          quantidadeDisponivel: novoVolume > 0 ? 1 : 0,
+          estado: novoVolume > 0 ? "disponivel" : "esgotado",
+        }).where(eq(lotesPecasSerradas.id, lote.id));
+        await tx.insert(movimentacoesEstoqueSerrado).values({
+          empresaId: venda.empresaId,
+          loteId: lote.id,
+          orcamentoId: vendaId,
+          tipo: "saida_entrega",
+          quantidade: 0,
+          volume: volumeBaixado.toFixed(6),
+          motivo: `Aproveitamento de ${essencia} entregue na venda ${venda.numero ?? venda.id}`,
+          criadoPor: userId,
+        });
+        movimentacoes.push({ loteId: lote.id, quantidade: 0, volume: volumeBaixado });
+        aproveitamentoEntregue += volumeBaixado;
+        restante = Number((restante - volumeBaixado).toFixed(6));
+      }
+      if (restante > 0) {
+        const insercao = await tx.insert(lotesPecasSerradas).values({
+          empresaId: venda.empresaId,
+          romaneioId: null,
+          itemRomaneioId: null,
+          madeiraNome: `Aproveitamento de ${essencia}`,
+          espessura: "0",
+          largura: "0",
+          comprimento: "0",
+          quantidadeProduzida: 0,
+          quantidadeDisponivel: -1,
+          metrosLineares: "0",
+          volume: (-restante).toFixed(6),
+          tipo: "aproveitamento",
+          propriedade: "proprio",
+          estado: "negativo",
+        });
+        const loteId = getInsertedId(insercao as MysqlInsertResult);
+        await tx.insert(movimentacoesEstoqueSerrado).values({
+          empresaId: venda.empresaId,
+          loteId,
+          orcamentoId: vendaId,
+          tipo: "saida_entrega",
+          quantidade: 0,
+          volume: restante.toFixed(6),
+          motivo: `Aproveitamento de ${essencia} entregue sem saldo na venda ${venda.numero ?? venda.id}`,
+          criadoPor: userId,
+        });
+        movimentacoes.push({ loteId, quantidade: 0, volume: restante });
+        aproveitamentoEntregue += restante;
+        aproveitamentoSemEstoque += restante;
+      }
     }
     const entregueEm = dadosEntrega.entregueEm;
     const observacoesEntrega = dadosEntrega.observacoesEntrega?.trim() || null;
@@ -3568,7 +3645,7 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
         alocacoes: movimentacoes,
       }),
     });
-    return { success: true, entregueEm, pecasEntregues: movimentacoes.reduce((total, alocacao) => total + alocacao.quantidade, 0), pecasSemEstoque: deficits.reduce((total, deficit) => total + deficit.quantidade, 0) };
+    return { success: true, entregueEm, pecasEntregues: movimentacoes.reduce((total, alocacao) => total + alocacao.quantidade, 0), pecasSemEstoque: deficits.reduce((total, deficit) => total + deficit.quantidade, 0), aproveitamentoEntregue: Number(aproveitamentoEntregue.toFixed(6)), aproveitamentoSemEstoque: Number(aproveitamentoSemEstoque.toFixed(6)) };
   });
 }
 
@@ -3581,16 +3658,19 @@ export async function estornarEntregaVenda(vendaId: number, userId: number, moti
     if (!venda?.entregue) throw new Error("Esta venda não possui entrega física para estornar");
     const itens = await tx.select({ id: itensOrcamento.id }).from(itensOrcamento).where(eq(itensOrcamento.orcamentoId, vendaId));
     const idsItens = new Set(itens.map((item: any) => item.id));
-    const saidas = (await tx.select().from(movimentacoesEstoqueSerrado)).filter((movimento: any) => movimento.tipo === "saida_entrega" && movimento.itemVendaId && idsItens.has(movimento.itemVendaId));
+    const saidas = (await tx.select().from(movimentacoesEstoqueSerrado)).filter((movimento: any) => movimento.tipo === "saida_entrega" && (movimento.orcamentoId === vendaId || (movimento.itemVendaId && idsItens.has(movimento.itemVendaId))));
     if (!saidas.length) throw new Error("Não foram encontradas peças baixadas para esta entrega");
     const lotes = await tx.select().from(lotesPecasSerradas);
     const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
     for (const saida of saidas) {
       const lote = lotesPorId.get(saida.loteId);
       if (!lote) throw new Error("Lote de peças não encontrado durante o estorno");
+      const volumeSaida = Number(saida.volume ?? 0);
       const saldo = Number(lote.quantidadeDisponivel) + saida.quantidade;
-      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldo, estado: saldo === 0 ? "esgotado" : saldo < 0 ? "negativo" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
-      await tx.insert(movimentacoesEstoqueSerrado).values({ loteId: lote.id, itemVendaId: saida.itemVendaId, tipo: "estorno_entrega", quantidade: saida.quantidade, motivo: motivo.trim(), criadoPor: userId });
+      const volumeRestaurado = Number((Number(lote.volume) + volumeSaida).toFixed(6));
+      const saldoAtualizado = volumeSaida > 0 ? (volumeRestaurado === 0 ? 0 : volumeRestaurado < 0 ? -1 : 1) : saldo;
+      await tx.update(lotesPecasSerradas).set({ quantidadeDisponivel: saldoAtualizado, volume: volumeSaida > 0 ? volumeRestaurado.toFixed(6) : lote.volume, estado: saldoAtualizado === 0 ? "esgotado" : saldoAtualizado < 0 ? "negativo" : "disponivel" }).where(eq(lotesPecasSerradas.id, lote.id));
+      await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: venda.empresaId, loteId: lote.id, itemVendaId: saida.itemVendaId, orcamentoId: vendaId, tipo: "estorno_entrega", quantidade: saida.quantidade, volume: volumeSaida.toFixed(6), motivo: motivo.trim(), criadoPor: userId });
     }
     await tx.update(orcamentos).set({
       entregue: false,
