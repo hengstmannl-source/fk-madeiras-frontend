@@ -57,6 +57,13 @@ const ListaPlaquetasSchema = z.object({
   deslocamento: z.number().int().min(0).default(0),
 });
 
+const ConfirmacaoVariacoesAtipicasSchema = z.object({
+  variacoes: z.array(z.object({
+    essencia: z.string().trim().min(1).max(200),
+    assinatura: z.string().trim().min(1).max(255),
+  })).min(1, "Não há variações pendentes para confirmar").max(50),
+});
+
 const RelatorioExcecoesPlaquetasSchema = z.object({
   busca: z.string().trim().max(200).optional(),
   situacao: z.enum(["todas", "duplicada", "sem_plaqueta"]).default("todas"),
@@ -169,6 +176,7 @@ export const producaoRouter = router({
   }),
   plaquetas: router({
     list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ ctx, input }) => db.listPlaquetas(input, ctx.empresaAtiva!.empresa.id)),
+    confirmarVariacoesAtipicas: protectedProcedure.input(ConfirmacaoVariacoesAtipicasSchema).mutation(({ ctx, input }) => db.confirmarVariacoesAtipicasPlaquetas(input.variacoes, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     relatorioExcecoes: protectedProcedure.input(RelatorioExcecoesPlaquetasSchema.optional()).query(({ ctx, input }) => db.getRelatorioExcecoesPlaquetas(input, ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({
       ...input,

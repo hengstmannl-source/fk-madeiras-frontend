@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const criarSerragemMock = vi.hoisted(() => vi.fn());
 const atualizarSerragemMock = vi.hoisted(() => vi.fn());
 const definirLocalizacaoMock = vi.hoisted(() => vi.fn());
+const confirmarVariacoesMock = vi.hoisted(() => vi.fn());
 const resumoPlaquetasMock = vi.hoisted(() => ({
   totalDisponiveis: 300,
   totalVolumeDisponivel: 178.246,
@@ -17,6 +18,7 @@ const resumoPlaquetasMock = vi.hoisted(() => ({
   ],
   alertaVariacaoAtipica: false,
   essenciasAtipicas: [] as string[],
+  variacoesAtipicas: [] as Array<{ essencia: string; assinatura: string }>,
   proximoDeslocamento: null,
 }));
 
@@ -44,7 +46,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, create: mutationInerte },
+        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
@@ -61,7 +63,7 @@ Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable
 Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", { configurable: true, value: () => undefined });
 Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => undefined });
 
-afterEach(() => { cleanup(); criarSerragemMock.mockReset(); atualizarSerragemMock.mockReset(); definirLocalizacaoMock.mockReset(); Object.assign(resumoPlaquetasMock, { totalDisponiveis: 300, totalVolumeDisponivel: 178.246, volumeMedioPorTora: 0.594, essenciasDisponiveis: [{ essencia: "CEDRINHO", quantidade: 158, volume: 174.451, volumeMedio: 1.104 }, { essencia: "MISTA", quantidade: 86, volume: 88.171, volumeMedio: 1.025 }], alertaVariacaoAtipica: false, essenciasAtipicas: [], proximoDeslocamento: null }); });
+afterEach(() => { cleanup(); criarSerragemMock.mockReset(); atualizarSerragemMock.mockReset(); confirmarVariacoesMock.mockReset(); definirLocalizacaoMock.mockReset(); Object.assign(resumoPlaquetasMock, { totalDisponiveis: 300, totalVolumeDisponivel: 178.246, volumeMedioPorTora: 0.594, essenciasDisponiveis: [{ essencia: "CEDRINHO", quantidade: 158, volume: 174.451, volumeMedio: 1.104 }, { essencia: "MISTA", quantidade: 86, volume: 88.171, volumeMedio: 1.025 }], alertaVariacaoAtipica: false, essenciasAtipicas: [], variacoesAtipicas: [], proximoDeslocamento: null }); });
 
 describe("ProducaoPage", () => {
   it("apresenta somente a produção diária e orienta o uso prévio do Estoque", () => {
@@ -91,11 +93,21 @@ describe("ProducaoPage", () => {
   });
 
   it("explica em âmbar as essências que têm toras atipicamente maiores que a média", () => {
-    Object.assign(resumoPlaquetasMock, { alertaVariacaoAtipica: true, essenciasAtipicas: ["GARAPEIRA", "CUMARU"] });
+    Object.assign(resumoPlaquetasMock, { alertaVariacaoAtipica: true, essenciasAtipicas: ["GARAPEIRA", "CUMARU"], variacoesAtipicas: [{ essencia: "GARAPEIRA", assinatura: "garapeira-atual" }, { essencia: "CUMARU", assinatura: "cumaru-atual" }] });
     render(<ProducaoPage />);
 
-    expect(screen.getByText(/Variação de volume identificada/i).closest("div")?.parentElement).toHaveClass("border-amber-200");
+    expect(screen.getByTestId("alerta-variacao-volume")).toHaveClass("border-amber-200");
     expect(screen.getByText(/Há essências com toras muito maiores que a média/i)).toHaveTextContent("GARAPEIRA, CUMARU");
+  });
+
+  it("permite confirmar a variação para ocultar o aviso até uma nova alteração de volumes", async () => {
+    const user = userEvent.setup();
+    Object.assign(resumoPlaquetasMock, { alertaVariacaoAtipica: true, essenciasAtipicas: ["GARAPEIRA"], variacoesAtipicas: [{ essencia: "GARAPEIRA", assinatura: "garapeira-atual" }] });
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Marcar como conferida" }));
+
+    expect(confirmarVariacoesMock).toHaveBeenCalledWith({ variacoes: [{ essencia: "GARAPEIRA", assinatura: "garapeira-atual" }] });
   });
 
   it("oferece a serragem de terceiros no mesmo fluxo em duas etapas da produção diária", async () => {

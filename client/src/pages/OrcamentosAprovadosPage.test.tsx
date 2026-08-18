@@ -18,12 +18,13 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({
-      orcamento: { list: { invalidate: state.invalidar }, get: { invalidate: state.invalidar } },
+      orcamento: { list: { invalidate: state.invalidar }, resumoFilas: { invalidate: state.invalidar }, get: { invalidate: state.invalidar } },
       producao: { estoque: { resumo: { invalidate: state.invalidar } } },
     }),
     cliente: { list: { useQuery: () => ({ data: [{ id: 1, nome: "Cliente de teste" }] }) } },
-    orcamento: {
-      list: { useQuery: () => ({ data: [state.venda], isLoading: false }) },
+      orcamento: {
+        list: { useQuery: () => ({ data: [state.venda], isLoading: false }) },
+        resumoFilas: { useQuery: () => ({ data: { aprovadas: 3, pagas: 2, entregues: 1, concluidas: 4 }, isLoading: false }) },
       registrarPagamento: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
       entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; entregueEm: string; modalidadeEntrega: "retirada" | "entrega"; responsavelEntrega: string; observacoesEntrega?: string }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2 }); } }) },
       estornarEntrega: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; motivo: string }, callbacks: { onSuccess?: (resultado: { pecasDevolvidas: number }) => void }) => { state.estornar(input); callbacks.onSuccess?.({ pecasDevolvidas: 4 }); } }) },
@@ -93,5 +94,14 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
     await user.click(screen.getByRole("button", { name: /Aprovadas/i }));
 
     expect(state.navegar).toHaveBeenCalledWith("/orcamentos/aprovados");
+  });
+
+  it("exibe o total consolidado em cada fila operacional de Vendas", () => {
+    render(<OrcamentosAprovadosPage />);
+
+    expect(screen.getByLabelText("Total de vendas Aprovadas")).toHaveTextContent("3");
+    expect(screen.getByLabelText("Total de vendas Pagas")).toHaveTextContent("2");
+    expect(screen.getByLabelText("Total de vendas Entregues")).toHaveTextContent("1");
+    expect(screen.getByLabelText("Total de vendas Concluídas")).toHaveTextContent("4");
   });
 });

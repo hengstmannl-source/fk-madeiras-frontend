@@ -67,6 +67,9 @@ export const orcamentoRouter = router({
       return db.listOrcamentos(input, ctx.empresaAtiva!.empresa.id);
     }),
 
+  resumoFilas: protectedProcedure
+    .query(({ ctx }) => db.getResumoFilasVendas(ctx.empresaAtiva!.empresa.id)),
+
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {

@@ -311,6 +311,23 @@ export const plaquetas = mysqlTable("plaquetas", {
 export type Plaqueta = typeof plaquetas.$inferSelect;
 export type InsertPlaqueta = typeof plaquetas.$inferInsert;
 
+/** Conferências registradas para alertas de volume atípico por essência. */
+export const conferenciasVariacaoPlaquetas = mysqlTable("conferenciasVariacaoPlaquetas", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  essencia: varchar("essencia", { length: 200 }).notNull(),
+  assinatura: varchar("assinatura", { length: 255 }).notNull(),
+  confirmadoPor: int("confirmadoPor").notNull(),
+  confirmadoEm: timestamp("confirmadoEm").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaEssenciaUnica: uniqueIndex("conferencias_variacao_plaquetas_empresa_essencia_unica").on(table.empresaId, table.essencia),
+  empresaIndice: index("conferencias_variacao_plaquetas_empresa_indice").on(table.empresaId),
+}));
+
+export type ConferenciaVariacaoPlaqueta = typeof conferenciasVariacaoPlaquetas.$inferSelect;
+
 export const romaneiosProducao = mysqlTable("romaneiosProducao", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),

@@ -412,3 +412,5 @@
 - [x] Detalhar volume e quantidade disponíveis por essência no atalho de toras disponíveis
 - [x] Alertar visualmente quando a relação entre quantidade e volume das toras apresentar variação atípica explicável
 - [x] Corrigir o retorno interno de Pagas para Vendas para impedir a abertura de uma venda inexistente
+- [x] Exibir contadores visuais com o total de vendas em cada fila operacional de Vendas
+- [x] Permitir confirmar uma variação atípica de volume por essência para ocultá-la até surgir um novo caso

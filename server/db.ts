@@ -6,7 +6,7 @@ import {
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -476,6 +476,17 @@ export async function listOrcamentos(filters?: { estado?: string; clienteId?: nu
   if (filters?.categoria === "concluidas") conditions.push(eq(orcamentos.pago, true), eq(orcamentos.entregue, true));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   return db.select().from(orcamentos).where(where).orderBy(desc(orcamentos.createdAt));
+}
+
+export async function getResumoFilasVendas(empresaId = 1): Promise<Record<CategoriaOperacionalVenda, number>> {
+  const db = await getDb();
+  const resumo: Record<CategoriaOperacionalVenda, number> = { aprovadas: 0, pagas: 0, entregues: 0, concluidas: 0 };
+  if (!db) return resumo;
+  const vendas = await db.select({ pago: orcamentos.pago, entregue: orcamentos.entregue })
+    .from(orcamentos)
+    .where(and(eq(orcamentos.empresaId, empresaId), eq(orcamentos.estado, "aprovado")));
+  for (const venda of vendas) resumo[classificarCategoriaOperacionalVenda(venda.pago, venda.entregue)] += 1;
+  return resumo;
 }
 
 export async function getOrcamentoWithItems(id: number, empresaId = 1) {
@@ -2198,7 +2209,7 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
 
 export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
   const db = await getDb();
-  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, volumeMedioPorTora: 0, essenciasDisponiveis: [], alertaVariacaoAtipica: false, essenciasAtipicas: [], proximoDeslocamento: null };
+  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, volumeMedioPorTora: 0, essenciasDisponiveis: [], alertaVariacaoAtipica: false, essenciasAtipicas: [], variacoesAtipicas: [], proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
   const todas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
@@ -2232,11 +2243,44 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
     }))
     .sort((primeira, segunda) => segunda.volume - primeira.volume || primeira.essencia.localeCompare(segunda.essencia, "pt-BR"));
   const limiarAlerta = 3;
-  const essenciasAtipicas = volumeMedioPorTora > 0
-    ? essenciasDisponiveis.filter((item) => item.volumeMedio > limiarAlerta * volumeMedioPorTora).map((item) => item.essencia)
+  const variacoesIdentificadas = volumeMedioPorTora > 0
+    ? essenciasDisponiveis
+      .filter((item) => item.volumeMedio > limiarAlerta * volumeMedioPorTora)
+      .map((item) => ({
+        essencia: item.essencia,
+        assinatura: `${item.essencia}|${item.quantidade}|${item.volume.toFixed(3)}|${item.volumeMedio.toFixed(3)}|${volumeMedioPorTora.toFixed(3)}`,
+      }))
     : [];
-  const alertaVariacaoAtipica = essenciasAtipicas.length > 0;
-  return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, proximoDeslocamento };
+  const conferencias = variacoesIdentificadas.length > 0
+    ? await db.select({ essencia: conferenciasVariacaoPlaquetas.essencia, assinatura: conferenciasVariacaoPlaquetas.assinatura })
+      .from(conferenciasVariacaoPlaquetas)
+      .where(eq(conferenciasVariacaoPlaquetas.empresaId, empresaId))
+    : [];
+  const assinaturasConferidas = new Map(conferencias.map((item) => [item.essencia, item.assinatura]));
+  const variacoesAtipicas = variacoesIdentificadas.filter((item) => assinaturasConferidas.get(item.essencia) !== item.assinatura);
+  const essenciasAtipicas = variacoesAtipicas.map((item) => item.essencia);
+  const alertaVariacaoAtipica = variacoesAtipicas.length > 0;
+  return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, variacoesAtipicas, proximoDeslocamento };
+}
+
+export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const registros = variacoes
+    .map((item) => ({ essencia: item.essencia.trim().toLocaleUpperCase("pt-BR"), assinatura: item.assinatura.trim() }))
+    .filter((item) => item.essencia.length > 0 && item.assinatura.length > 0);
+  if (registros.length === 0) return { confirmadas: 0 };
+  const confirmadoEm = new Date();
+  for (const registro of registros) {
+    await db.insert(conferenciasVariacaoPlaquetas).values({
+      empresaId,
+      essencia: registro.essencia,
+      assinatura: registro.assinatura,
+      confirmadoPor,
+      confirmadoEm,
+    }).onDuplicateKeyUpdate({ set: { assinatura: registro.assinatura, confirmadoPor, confirmadoEm } });
+  }
+  return { confirmadas: registros.length };
 }
 
 export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId = 1) {

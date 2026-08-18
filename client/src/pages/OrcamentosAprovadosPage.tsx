@@ -89,6 +89,7 @@ export default function OrcamentosAprovadosPage() {
   const categoria = categoriaDaRota(location);
   const configuracao = CATEGORIAS[categoria];
   const vendas = trpc.orcamento.list.useQuery({ estado: "aprovado", categoria });
+  const resumoFilas = trpc.orcamento.resumoFilas.useQuery();
   const clientes = trpc.cliente.list.useQuery();
   const registrarPagamento = trpc.orcamento.registrarPagamento.useMutation();
   const entregarFisicamente = trpc.orcamento.entregarFisicamente.useMutation();
@@ -136,6 +137,7 @@ export default function OrcamentosAprovadosPage() {
 
   const invalidarVendas = () => {
     utils.orcamento.list.invalidate();
+    utils.orcamento.resumoFilas.invalidate();
     utils.orcamento.get.invalidate();
     utils.producao.estoque.resumo.invalidate();
   };
@@ -193,8 +195,9 @@ export default function OrcamentosAprovadosPage() {
         {(Object.keys(CATEGORIAS) as CategoriaOperacional[]).map((chave) => {
           const ativa = chave === categoria;
           const item = CATEGORIAS[chave];
+          const totalNaFila = resumoFilas.data?.[chave];
           return <Button key={chave} variant="outline" onClick={() => setLocation(ROTAS_CATEGORIA[chave])} className={`h-auto justify-start border p-4 text-left ${ativa ? item.destaque : "bg-card text-card-foreground hover:bg-muted"}`}>
-            <div><p className="font-semibold">{item.titulo.replace("Vendas ", "")}</p><p className="mt-1 text-xs font-normal text-muted-foreground">{chave === "aprovadas" ? "Aguardam ambos" : chave === "pagas" ? "Aguardam entrega" : chave === "entregues" ? "Aguardam pagamento" : "Fluxo finalizado"}</p></div>
+            <div className="w-full"><div className="flex items-center justify-between gap-3"><p className="font-semibold">{item.titulo.replace("Vendas ", "")}</p><Badge variant="outline" className="min-w-7 justify-center border-current/20 bg-background/55 text-xs" aria-label={`Total de vendas ${item.titulo.replace("Vendas ", "")}`}>{totalNaFila === undefined ? "…" : totalNaFila}</Badge></div><p className="mt-1 text-xs font-normal text-muted-foreground">{chave === "aprovadas" ? "Aguardam ambos" : chave === "pagas" ? "Aguardam entrega" : chave === "entregues" ? "Aguardam pagamento" : "Fluxo finalizado"}</p></div>
           </Button>;
         })}
       </div>
