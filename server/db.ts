@@ -2198,7 +2198,7 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
 
 export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
   const db = await getDb();
-  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, proximoDeslocamento: null };
+  if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, volumeMedioPorTora: 0, essenciasDisponiveis: [], alertaVariacaoAtipica: false, essenciasAtipicas: [], proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
   const todas = numerarDuplicidadesPlaquetas(brutas);
   const termo = (parametros.busca ?? "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
@@ -2214,7 +2214,29 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
   const proximoDeslocamento = deslocamento + itens.length < filtradas.length ? deslocamento + itens.length : null;
   const disponiveis = todas.filter((item) => item.estado === "disponivel");
   const totalVolumeDisponivel = disponiveis.reduce((total, item) => total + Number(item.volumeDisponivel ?? 0), 0);
-  return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, proximoDeslocamento };
+  const volumeMedioPorTora = disponiveis.length > 0 ? totalVolumeDisponivel / disponiveis.length : 0;
+  const essenciasMap = new Map<string, { quantidade: number; volume: number }>();
+  for (const item of disponiveis) {
+    const essencia = String(item.madeiraNome ?? "").trim().toLocaleUpperCase("pt-BR") || "SEM ESSÊNCIA";
+    const atual = essenciasMap.get(essencia) ?? { quantidade: 0, volume: 0 };
+    atual.quantidade += 1;
+    atual.volume += Number(item.volumeDisponivel ?? 0);
+    essenciasMap.set(essencia, atual);
+  }
+  const essenciasDisponiveis = Array.from(essenciasMap.entries())
+    .map(([essencia, dados]) => ({
+      essencia,
+      quantidade: dados.quantidade,
+      volume: Number(dados.volume.toFixed(3)),
+      volumeMedio: Number((dados.volume / dados.quantidade).toFixed(3)),
+    }))
+    .sort((primeira, segunda) => segunda.volume - primeira.volume || primeira.essencia.localeCompare(segunda.essencia, "pt-BR"));
+  const limiarAlerta = 3;
+  const essenciasAtipicas = volumeMedioPorTora > 0
+    ? essenciasDisponiveis.filter((item) => item.volumeMedio > limiarAlerta * volumeMedioPorTora).map((item) => item.essencia)
+    : [];
+  const alertaVariacaoAtipica = essenciasAtipicas.length > 0;
+  return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, proximoDeslocamento };
 }
 
 export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId = 1) {

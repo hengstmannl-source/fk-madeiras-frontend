@@ -408,3 +408,6 @@
 - [x] Criar competência reutilizável que padronize investigação, implementação, testes, validação visual e publicação de evoluções do ERP
 - [x] Corrigir a divergência entre a quantidade de toras disponíveis e o volume total em m³ exibido na Produção
 - [x] Eliminar a reincidência de tempo excedido no teste financeiro de estorno identificado na suíte completa
+- [x] Exibir o volume médio por tora no cartão de disponibilidade da Produção Diária
+- [x] Detalhar volume e quantidade disponíveis por essência no atalho de toras disponíveis
+- [x] Alertar visualmente quando a relação entre quantidade e volume das toras apresentar variação atípica explicável

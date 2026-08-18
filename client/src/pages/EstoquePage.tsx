@@ -108,10 +108,13 @@ export default function EstoquePage() {
   const buscaUrl = useSearch();
   const { user } = useAuth();
   useEffect(() => {
-    const estado = new URLSearchParams(buscaUrl).get("estado");
+    const parametros = new URLSearchParams(buscaUrl);
+    const estado = parametros.get("estado");
+    const busca = parametros.get("busca") ?? "";
     const filtroDisponivel = estado === "disponivel";
     setEstadoPlaquetas(filtroDisponivel ? "disponivel" : "");
     if (filtroDisponivel) setCategoria("toras");
+    setBuscaPlaquetas(busca);
     setDeslocamentoPlaquetas(0);
   }, [buscaUrl]);
   const filtrosCargasAtivos = useMemo(() => ({

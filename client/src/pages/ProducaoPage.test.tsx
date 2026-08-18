@@ -7,6 +7,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 const criarSerragemMock = vi.hoisted(() => vi.fn());
 const atualizarSerragemMock = vi.hoisted(() => vi.fn());
 const definirLocalizacaoMock = vi.hoisted(() => vi.fn());
+const resumoPlaquetasMock = vi.hoisted(() => ({
+  totalDisponiveis: 300,
+  totalVolumeDisponivel: 178.246,
+  volumeMedioPorTora: 0.594,
+  essenciasDisponiveis: [
+    { essencia: "CEDRINHO", quantidade: 158, volume: 174.451, volumeMedio: 1.104 },
+    { essencia: "MISTA", quantidade: 86, volume: 88.171, volumeMedio: 1.025 },
+  ],
+  alertaVariacaoAtipica: false,
+  essenciasAtipicas: [] as string[],
+  proximoDeslocamento: null,
+}));
 
 vi.stubGlobal("ResizeObserver", class {
   observe() {}
@@ -32,7 +44,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, totalDisponiveis: 300, totalVolumeDisponivel: 178.246, proximoDeslocamento: null }, isLoading: false }) }, create: mutationInerte },
+        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
@@ -49,7 +61,7 @@ Object.defineProperty(HTMLElement.prototype, "setPointerCapture", { configurable
 Object.defineProperty(HTMLElement.prototype, "releasePointerCapture", { configurable: true, value: () => undefined });
 Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: () => undefined });
 
-afterEach(() => { cleanup(); criarSerragemMock.mockReset(); atualizarSerragemMock.mockReset(); definirLocalizacaoMock.mockReset(); });
+afterEach(() => { cleanup(); criarSerragemMock.mockReset(); atualizarSerragemMock.mockReset(); definirLocalizacaoMock.mockReset(); Object.assign(resumoPlaquetasMock, { totalDisponiveis: 300, totalVolumeDisponivel: 178.246, volumeMedioPorTora: 0.594, essenciasDisponiveis: [{ essencia: "CEDRINHO", quantidade: 158, volume: 174.451, volumeMedio: 1.104 }, { essencia: "MISTA", quantidade: 86, volume: 88.171, volumeMedio: 1.025 }], alertaVariacaoAtipica: false, essenciasAtipicas: [], proximoDeslocamento: null }); });
 
 describe("ProducaoPage", () => {
   it("apresenta somente a produção diária e orienta o uso prévio do Estoque", () => {
@@ -62,6 +74,9 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/Registre todas as plaquetas serradas no dia/i)).toBeInTheDocument();
     expect(screen.getByText("Toras disponíveis").closest(".rounded-xl")).toHaveTextContent("300");
     expect(screen.getByText("Toras disponíveis").closest(".rounded-xl")).toHaveTextContent("178,246 m³");
+    expect(screen.getByText("Toras disponíveis").closest(".rounded-xl")).toHaveTextContent("Média: 0,594 m³/tora");
+    expect(screen.getByRole("button", { name: "Filtrar toras de CEDRINHO" })).toHaveTextContent("158 toras · 174,451 m³");
+    expect(screen.queryByText(/Variação de volume identificada/i)).not.toBeInTheDocument();
   });
 
   it("direciona o indicador de toras disponíveis para o Estoque já filtrado", async () => {
@@ -70,6 +85,17 @@ describe("ProducaoPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Ver toras disponíveis" }));
     expect(definirLocalizacaoMock).toHaveBeenCalledWith("/estoque?estado=disponivel");
+
+    await user.click(screen.getByRole("button", { name: "Filtrar toras de CEDRINHO" }));
+    expect(definirLocalizacaoMock).toHaveBeenCalledWith("/estoque?estado=disponivel&busca=CEDRINHO");
+  });
+
+  it("explica em âmbar as essências que têm toras atipicamente maiores que a média", () => {
+    Object.assign(resumoPlaquetasMock, { alertaVariacaoAtipica: true, essenciasAtipicas: ["GARAPEIRA", "CUMARU"] });
+    render(<ProducaoPage />);
+
+    expect(screen.getByText(/Variação de volume identificada/i).closest("div")?.parentElement).toHaveClass("border-amber-200");
+    expect(screen.getByText(/Há essências com toras muito maiores que a média/i)).toHaveTextContent("GARAPEIRA, CUMARU");
   });
 
   it("oferece a serragem de terceiros no mesmo fluxo em duas etapas da produção diária", async () => {
