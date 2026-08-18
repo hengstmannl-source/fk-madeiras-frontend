@@ -123,6 +123,17 @@ describe("regras de produção", () => {
     expect(resultado).toMatchObject({ volumeTora: 2, volumeProduzido: 0.4, aproveitamento: 20 });
   });
 
+  it("mantém o aproveitamento manual fora do rendimento por padrão e permite incluí-lo quando marcado", () => {
+    const base = {
+      plaqueta: { codigo: "PLQ-APV", estado: "disponivel" as const, volumeDisponivel: "1.000000" },
+      tora: { madeiraNome: "Cedrinho", volume: "1.000000" },
+      itens: [{ madeiraNome: "Cedrinho", espessura: 5, largura: 20, comprimento: 2, quantidade: 10 }],
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.2" }],
+    };
+    expect(validarConfirmacaoRomaneio(base)).toMatchObject({ volumeProduzido: 0.2, volumeAproveitamento: 0.2, volumeComAproveitamento: 0.4, incluirAproveitamentoNoRendimento: false, aproveitamento: 20 });
+    expect(validarConfirmacaoRomaneio({ ...base, incluirAproveitamentoNoRendimento: true })).toMatchObject({ incluirAproveitamentoNoRendimento: true, aproveitamento: 40, aproveitamentos: [{ madeiraNome: "Cedrinho", volume: 0.2 }] });
+  });
+
   it("detalha o aproveitamento por essência na produção diária e na serragem de terceiros", () => {
     const toras = [
       { plaqueta: { codigo: "JAT-01", estado: "disponivel" as const, volumeDisponivel: "1" }, tora: { madeiraNome: "Jatobá", volume: "1" } },
@@ -133,8 +144,8 @@ describe("regras de produção", () => {
       { madeiraNome: "Piqui", espessura: 4, largura: 20, comprimento: 3, quantidade: 20 },
     ];
     expect(validarConfirmacaoRomaneio({ toras, itens }).aproveitamentoPorEssencia).toEqual([
-      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, aproveitamento: 60, perdaVolume: 0.4, perdaPercentual: 40 },
-      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, aproveitamento: 48, perdaVolume: 0.52, perdaPercentual: 52 },
+      { essencia: "Jatobá", volumeToras: 1, volumeProduzido: 0.6, volumeAproveitamento: 0, volumeComAproveitamento: 0.6, aproveitamento: 60, perdaVolume: 0.4, perdaPercentual: 40 },
+      { essencia: "Piqui", volumeToras: 1, volumeProduzido: 0.48, volumeAproveitamento: 0, volumeComAproveitamento: 0.48, aproveitamento: 48, perdaVolume: 0.52, perdaPercentual: 52 },
     ]);
 
     const terceiros = validarSerragemTerceiros({

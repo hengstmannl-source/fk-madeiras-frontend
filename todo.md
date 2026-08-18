@@ -414,3 +414,6 @@
 - [x] Corrigir o retorno interno de Pagas para Vendas para impedir a abertura de uma venda inexistente
 - [x] Exibir contadores visuais com o total de vendas em cada fila operacional de Vendas
 - [x] Permitir confirmar uma variação atípica de volume por essência para ocultá-la até surgir um novo caso
+- [x] Permitir lançar o aproveitamento manual em m³ por essência na Produção Diária e registrá-lo como estoque identificado
+- [x] Exibir produção de peças romaneadas e produção total com aproveitamento em valores separados
+- [x] Permitir incluir opcionalmente o aproveitamento manual no percentual de produção, mantendo-o fora do cálculo por padrão

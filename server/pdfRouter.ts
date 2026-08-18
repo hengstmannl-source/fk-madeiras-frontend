@@ -297,7 +297,24 @@ export async function registerPdfRoutes(app: any) {
       const torasParaResumo = data.toras.length
         ? data.toras
         : [{ madeiraNome: data.romaneio.madeiraTora ?? "Não informada", volume: data.romaneio.volumeTora ?? "0" }];
-      const resumoPorEssencia = calcularAproveitamentoPorEssencia(torasParaResumo, data.itens);
+      const aproveitamentosManuais = data.aproveitamentos ?? [];
+      const volumeAproveitamento = Number(data.romaneio.volumeAproveitamento ?? aproveitamentosManuais.reduce((total: number, item: any) => total + Number(item.volume ?? 0), 0));
+      const incluirAproveitamentoNoRendimento = Boolean(data.romaneio.incluirAproveitamentoNoRendimento);
+      const resumoPorEssencia = calcularAproveitamentoPorEssencia(torasParaResumo, data.itens).map((resumo) => {
+        const volumeAproveitamentoEssencia = aproveitamentosManuais
+          .filter((item: any) => String(item.madeiraNome ?? "").localeCompare(resumo.essencia, "pt-BR", { sensitivity: "accent" }) === 0)
+          .reduce((total: number, item: any) => total + Number(item.volume ?? 0), 0);
+        const volumeParaRendimento = resumo.volumeProduzido + (incluirAproveitamentoNoRendimento ? volumeAproveitamentoEssencia : 0);
+        const aproveitamento = resumo.volumeToras > 0 ? (volumeParaRendimento / resumo.volumeToras) * 100 : 0;
+        return {
+          ...resumo,
+          volumeAproveitamento: Number(volumeAproveitamentoEssencia.toFixed(6)),
+          volumeComAproveitamento: Number((resumo.volumeProduzido + volumeAproveitamentoEssencia).toFixed(6)),
+          aproveitamento: Number(aproveitamento.toFixed(2)),
+          perdaVolume: Number((resumo.volumeToras - volumeParaRendimento).toFixed(6)),
+          perdaPercentual: Number((100 - aproveitamento).toFixed(2)),
+        };
+      });
 
       const pdfDoc = await PDFDocument.create();
       let page = pdfDoc.addPage([595, 842]);
@@ -317,6 +334,7 @@ export async function registerPdfRoutes(app: any) {
       page.drawText(data.romaneio.numero, { x: 62, y: y - 6, size: 17, font: bold, color: rgb(0.22, 0.16, 0.08) });
       page.drawText(`Produção em ${new Date(data.romaneio.dataProducao).toLocaleDateString("pt-BR", { timeZone: "UTC" })}`, { x: 62, y: y - 25, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
       page.drawText(`Aproveitamento: ${formatMeasurement(data.romaneio.aproveitamento ?? "0")}%`, { x: width - 212, y: y - 17, size: 11, font: bold, color: rgb(0.12, 0.42, 0.25) });
+      page.drawText(incluirAproveitamentoNoRendimento ? "Rendimento inclui aproveitamento" : "Rendimento considera apenas peças", { x: width - 212, y: y - 31, size: 7, font, color: rgb(0.35, 0.35, 0.35) });
       y -= 78;
       const torasSerradas = data.toras.length
         ? data.toras
@@ -367,7 +385,14 @@ export async function registerPdfRoutes(app: any) {
       y -= 18;
       page.drawText(`Total de peças: ${totalPecas}`, { x: 48, y, size: 10, font: bold });
       page.drawText(`Metros lineares: ${formatMeasurement(String(totalMetros))} m`, { x: 210, y, size: 10, font: bold });
-      page.drawText(`Madeira serrada: ${formatMeasurement(String(totalVolume))} m³`, { x: 385, y, size: 10, font: bold });
+      page.drawText(`Peças romaneadas: ${formatMeasurement(String(totalVolume))} m³`, { x: 385, y, size: 10, font: bold });
+      y -= 16;
+      page.drawText(`Aproveitamento manual: ${formatMeasurement(String(volumeAproveitamento))} m³`, { x: 48, y, size: 9, font, color: rgb(0.55, 0.33, 0.05) });
+      page.drawText(`Produção total: ${formatMeasurement(String(totalVolume + volumeAproveitamento))} m³`, { x: 290, y, size: 9, font: bold, color: rgb(0.12, 0.42, 0.25) });
+      if (aproveitamentosManuais.length) {
+        y -= 20;
+        page.drawText(`Aproveitamento por essência: ${aproveitamentosManuais.map((item: any) => `${item.madeiraNome} ${formatMeasurement(item.volume)} m³`).join(" · ")}`, { x: 48, y, size: 8, font, color: rgb(0.35, 0.35, 0.35), maxWidth: width - 96 });
+      }
       if (resumoPorEssencia.length) {
         if (y < 170) { page = pdfDoc.addPage([595, 842]); y = height - 58; }
         y -= 32;

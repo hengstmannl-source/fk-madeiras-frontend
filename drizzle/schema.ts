@@ -340,6 +340,8 @@ export const romaneiosProducao = mysqlTable("romaneiosProducao", {
   comprimentoTora: decimal("comprimentoTora", { precision: 8, scale: 2 }),
   volumeTora: decimal("volumeTora", { precision: 14, scale: 6 }),
   aproveitamento: decimal("aproveitamento", { precision: 8, scale: 2 }),
+  volumeAproveitamento: decimal("volumeAproveitamento", { precision: 14, scale: 6 }).notNull().default("0"),
+  incluirAproveitamentoNoRendimento: boolean("incluirAproveitamentoNoRendimento").notNull().default(false),
   dataProducao: timestamp("dataProducao").notNull(),
   fita: varchar("fita", { length: 100 }),
   responsavel: varchar("responsavel", { length: 200 }),
@@ -387,6 +389,17 @@ export const itensRomaneioProducao = mysqlTable("itensRomaneioProducao", {
   observacoes: text("observacoes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
+
+export const aproveitamentosRomaneioProducao = mysqlTable("aproveitamentosRomaneioProducao", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  romaneioId: int("romaneioId").notNull(),
+  madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
+  volume: decimal("volume", { precision: 14, scale: 6 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  romaneioIndice: index("aproveitamentos_romaneio_producao_romaneio_indice").on(table.empresaId, table.romaneioId),
+}));
 
 export type ItemRomaneioProducao = typeof itensRomaneioProducao.$inferSelect;
 export type InsertItemRomaneioProducao = typeof itensRomaneioProducao.$inferInsert;
@@ -474,6 +487,7 @@ export const lotesPecasSerradas = mysqlTable("lotesPecasSerradas", {
   itemSerragemId: int("itemSerragemId").unique(),
   propriedade: mysqlEnum("propriedade", ["proprio", "terceiro"]).notNull().default("proprio"),
   clienteProprietarioId: int("clienteProprietarioId"),
+  tipo: mysqlEnum("tipo", ["peca", "aproveitamento"]).notNull().default("peca"),
   madeiraNome: varchar("madeiraNome", { length: 200 }).notNull(),
   espessura: decimal("espessura", { precision: 8, scale: 2 }).notNull(),
   largura: decimal("largura", { precision: 8, scale: 2 }).notNull(),

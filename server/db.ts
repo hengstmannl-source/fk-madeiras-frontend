@@ -6,7 +6,7 @@ import {
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -2795,12 +2795,14 @@ export async function getRomaneioProducaoComItens(romaneioId: number, empresaId 
     comprimentoTora: romaneiosProducao.comprimentoTora,
     volumeTora: romaneiosProducao.volumeTora,
     aproveitamento: romaneiosProducao.aproveitamento,
+    volumeAproveitamento: romaneiosProducao.volumeAproveitamento,
+    incluirAproveitamentoNoRendimento: romaneiosProducao.incluirAproveitamentoNoRendimento,
     plaquetaCodigo: plaquetas.codigo,
     origemPlaqueta: plaquetas.origem,
     localizacaoPlaqueta: plaquetas.localizacao,
   }).from(romaneiosProducao).leftJoin(plaquetas, and(eq(romaneiosProducao.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId))).where(and(eq(romaneiosProducao.id, romaneioId), eq(romaneiosProducao.empresaId, empresaId))).limit(1))[0];
   if (!romaneio) return null;
-  const [itens, toras] = await Promise.all([
+  const [itens, toras, aproveitamentos] = await Promise.all([
     listItensRomaneioProducao(romaneioId, empresaId),
     db.select({
       id: itensRomaneioToras.id,
@@ -2811,8 +2813,9 @@ export async function getRomaneioProducaoComItens(romaneioId: number, empresaId 
       comprimento: itensRomaneioToras.comprimento,
       volume: itensRomaneioToras.volume,
     }).from(itensRomaneioToras).innerJoin(plaquetas, and(eq(itensRomaneioToras.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId))).where(and(eq(itensRomaneioToras.romaneioId, romaneioId), eq(itensRomaneioToras.empresaId, empresaId))),
+    db.select().from(aproveitamentosRomaneioProducao).where(and(eq(aproveitamentosRomaneioProducao.romaneioId, romaneioId), eq(aproveitamentosRomaneioProducao.empresaId, empresaId))),
   ]);
-  return { romaneio, itens, toras };
+  return { romaneio, itens, toras, aproveitamentos };
 }
 
 export async function confirmarRomaneioProducao(data: {
@@ -2824,6 +2827,8 @@ export async function confirmarRomaneioProducao(data: {
   responsavel?: string | null;
   observacoes?: string | null;
   itens: ItemProducaoEntrada[];
+  aproveitamentos?: Array<{ madeiraNome: string; volume: string | number }>;
+  incluirAproveitamentoNoRendimento?: boolean;
   criadoPor: number;
   empresaId: number;
 }) {
@@ -2877,7 +2882,7 @@ export async function confirmarRomaneioProducao(data: {
       }
       plaquetasSelecionadas.push({ plaqueta, tora: entrada.tora });
     }
-    const calculo = validarConfirmacaoRomaneio({ toras: plaquetasSelecionadas, itens: data.itens });
+    const calculo = validarConfirmacaoRomaneio({ toras: plaquetasSelecionadas, itens: data.itens, aproveitamentos: data.aproveitamentos, incluirAproveitamentoNoRendimento: data.incluirAproveitamentoNoRendimento });
     const primeiraTora = calculo.toras[0];
     const numeroTemporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
     const insercaoRomaneio = await tx.insert(romaneiosProducao).values({
@@ -2891,6 +2896,8 @@ export async function confirmarRomaneioProducao(data: {
       comprimentoTora: primeiraTora.tora.comprimento ? Number(primeiraTora.tora.comprimento).toFixed(2) : null,
       volumeTora: calculo.volumeTora.toFixed(6),
       aproveitamento: calculo.aproveitamento.toFixed(2),
+      volumeAproveitamento: calculo.volumeAproveitamento.toFixed(6),
+      incluirAproveitamentoNoRendimento: calculo.incluirAproveitamentoNoRendimento,
       dataProducao: data.dataProducao,
       fita: data.fita?.trim() || null,
       responsavel: data.responsavel?.trim() || null,
@@ -2963,6 +2970,16 @@ export async function confirmarRomaneioProducao(data: {
       });
       const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
       await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Entrada do romaneio ${numero}`, criadoPor: data.criadoPor });
+    }
+    for (const aproveitamento of calculo.aproveitamentos) {
+      await tx.insert(aproveitamentosRomaneioProducao).values({ empresaId: data.empresaId, romaneioId, madeiraNome: aproveitamento.madeiraNome, volume: aproveitamento.volume.toFixed(6) });
+      const insercaoLote = await tx.insert(lotesPecasSerradas).values({
+        empresaId: data.empresaId, romaneioId, tipo: "aproveitamento", madeiraNome: `Aproveitamento de ${aproveitamento.madeiraNome}`,
+        espessura: "0.00", largura: "0.00", comprimento: "0.00", quantidadeProduzida: 1, quantidadeDisponivel: 1,
+        metrosLineares: "0.0000", volume: aproveitamento.volume.toFixed(6), estado: "disponivel",
+      });
+      const loteId = getInsertedId(insercaoLote as MysqlInsertResult);
+      await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: 1, motivo: `Aproveitamento do romaneio ${numero}`, criadoPor: data.criadoPor });
     }
     return { id: romaneioId, numero, ...calculo };
   });

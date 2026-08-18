@@ -8,6 +8,11 @@ export type ItemProducaoEntrada = {
   quantidade: number;
 };
 
+export type AproveitamentoProducaoEntrada = {
+  madeiraNome: string;
+  volume: string | number;
+};
+
 export type PlaquetaParaConfirmacao = {
   id?: number;
   codigo: string;
@@ -127,6 +132,8 @@ export function validarConfirmacaoRomaneio(input: {
   tora?: ToraParaRomaneio;
   toras?: Array<{ plaqueta: PlaquetaParaConfirmacao | null | undefined; tora: ToraParaRomaneio }>;
   itens: ItemProducaoEntrada[];
+  aproveitamentos?: AproveitamentoProducaoEntrada[];
+  incluirAproveitamentoNoRendimento?: boolean;
   permitirPlaquetasConsumidas?: boolean;
 }) {
   const entradasToras = input.toras ?? (input.plaqueta && input.tora ? [{ plaqueta: input.plaqueta, tora: input.tora }] : []);
@@ -149,24 +156,40 @@ export function validarConfirmacaoRomaneio(input: {
   });
   const itens = input.itens.map(calcularItemRomaneio);
   const volumeProduzido = itens.reduce((total, item) => total + item.volume, 0);
+  const aproveitamentos = (input.aproveitamentos ?? []).filter((item) => item.madeiraNome.trim() || numero(item.volume) > 0).map((item) => {
+    const volume = numero(item.volume);
+    if (!item.madeiraNome.trim() || volume <= 0) throw new Error("Informe a essência e o volume positivo para cada aproveitamento");
+    return { madeiraNome: item.madeiraNome.trim(), volume: Number(volume.toFixed(6)) };
+  });
+  const volumeAproveitamento = aproveitamentos.reduce((total, item) => total + item.volume, 0);
+  const volumeComAproveitamento = volumeProduzido + volumeAproveitamento;
   const volumeTora = toras.reduce((total, entrada) => total + entrada.volume, 0);
-  if (volumeProduzido > volumeTora + 0.000001) {
-    throw new Error(`O volume produzido (${volumeProduzido.toFixed(6)} m³) excede o volume total das toras (${volumeTora.toFixed(6)} m³)`);
+  if (volumeComAproveitamento > volumeTora + 0.000001) {
+    throw new Error(`A produção com aproveitamento (${volumeComAproveitamento.toFixed(6)} m³) excede o volume total das toras (${volumeTora.toFixed(6)} m³)`);
   }
-  const aproveitamentoPorEssencia = calcularAproveitamentoPorEssencia(toras.map((entrada) => ({ madeiraNome: entrada.tora.madeiraNome, volume: entrada.volume })), itens);
-  if (aproveitamentoPorEssencia.some((resumo) => resumo.volumeProduzido > resumo.volumeToras + 0.000001)) {
-    throw new Error("O volume produzido de uma essência não pode exceder o volume das toras desta essência");
+  const aproveitamentoPorEssencia = calcularAproveitamentoPorEssencia(toras.map((entrada) => ({ madeiraNome: entrada.tora.madeiraNome, volume: entrada.volume })), itens).map((resumo) => {
+    const volumeAproveitamentoEssencia = aproveitamentos.filter((item) => item.madeiraNome.localeCompare(resumo.essencia, "pt-BR", { sensitivity: "accent" }) === 0).reduce((total, item) => total + item.volume, 0);
+    return { ...resumo, volumeAproveitamento: Number(volumeAproveitamentoEssencia.toFixed(6)), volumeComAproveitamento: Number((resumo.volumeProduzido + volumeAproveitamentoEssencia).toFixed(6)) };
+  });
+  if (aproveitamentoPorEssencia.some((resumo) => resumo.volumeComAproveitamento > resumo.volumeToras + 0.000001)) {
+    throw new Error("A produção com aproveitamento de uma essência não pode exceder o volume de suas toras");
   }
+  const incluirAproveitamentoNoRendimento = Boolean(input.incluirAproveitamentoNoRendimento);
+  const volumeParaRendimento = incluirAproveitamentoNoRendimento ? volumeComAproveitamento : volumeProduzido;
   return {
     toras,
     totalToras: toras.length,
     itens,
+    aproveitamentos,
     totalPecas: itens.reduce((total, item) => total + item.quantidade, 0),
     metrosLineares: Number(itens.reduce((total, item) => total + item.metrosLineares, 0).toFixed(4)),
     volumeProduzido: Number(volumeProduzido.toFixed(6)),
+    volumeAproveitamento: Number(volumeAproveitamento.toFixed(6)),
+    volumeComAproveitamento: Number(volumeComAproveitamento.toFixed(6)),
+    incluirAproveitamentoNoRendimento,
     volumeTora: Number(volumeTora.toFixed(6)),
-    volumeRemanescente: Number((volumeTora - volumeProduzido).toFixed(6)),
-    aproveitamento: Number(((volumeProduzido / volumeTora) * 100).toFixed(2)),
+    volumeRemanescente: Number((volumeTora - volumeComAproveitamento).toFixed(6)),
+    aproveitamento: Number(((volumeParaRendimento / volumeTora) * 100).toFixed(2)),
     aproveitamentoPorEssencia,
   };
 }

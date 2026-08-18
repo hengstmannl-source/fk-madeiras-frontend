@@ -103,12 +103,13 @@ describe("rotas de PDF protegidas", () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
     vi.spyOn(db, "getRomaneioProducaoComItens").mockResolvedValue({
-      romaneio: { numero: "ROM-000021", dataProducao: new Date("2026-08-12T12:00:00.000Z"), aproveitamento: "50.00", volumeTora: "2.000000", fita: "1", responsavel: "Adilson", observacoes: null, plaquetaCodigo: "PLA-001", madeiraTora: "Cedrinho", comprimentoTora: "5.00" },
+      romaneio: { numero: "ROM-000021", dataProducao: new Date("2026-08-12T12:00:00.000Z"), aproveitamento: "60.00", volumeTora: "2.000000", volumeAproveitamento: "0.200000", incluirAproveitamentoNoRendimento: true, fita: "1", responsavel: "Adilson", observacoes: null, plaquetaCodigo: "PLA-001", madeiraTora: "Cedrinho", comprimentoTora: "5.00" },
       toras: [
         { codigo: "PLA-001", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volume: "1.000000" },
         { codigo: "PLA-002", madeiraNome: "Cedrinho", diametro: "28.00", comprimento: "5.00", volume: "1.000000" },
       ],
       itens: [{ madeiraNome: "Cedrinho", espessura: "2.00", largura: "10.00", comprimento: "3.00", quantidade: 116, metrosLineares: "348.0000", volume: "1.000000" }],
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.200000" }],
     } as any);
     const res = createResponse();
 
@@ -120,7 +121,11 @@ describe("rotas de PDF protegidas", () => {
     expect(textos).toContain("Plaqueta: PLA-001");
     expect(textos).toContain("Plaqueta: PLA-002");
     expect(textos).toContain("Volume de toras: 2 m³");
-    expect(textos).toContain("Aproveitamento: 50%");
+    expect(textos).toContain("Aproveitamento: 60%");
+    expect(textos).toContain("Rendimento inclui aproveitamento");
+    expect(textos).toContain("Peças romaneadas: 1 m³");
+    expect(textos).toContain("Aproveitamento manual: 0,2 m³");
+    expect(textos).toContain("Produção total: 1,2 m³");
   });
 
   it("rejeita recibo de venda ainda não quitada", async () => {

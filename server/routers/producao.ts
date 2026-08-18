@@ -92,6 +92,11 @@ const ItemRomaneioSchema = z.object({
   quantidade: z.number().int().positive(),
 });
 
+const AproveitamentoRomaneioSchema = z.object({
+  madeiraNome: z.string().trim().min(2).max(200),
+  volume: DecimalPositivo,
+});
+
 const ToraRomaneioSchema = z.object({
     madeiraNome: z.string().trim().min(2).max(200),
     diametro: DecimalPositivo.optional().nullable(),
@@ -115,6 +120,8 @@ const RomaneioSchema = z.object({
   responsavel: z.string().trim().max(200).nullable().optional(),
   observacoes: z.string().max(4000).nullable().optional(),
   itens: z.array(ItemRomaneioSchema).min(1, "Adicione ao menos uma peça produzida"),
+  aproveitamentos: z.array(AproveitamentoRomaneioSchema).max(50).default([]),
+  incluirAproveitamentoNoRendimento: z.boolean().default(false),
 });
 
 const ToraSerragemTerceirosSchema = z.object({
