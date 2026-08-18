@@ -427,3 +427,10 @@
 - [x] Reestruturar o relatório de Produção Diária em grade compacta por bitola e comprimento
 - [x] Exibir por bitola o total de peças, volume e participação percentual na produção serrada
 - [x] Cobrir a pré-visualização e a grade de produção no PDF com testes automatizados e validação visual
+- [x] Ampliar a pré-visualização de PDFs para ocupar a área útil de leitura em desktop e celular
+- [x] Remover o painel lateral de miniaturas e priorizar uma página legível por vez no leitor de PDF
+- [x] Validar visualmente a pré-visualização redesenhada e cobrir o novo layout com testes de regressão
+- [x] Corrigir a pré-visualização para leitura ampliada e sem navegação lateral de miniaturas
+- [x] Inverter a grade de Produção: bitolas em colunas superiores e comprimentos em linhas
+- [x] Iniciar a grade de Produção sempre em uma nova página após a listagem de toras
+- [x] Cobrir com testes a orientação invertida e a quebra obrigatória de página da grade

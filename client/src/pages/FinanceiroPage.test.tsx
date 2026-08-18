@@ -438,7 +438,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
         titulos: [expect.objectContaining({ descricao: "Carga de toras RC-001" })],
       }));
     });
-    expect(await screen.findByTitle("Pré-visualização: Relatório financeiro")).toHaveAttribute("src", "blob:relatorio-financeiro");
+    expect(await screen.findByLabelText("Pré-visualização: Relatório financeiro")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
   });
 });
