@@ -16,6 +16,7 @@ import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
+import { criarModeloCsvClientes, prepararImportacaoClientes } from "./clientes.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarRetiradaSerragemTerceiros, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
@@ -382,6 +383,53 @@ export async function createCliente(data: InsertCliente) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(clientes).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+export function getModeloImportacaoClientesCsv() {
+  return criarModeloCsvClientes();
+}
+
+export async function prepararImportacaoClientesCsv(
+  conteudo: string,
+  dependencias?: { database?: any; empresaId?: number; clientesExistentes?: Array<{ id: number; nome: string; email?: string | null; nif?: string | null }> },
+) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const clientesExistentes = dependencias?.clientesExistentes ?? await db.select({
+    id: clientes.id,
+    nome: clientes.nome,
+    email: clientes.email,
+    nif: clientes.nif,
+  }).from(clientes).where(eq(clientes.empresaId, dependencias?.empresaId ?? 1));
+  return prepararImportacaoClientes({ conteudo, clientesExistentes });
+}
+
+export async function importarClientesCsv(
+  conteudo: string,
+  userId: number,
+  empresaIdOuDependencias: number | { database?: any; clientesExistentes?: Array<{ id: number; nome: string; email?: string | null; nif?: string | null }> } = 1,
+  dependencias?: { database?: any; clientesExistentes?: Array<{ id: number; nome: string; email?: string | null; nif?: string | null }> },
+) {
+  const empresaId = typeof empresaIdOuDependencias === "number" ? empresaIdOuDependencias : 1;
+  const dependenciasResolvidas = typeof empresaIdOuDependencias === "number" ? dependencias : empresaIdOuDependencias;
+  const db = dependenciasResolvidas?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const preparo = await prepararImportacaoClientesCsv(conteudo, { database: db, empresaId, clientesExistentes: dependenciasResolvidas?.clientesExistentes });
+  if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
+  await db.transaction(async (tx: any) => {
+    await tx.insert(clientes).values(preparo.linhas.map((linha) => ({
+      nome: linha.nome,
+      contacto: linha.contacto,
+      email: linha.email,
+      nif: linha.nif,
+      morada: linha.morada,
+      observacoes: linha.observacoes,
+      ativo: true,
+      criadoPor: userId,
+      empresaId,
+    })));
+  });
+  return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
 export async function updateCliente(id: number, data: Partial<InsertCliente>, empresaId = 1) {

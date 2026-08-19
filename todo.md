@@ -452,3 +452,8 @@
 - [x] Permitir selecionar várias Produções Diárias e atualizar em lote seus dados de cabeçalho autorizados
 - [x] Permitir selecionar várias Serragens de Terceiros e atualizar em lote seus dados de cabeçalho autorizados
 - [x] Cobrir pacotes, produtos recorrentes, fornecedores e edições em lote com testes de regressão
+- [x] Definir o modelo de planilha para importação de clientes, com cabeçalhos e exemplo
+- [x] Validar campos, normalizar contactos e impedir duplicidades antes de gravar clientes importados
+- [x] Criar prévia e resultado detalhado das linhas aceites e recusadas na importação de clientes
+- [x] Adicionar controles de modelo e importação por planilha na tela de Clientes
+- [x] Cobrir importação válida, linhas inválidas, duplicidades e interface com testes de regressão
