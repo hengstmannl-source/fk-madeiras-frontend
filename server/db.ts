@@ -958,7 +958,13 @@ export async function atribuirNumeroVendaAprovada(orcamentoId: number, database?
   if (!venda[0]) throw new Error("Venda não encontrada");
   if (venda[0].numero) return venda[0].numero;
 
-  const reserva = await db.insert(sequenciasVendas).values({ orcamentoId, numero: `PENDENTE-${orcamentoId}` });
+  if (!venda[0].empresaId) throw new Error("A venda não possui empresa vinculada para gerar a numeração");
+
+  const reserva = await db.insert(sequenciasVendas).values({
+    empresaId: venda[0].empresaId,
+    orcamentoId,
+    numero: `PENDENTE-${orcamentoId}`,
+  });
   const sequenciaId = getInsertedId(reserva as MysqlInsertResult);
   const numero = `VND-${String(sequenciaId).padStart(6, "0")}`;
   await db.update(sequenciasVendas).set({ numero }).where(eq(sequenciasVendas.id, sequenciaId));

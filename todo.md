@@ -486,3 +486,5 @@
 - [x] Cobrir a busca por código físico, código interno e situação disponível no fluxo de Produção
 - [x] Padronizar a exibição de todos os volumes cúbicos de toras com no máximo três casas decimais
 - [x] Cobrir a formatação de volumes de toras em interface e documentos com testes de regressão
+- [x] Corrigir a geração da sequência de vendas que falha ao aprovar um pedido
+- [x] Cobrir aprovação de venda, unicidade de número e recuperação após sequência já existente
