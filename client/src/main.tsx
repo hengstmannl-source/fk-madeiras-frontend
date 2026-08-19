@@ -6,7 +6,7 @@ import { createRoot } from "react-dom/client";
 import superjson from "superjson";
 import App from "./App";
 import { FormValidationAssistant } from "./components/FormValidationAssistant";
-import { startLogin } from "./const";
+import { deveRedirecionarParaLoginLocal } from "./lib/redirecionamentoAcesso";
 import "./index.css";
 
 const queryClient = new QueryClient();
@@ -19,7 +19,8 @@ const redirectToLoginIfUnauthorized = (error: unknown) => {
 
   if (!isUnauthorized) return;
 
-  startLogin();
+  if (!deveRedirecionarParaLoginLocal(window.location.pathname)) return;
+  window.location.assign("/login");
 };
 
 queryClient.getQueryCache().subscribe(event => {

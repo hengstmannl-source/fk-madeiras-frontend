@@ -7,6 +7,7 @@ import { Building2, CheckCircle2, LockKeyhole, Mail, ShieldCheck, Trees } from "
 import { FormEvent, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
 import { toast } from "sonner";
+import { startLogin } from "../const";
 
 function mensagemErro(error: unknown) {
   return error instanceof Error ? error.message : "Não foi possível concluir a operação. Tente novamente.";
@@ -80,7 +81,11 @@ export function LoginPage() {
       <div className="space-y-2"><div className="flex items-center justify-between gap-3"><Label htmlFor="senha">Senha</Label><span className="text-right text-xs text-slate-400">Esqueceu? Fale com o administrador.</span></div><div className="relative"><LockKeyhole className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" /><Input id="senha" type="password" autoComplete="current-password" value={senha} onChange={(event) => setSenha(event.target.value)} className="h-11 pl-10" placeholder="A sua senha" required /></div></div>
       <Button className="h-11 w-full bg-[#173b30] text-white hover:bg-[#0f2c23]" type="submit" disabled={entrar.isPending}>{entrar.isPending ? "A entrar…" : "Entrar no sistema"}</Button>
     </form>
-    <div className="mt-7 border-t pt-6 text-center text-sm text-slate-600">A sua empresa ainda não utiliza a plataforma? <Link href="/cadastro" className="font-semibold text-[#8b5721] hover:underline">Criar ambiente empresarial</Link></div>
+    <div className="mt-7 space-y-3 border-t pt-6 text-center text-sm text-slate-600">
+      <p>É funcionário convidado? Entre acima com o e-mail e a senha criados no convite.</p>
+      <p>A sua empresa ainda não utiliza a plataforma? <Link href="/cadastro" className="font-semibold text-[#8b5721] hover:underline">Criar ambiente empresarial</Link></p>
+      <button type="button" onClick={startLogin} className="text-xs font-medium text-slate-500 underline-offset-4 hover:text-[#173b30] hover:underline">Entrar com conta Manus (administradores)</button>
+    </div>
   </AcessoShell>;
 }
 

@@ -1,10 +1,12 @@
 import "@testing-library/jest-dom/vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ConvitePage } from "./AcessoPage";
+import { ConvitePage, LoginPage } from "./AcessoPage";
 
 const state = vi.hoisted(() => ({
   aceitarConvite: vi.fn(),
+  entrar: vi.fn(),
+  startLogin: vi.fn(),
   toastError: vi.fn(),
 }));
 
@@ -15,10 +17,16 @@ vi.mock("wouter", () => ({
 }));
 
 vi.mock("sonner", () => ({ toast: { error: state.toastError } }));
+vi.mock("../const", () => ({ startLogin: state.startLogin }));
 
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({ auth: { me: { invalidate: vi.fn() } } }),
+    auth: {
+      entrar: {
+        useMutation: () => ({ mutate: state.entrar, isPending: false }),
+      },
+    },
     equipe: {
       consultarConvite: {
         useQuery: () => ({
@@ -39,6 +47,8 @@ describe("ConvitePage", () => {
 
   beforeEach(() => {
     state.aceitarConvite.mockReset();
+    state.entrar.mockReset();
+    state.startLogin.mockReset();
     state.toastError.mockReset();
   });
 
@@ -72,5 +82,17 @@ describe("ConvitePage", () => {
       nome: "João Silva",
       senha: "Madeira8",
     });
+  });
+});
+
+describe("LoginPage", () => {
+  afterEach(() => cleanup());
+
+  it("prioriza o acesso local de colaboradores e deixa Manus como opção explícita", () => {
+    render(<LoginPage />);
+
+    expect(screen.getByText("É funcionário convidado? Entre acima com o e-mail e a senha criados no convite.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Entrar com conta Manus (administradores)" }));
+    expect(state.startLogin).toHaveBeenCalledTimes(1);
   });
 });

@@ -460,3 +460,7 @@
 - [x] Exibir requisitos claros de senha no fluxo de ativação de funcionários convidados
 - [x] Validar a senha no formulário antes do envio e traduzir erros técnicos para mensagens compreensíveis
 - [x] Cobrir senha curta, ausência de maiúscula e senha válida com testes de regressão
+- [x] Garantir que funcionários convidados possam entrar com e-mail e senha sem login Manus
+- [x] Tornar a opção de acesso local clara na tela de login e explicar o fluxo para colaboradores
+- [x] Preservar o acesso administrativo por Manus sem interferir no login local de funcionários
+- [x] Cobrir autenticação local, credenciais inválidas e coexistência dos dois fluxos com testes de regressão
