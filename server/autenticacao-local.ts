@@ -13,6 +13,14 @@ function segredoObrigatorio() {
   return ENV.cookieSecret;
 }
 
+/**
+ * Garante que o servidor pode assinar a sessão local antes de gravar uma
+ * ativação de convite ou o cadastro de uma nova empresa.
+ */
+export function validarConfiguracaoSessaoLocal() {
+  segredoObrigatorio();
+}
+
 export function normalizarEmail(email: string) {
   return email.trim().toLocaleLowerCase("pt-BR");
 }

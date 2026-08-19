@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { perfilAtual, contextoAtual, membrosQuery, convitesQuery, reenviarMutate, invalidarConvites } = vi.hoisted(() => ({
+const { perfilAtual, contextoAtual, membrosQuery, convitesQuery, reenviarMutate, removerMutate, invalidarConvites, invalidarMembros } = vi.hoisted(() => ({
   perfilAtual: { role: "user" },
   contextoAtual: { membro: { papel: "administrador" } },
   membrosQuery: vi.fn(() => ({
@@ -17,19 +17,22 @@ const { perfilAtual, contextoAtual, membrosQuery, convitesQuery, reenviarMutate,
     isLoading: false,
   })),
   reenviarMutate: vi.fn(),
+  removerMutate: vi.fn(),
   invalidarConvites: vi.fn(),
+  invalidarMembros: vi.fn(),
 }));
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/_core/hooks/useAuth", () => ({ useAuth: () => ({ user: perfilAtual, loading: false }) }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
-    useUtils: () => ({ equipe: { listarConvitesPendentes: { invalidate: invalidarConvites } } }),
+    useUtils: () => ({ equipe: { listar: { invalidate: invalidarMembros }, listarConvitesPendentes: { invalidate: invalidarConvites } } }),
     auth: { contexto: { useQuery: () => ({ data: contextoAtual, isLoading: false }) } },
     equipe: {
       listar: { useQuery: membrosQuery },
       listarConvitesPendentes: { useQuery: convitesQuery },
       reenviarConvite: { useMutation: () => ({ mutate: reenviarMutate, isPending: false }) },
+      remover: { useMutation: () => ({ mutate: removerMutate, isPending: false }) },
     },
   },
 }));
@@ -43,7 +46,9 @@ afterEach(() => {
   membrosQuery.mockClear();
   convitesQuery.mockClear();
   reenviarMutate.mockReset();
+  removerMutate.mockReset();
   invalidarConvites.mockReset();
+  invalidarMembros.mockReset();
 });
 
 describe("UtilizadoresPage", () => {
@@ -65,5 +70,16 @@ describe("UtilizadoresPage", () => {
     await user.click(screen.getByRole("button", { name: "Reenviar" }));
 
     expect(reenviarMutate).toHaveBeenCalledWith({ conviteId: 9 });
+  });
+
+  it("pede confirmação antes de remover o acesso de um utilizador", async () => {
+    const user = userEvent.setup();
+    render(<UtilizadoresPage />);
+
+    await user.click(screen.getByRole("button", { name: "Remover" }));
+    expect(screen.getByRole("heading", { name: "Remover acesso de Maria Silva?" })).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Remover acesso" }));
+    expect(removerMutate).toHaveBeenCalledWith({ membroId: 1 });
   });
 });

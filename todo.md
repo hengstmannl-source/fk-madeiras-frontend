@@ -473,3 +473,8 @@
 - [x] Cobrir o redirecionamento inicial e a autenticação local de colaboradores com testes de regressão
 - [x] Corrigir a validação de plaquetas na Produção Diária para não classificar como duplicada a tora adicionada manualmente no próprio romaneio
 - [x] Cobrir com teste o lançamento manual de plaqueta ausente e o bloqueio apenas para duplicidade real
+- [x] Corrigir a consulta tRPC da página inicial que retorna resposta em fluxo incompatível com o transporte não-streaming
+- [x] Cobrir o carregamento da página inicial para impedir regressão de resposta tRPC em fluxo
+- [x] Permitir remover utilizadores ativos por administradores, preservando a segurança do acesso empresarial
+- [x] Corrigir o fluxo de colaboradores ativos sem chave de segurança local e oferecer uma recuperação de acesso coerente
+- [x] Cobrir remoção, permissões e recuperação de credenciais com testes de regressão

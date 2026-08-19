@@ -25,6 +25,7 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
 import { sugerirConciliacoes } from "./conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../shared/plaquetas";
+import { normalizarEmail } from "./autenticacao-local";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -140,6 +141,43 @@ export async function listarMembrosEmpresa(empresaId: number) {
     .innerJoin(users, eq(users.id, empresaMembros.usuarioId))
     .where(eq(empresaMembros.empresaId, empresaId))
     .orderBy(asc(users.name));
+}
+
+export async function removerMembroEmpresa(data: { empresaId: number; membroId: number }) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const [encontrado] = await tx
+      .select({ membro: empresaMembros, usuario: users })
+      .from(empresaMembros)
+      .innerJoin(users, eq(users.id, empresaMembros.usuarioId))
+      .where(and(eq(empresaMembros.id, data.membroId), eq(empresaMembros.empresaId, data.empresaId)))
+      .limit(1);
+
+    if (!encontrado) throw new Error("MEMBRO_NAO_ENCONTRADO");
+    if (encontrado.membro.papel === "proprietario") throw new Error("PROPRIETARIO_NAO_REMOVIVEL");
+
+    await tx
+      .update(empresaMembros)
+      .set({ ativo: false })
+      .where(eq(empresaMembros.id, encontrado.membro.id));
+    await tx.delete(credenciaisUsuarios).where(eq(credenciaisUsuarios.usuarioId, encontrado.usuario.id));
+    await tx.delete(recuperacoesSenha).where(eq(recuperacoesSenha.usuarioId, encontrado.usuario.id));
+
+    if (encontrado.usuario.email) {
+      await tx
+        .update(convitesEmpresa)
+        .set({ canceladoEm: new Date() })
+        .where(and(
+          eq(convitesEmpresa.empresaId, data.empresaId),
+          eq(convitesEmpresa.emailNormalizado, normalizarEmail(encontrado.usuario.email)),
+          isNull(convitesEmpresa.aceitoEm),
+          isNull(convitesEmpresa.canceladoEm),
+        ));
+    }
+
+    return { membroId: encontrado.membro.id, usuarioId: encontrado.usuario.id };
+  });
 }
 
 export async function criarConviteEmpresa(data: {

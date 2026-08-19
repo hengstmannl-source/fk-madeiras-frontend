@@ -5,6 +5,7 @@ vi.mock("./db", () => ({
   listarMembrosEmpresa: vi.fn(),
   listarConvitesPendentesEmpresa: vi.fn(),
   reenviarConviteEmpresa: vi.fn(),
+  removerMembroEmpresa: vi.fn(),
 }));
 
 import * as db from "./db";
@@ -75,5 +76,30 @@ describe("gestão administrativa de equipa", () => {
     await expect(caller.equipe.listarConvitesPendentes()).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(caller.equipe.reenviarConvite({ conviteId: 9 })).rejects.toMatchObject({ code: "FORBIDDEN" });
     expect(db.reenviarConviteEmpresa).not.toHaveBeenCalled();
+  });
+
+  it("revoga o acesso de outro membro da empresa ativa", async () => {
+    vi.mocked(db.removerMembroEmpresa).mockResolvedValue({ membroId: 55, usuarioId: 98 });
+    const caller = appRouter.createCaller(criarContextoEquipe("proprietario"));
+
+    await expect(caller.equipe.remover({ membroId: 55 })).resolves.toEqual({ success: true });
+    expect(db.removerMembroEmpresa).toHaveBeenCalledWith({ empresaId: 7, membroId: 55 });
+  });
+
+  it("impede que um utilizador remova o próprio acesso", async () => {
+    const caller = appRouter.createCaller(criarContextoEquipe());
+
+    await expect(caller.equipe.remover({ membroId: 12 })).rejects.toMatchObject({ code: "BAD_REQUEST" });
+    expect(db.removerMembroEmpresa).not.toHaveBeenCalled();
+  });
+
+  it("preserva o proprietário quando a base de dados recusa a remoção", async () => {
+    vi.mocked(db.removerMembroEmpresa).mockRejectedValue(new Error("PROPRIETARIO_NAO_REMOVIVEL"));
+    const caller = appRouter.createCaller(criarContextoEquipe("proprietario"));
+
+    await expect(caller.equipe.remover({ membroId: 3 })).rejects.toMatchObject({
+      code: "FORBIDDEN",
+      message: "O proprietário da empresa não pode ser removido.",
+    });
   });
 });

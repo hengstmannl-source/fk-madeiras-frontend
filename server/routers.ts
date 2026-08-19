@@ -5,7 +5,7 @@ import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { adminProcedure, protectedProcedure, publicProcedure, router } from "./_core/trpc";
-import { COOKIE_SESSAO_LOCAL, criarSessaoLocal, DURACAO_SESSAO_LOCAL_MS, gerarHashSenha, normalizarEmail, validarSenha } from "./autenticacao-local";
+import { COOKIE_SESSAO_LOCAL, criarSessaoLocal, DURACAO_SESSAO_LOCAL_MS, gerarHashSenha, normalizarEmail, validarConfiguracaoSessaoLocal, validarSenha } from "./autenticacao-local";
 import * as db from "./db";
 import { madeiraRouter } from "./routers/madeira";
 import { bitolaRouter } from "./routers/bitola";
@@ -28,11 +28,11 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    contexto: protectedProcedure.query(({ ctx }) => ({
+    contexto: protectedProcedure.query(async ({ ctx }) => ({
       usuario: ctx.user,
       empresa: ctx.empresaAtiva.empresa,
       membro: ctx.empresaAtiva.membro,
-      empresasDisponiveis: db.listarEmpresasDoUsuario(ctx.user.id),
+      empresasDisponiveis: await db.listarEmpresasDoUsuario(ctx.user.id),
     })),
     entrar: publicProcedure
       .input(z.object({ email: z.string().email(), senha: z.string().min(1).max(200) }))
@@ -64,6 +64,7 @@ export const appRouter = router({
         senha: senhaSeguraSchema,
       }))
       .mutation(async ({ ctx, input }) => {
+        validarConfiguracaoSessaoLocal();
         const emailNormalizado = normalizarEmail(input.email);
         try {
           const criado = await db.criarEmpresaComProprietario({
@@ -95,6 +96,26 @@ export const appRouter = router({
   equipe: router({
     listar: adminProcedure.query(({ ctx }) => db.listarMembrosEmpresa(ctx.empresaAtiva!.empresa.id)),
     listarConvitesPendentes: adminProcedure.query(({ ctx }) => db.listarConvitesPendentesEmpresa(ctx.empresaAtiva!.empresa.id)),
+    remover: adminProcedure
+      .input(z.object({ membroId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const papelAtual = ctx.empresaAtiva!.membro.papel;
+        if (papelAtual !== "proprietario" && papelAtual !== "administrador") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Apenas proprietários e administradores podem remover utilizadores." });
+        }
+        if (input.membroId === ctx.empresaAtiva!.membro.id) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: "Não é possível remover o seu próprio acesso." });
+        }
+        try {
+          await db.removerMembroEmpresa({ empresaId: ctx.empresaAtiva!.empresa.id, membroId: input.membroId });
+        } catch (error) {
+          const mensagem = error instanceof Error ? error.message : "";
+          if (mensagem === "MEMBRO_NAO_ENCONTRADO") throw new TRPCError({ code: "NOT_FOUND", message: "Este utilizador já não está associado à empresa." });
+          if (mensagem === "PROPRIETARIO_NAO_REMOVIVEL") throw new TRPCError({ code: "FORBIDDEN", message: "O proprietário da empresa não pode ser removido." });
+          throw error;
+        }
+        return { success: true } as const;
+      }),
     criarConvite: adminProcedure
       .input(z.object({ email: z.string().email(), papel: z.enum(["administrador", "financeiro", "vendas", "producao", "consulta"]) }))
       .mutation(async ({ ctx, input }) => {
@@ -152,6 +173,7 @@ export const appRouter = router({
     aceitarConvite: publicProcedure
       .input(z.object({ token: z.string().min(20).max(200), nome: z.string().trim().min(2).max(300), senha: senhaSeguraSchema }))
       .mutation(async ({ ctx, input }) => {
+        validarConfiguracaoSessaoLocal();
         try {
           const criado = await db.aceitarConviteCriandoUsuario({
             tokenHash: createHash("sha256").update(input.token).digest("hex"),
