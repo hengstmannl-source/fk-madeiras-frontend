@@ -469,3 +469,6 @@
 - [x] Calcular o total de peças produzidas agrupado por bitola na Produção Diária
 - [x] Exibir os totais por bitola no painel-resumo de produção sem comprometer a responsividade
 - [x] Cobrir o resumo de peças por bitola com teste de regressão
+- [x] Mapear a sequência operacional do tutorial guiado de RH e Folha
+- [x] Criar um tutorial interativo dentro da página de RH
+- [x] Cobrir a abertura, navegação e conclusão do tutorial com testes de regressão
