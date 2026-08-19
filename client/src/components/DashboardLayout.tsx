@@ -26,7 +26,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
+  ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users, UserCog,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
   ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning, Truck, CircleCheckBig, ReceiptText,
 } from "lucide-react";
@@ -36,12 +36,14 @@ import { DashboardLayoutSkeleton } from './DashboardLayoutSkeleton';
 import { Button } from "./ui/button";
 import { toast } from "sonner";
 import { useTheme } from "@/contexts/ThemeContext";
+import { trpc } from "@/lib/trpc";
 
 type NavigationItem = {
   icon: typeof LayoutDashboard;
   label: string;
   path: string;
   disabled?: boolean;
+  adminOnly?: boolean;
 };
 
 export const dashboardNavigation = {
@@ -68,6 +70,7 @@ export const dashboardNavigation = {
     { icon: Users, label: "Clientes", path: "/clientes" },
     { icon: Building2, label: "Empresa", path: "/empresa" },
     { icon: Users, label: "Colaboradores", path: "/equipe" },
+    { icon: UserCog, label: "Utilizadores", path: "/utilizadores", adminOnly: true },
   ],
   producao: [
     { icon: Factory, label: "Produção", path: "/producao" },
@@ -152,6 +155,7 @@ type DashboardLayoutContentProps = {
 
 function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
+  const contexto = trpc.auth.contexto.useQuery(undefined, { enabled: Boolean(user), retry: false, refetchOnWindowFocus: false });
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const { theme, toggleTheme } = useTheme();
@@ -159,7 +163,10 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const isCollapsed = state === "collapsed";
   const [isResizing, setIsResizing] = useState(false);
   const sidebarRef = useRef<HTMLDivElement>(null);
-  const activeMenuItem = dashboardMenuItems.find((item) => isItemActive(item, location, search));
+  const podeAdministrarUtilizadores = user?.role === "admin" || contexto.data?.membro.papel === "proprietario" || contexto.data?.membro.papel === "administrador";
+  const itensGestaoVisiveis = dashboardNavigation.gestao.filter((item) => !item.adminOnly || podeAdministrarUtilizadores);
+  const itensNavegacaoVisiveis = [...dashboardNavigation.principal, ...dashboardNavigation.financeiro, ...dashboardNavigation.vendas, ...itensGestaoVisiveis, ...dashboardNavigation.producao, ...dashboardNavigation.combustivel];
+  const activeMenuItem = itensNavegacaoVisiveis.find((item) => isItemActive(item, location, search));
   const isMobile = useIsMobile();
   const navigationPresentation = getNavigationPresentation(isMobile);
   const [gruposExpandidos, setGruposExpandidos] = useState(() => gruposExpandidosIniciais(localStorage.getItem(SIDEBAR_GROUPS_KEY)));
@@ -227,7 +234,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
             </SidebarMenu>
             <NavigationGroup label="Financeiro" items={dashboardNavigation.financeiro} location={location} search={search} navigate={setLocation} renderPrincipal open={gruposExpandidos.Financeiro} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Financeiro: aberto }))} />
             <NavigationGroup label="Vendas" items={dashboardNavigation.vendas} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Vendas} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Vendas: aberto }))} />
-            <NavigationGroup label="Gestão" items={dashboardNavigation.gestao} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Gestão} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Gestão: aberto }))} />
+            <NavigationGroup label="Gestão" items={itensGestaoVisiveis} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Gestão} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Gestão: aberto }))} />
             <NavigationGroup label="Produção" items={dashboardNavigation.producao} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Produção} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Produção: aberto }))} />
             <NavigationGroup label="Combustível" items={dashboardNavigation.combustivel} location={location} search={search} navigate={setLocation} open={gruposExpandidos.Combustível} onOpenChange={(aberto) => setGruposExpandidos((grupos) => ({ ...grupos, Combustível: aberto }))} />
           </SidebarContent>

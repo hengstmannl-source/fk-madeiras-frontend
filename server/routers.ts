@@ -94,6 +94,7 @@ export const appRouter = router({
   }),
   equipe: router({
     listar: adminProcedure.query(({ ctx }) => db.listarMembrosEmpresa(ctx.empresaAtiva!.empresa.id)),
+    listarConvitesPendentes: adminProcedure.query(({ ctx }) => db.listarConvitesPendentesEmpresa(ctx.empresaAtiva!.empresa.id)),
     criarConvite: adminProcedure
       .input(z.object({ email: z.string().email(), papel: z.enum(["administrador", "financeiro", "vendas", "producao", "consulta"]) }))
       .mutation(async ({ ctx, input }) => {
@@ -114,6 +115,32 @@ export const appRouter = router({
         const protocolo = ctx.req.protocol;
         const conviteUrl = `${protocolo}://${ctx.req.get("host")}/convite/${token}`;
         return { success: true, conviteUrl, expiraEm: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) };
+      }),
+    reenviarConvite: adminProcedure
+      .input(z.object({ conviteId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const papelAtual = ctx.empresaAtiva!.membro.papel;
+        if (papelAtual !== "proprietario" && papelAtual !== "administrador") {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Apenas proprietários e administradores podem reenviar convites." });
+        }
+        const token = randomBytes(32).toString("base64url");
+        const expiraEm = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        try {
+          await db.reenviarConviteEmpresa({
+            conviteId: input.conviteId,
+            empresaId: ctx.empresaAtiva!.empresa.id,
+            convidadoPor: ctx.user.id,
+            tokenHash: createHash("sha256").update(token).digest("hex"),
+            expiraEm,
+          });
+        } catch (error) {
+          if (error instanceof Error && error.message === "CONVITE_NAO_DISPONIVEL") {
+            throw new TRPCError({ code: "NOT_FOUND", message: "Este convite já não está disponível para reenvio." });
+          }
+          throw error;
+        }
+        const conviteUrl = `${ctx.req.protocol}://${ctx.req.get("host")}/convite/${token}`;
+        return { success: true, conviteUrl, expiraEm };
       }),
     consultarConvite: publicProcedure
       .input(z.object({ token: z.string().min(20).max(200) }))

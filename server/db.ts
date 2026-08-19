@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gt, gte, isNull, lte, ne, inArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -154,6 +154,61 @@ export async function criarConviteEmpresa(data: {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(convitesEmpresa).values(data);
   return getInsertedId(result as MysqlInsertResult);
+}
+
+export async function listarConvitesPendentesEmpresa(empresaId: number) {
+  const db = await getDb();
+  if (!db) return [];
+  return db
+    .select({ convite: convitesEmpresa })
+    .from(convitesEmpresa)
+    .where(and(
+      eq(convitesEmpresa.empresaId, empresaId),
+      isNull(convitesEmpresa.aceitoEm),
+      isNull(convitesEmpresa.canceladoEm),
+      gt(convitesEmpresa.expiraEm, new Date()),
+    ))
+    .orderBy(desc(convitesEmpresa.createdAt));
+}
+
+export async function reenviarConviteEmpresa(data: {
+  conviteId: number;
+  empresaId: number;
+  convidadoPor: number;
+  tokenHash: string;
+  expiraEm: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async tx => {
+    const [conviteAnterior] = await tx
+      .select()
+      .from(convitesEmpresa)
+      .where(and(
+        eq(convitesEmpresa.id, data.conviteId),
+        eq(convitesEmpresa.empresaId, data.empresaId),
+        isNull(convitesEmpresa.aceitoEm),
+        isNull(convitesEmpresa.canceladoEm),
+      ))
+      .limit(1);
+
+    if (!conviteAnterior) throw new Error("CONVITE_NAO_DISPONIVEL");
+
+    await tx
+      .update(convitesEmpresa)
+      .set({ canceladoEm: new Date() })
+      .where(eq(convitesEmpresa.id, conviteAnterior.id));
+
+    const result = await tx.insert(convitesEmpresa).values({
+      empresaId: data.empresaId,
+      emailNormalizado: conviteAnterior.emailNormalizado,
+      papel: conviteAnterior.papel,
+      tokenHash: data.tokenHash,
+      expiraEm: data.expiraEm,
+      convidadoPor: data.convidadoPor,
+    });
+    return getInsertedId(result as MysqlInsertResult);
+  });
 }
 
 export async function getConviteValidoPorHash(tokenHash: string) {

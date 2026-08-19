@@ -464,3 +464,8 @@
 - [x] Tornar a opção de acesso local clara na tela de login e explicar o fluxo para colaboradores
 - [x] Preservar o acesso administrativo por Manus sem interferir no login local de funcionários
 - [x] Cobrir autenticação local, credenciais inválidas e coexistência dos dois fluxos com testes de regressão
+- [x] Criar página administrativa para listar utilizadores ativos e convites pendentes
+- [x] Exibir estado, perfil, último acesso e dados essenciais de cada utilizador para administradores
+- [x] Permitir reenviar de forma segura os convites pendentes, renovando a validade do acesso
+- [x] Adicionar acesso à Gestão de Utilizadores na navegação exclusiva de administradores
+- [x] Cobrir permissões administrativas, listagem de estados e reenvio de convites com testes de regressão
