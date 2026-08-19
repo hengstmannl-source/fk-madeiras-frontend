@@ -3271,7 +3271,13 @@ export default function ProducaoPage() {
                       </p>
                       {codigoPlaqueta.trim() && !plaquetas.isLoading && (
                         <p
-                          className={`text-xs ${torasDisponiveis.some((item: any) => normalizarCodigo(item.codigo) === normalizarCodigo(codigoPlaqueta)) ? "text-emerald-700" : "text-amber-700"}`}
+                          className={`rounded-md px-2 py-1 text-xs font-medium ${
+                            buscaPlaquetaDigitada.isLoading
+                              ? "text-muted-foreground"
+                              : buscaPlaquetaDigitada.data
+                                ? "border border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                : "text-amber-700 dark:text-amber-400"
+                          }`}
                         >
                           {buscaPlaquetaDigitada.isLoading
                             ? "Consultando a plaqueta no estoque..."

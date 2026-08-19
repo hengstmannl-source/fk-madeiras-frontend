@@ -456,3 +456,5 @@
 - [x] Cobrir o avanço publicado ao romaneio de peças sem identificação de tora
 - [x] Corrigir a busca da Produção Diária que não reconhece a plaqueta 1012 disponível no estoque
 - [x] Cobrir a identificação da plaqueta por código físico e código interno no fluxo de produção
+- [x] Destacar em verde o aviso de plaqueta encontrada na Produção Diária
+- [x] Validar o contraste visual do aviso de disponibilidade da plaqueta

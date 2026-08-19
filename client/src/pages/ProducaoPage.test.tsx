@@ -274,6 +274,7 @@ describe("ProducaoPage", () => {
 
     await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
     await user.type(screen.getByLabelText("Código da plaqueta"), "1012");
+    expect(screen.getByText("Plaqueta disponível encontrada. Pressione Enter para adicionar.")).toHaveClass("text-emerald-800");
     await user.keyboard("{Enter}");
 
     expect(await screen.findByDisplayValue("Cedrinho")).toBeInTheDocument();
