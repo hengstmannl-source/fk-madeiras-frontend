@@ -16,12 +16,6 @@ describe("navegação principal", () => {
     expect(dashboardNavigation.combustivel.every((item) => !item.disabled)).toBe(true);
   });
 
-  it("identifica Gestão de Utilizadores como acesso exclusivo de administradores", () => {
-    const utilizadores = dashboardNavigation.gestao.find((item) => item.path === "/utilizadores");
-    expect(utilizadores).toMatchObject({ label: "Utilizadores", adminOnly: true });
-    expect(dashboardMenuItems.map((item) => item.path)).toContain("/utilizadores");
-  });
-
   it("navega diretamente para o módulo Diesel disponível", () => {
     const navigate = vi.fn();
     const notify = vi.fn();

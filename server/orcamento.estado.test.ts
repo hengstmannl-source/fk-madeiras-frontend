@@ -88,14 +88,12 @@ describe("mudança de estado de orçamento", () => {
 
   it("reserva uma numeração sequencial única ao aprovar a venda", async () => {
     const atualizacoes: any[] = [];
-    const reservas: any[] = [];
     const db = {
-      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 150001, empresaId: 31, numero: null }] }) }) })),
-      insert: vi.fn(() => ({ values: async (dados: any) => { reservas.push(dados); return [{ insertId: 42 }]; } })),
+      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 150001, numero: null }] }) }) })),
+      insert: vi.fn(() => ({ values: async () => [{ insertId: 42 }] })),
       update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
     };
     await expect(atribuirNumeroVendaAprovada(150001, db)).resolves.toBe("VND-000042");
-    expect(reservas).toEqual([{ empresaId: 31, orcamentoId: 150001, numero: "PENDENTE-150001" }]);
     expect(atualizacoes).toEqual([{ numero: "VND-000042" }, { numero: "VND-000042" }]);
   });
 

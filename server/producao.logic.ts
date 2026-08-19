@@ -81,14 +81,14 @@ export function calcularItemRomaneio(item: ItemProducaoEntrada) {
 }
 
 export function validarSerragemTerceiros(input: {
-  toras: Array<{ referencia: string; madeiraNome: string; diametro?: string | number | null; comprimento?: string | number | null; volume?: string | number }>;
+  toras: Array<{ referencia?: string; madeiraNome: string; diametro?: string | number | null; comprimento?: string | number | null; volume?: string | number }>;
   itens: ItemProducaoEntrada[];
 }) {
   if (!input.toras.length) throw new Error("Informe ao menos uma tora do cliente para a serragem");
   if (!input.itens.length) throw new Error("Adicione ao menos uma peça serrada");
   const referencias = new Set<string>();
   const toras = input.toras.map((tora) => {
-    const referencia = tora.referencia.trim() || "-";
+    const referencia = tora.referencia?.trim() || "-";
     if (!tora.madeiraNome.trim()) throw new Error("Informe uma essência válida para cada tora");
     const referenciaNormalizada = referencia.toLocaleUpperCase("pt-BR");
     const referenciaNaoInformada = referencia === "-";

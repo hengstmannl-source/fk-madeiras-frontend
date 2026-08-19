@@ -125,7 +125,7 @@ const RomaneioSchema = z.object({
 });
 
 const ToraSerragemTerceirosSchema = z.object({
-  referencia: z.string().trim().max(120).default("-"),
+  referencia: z.string().trim().max(120).optional().transform((referencia) => referencia || "-"),
   madeiraNome: z.string().trim().min(2).max(200),
   diametro: DecimalPositivo,
   comprimento: DecimalPositivo,
@@ -203,7 +203,6 @@ export const producaoRouter = router({
   }),
   plaquetas: router({
     list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ ctx, input }) => db.listPlaquetas(input, ctx.empresaAtiva!.empresa.id)),
-    buscarDisponivel: protectedProcedure.input(z.object({ codigo: z.string().trim().min(1, "Informe o código da plaqueta").max(80) })).query(({ ctx, input }) => db.getPlaquetaDisponivelPorCodigo(input.codigo, ctx.empresaAtiva!.empresa.id)),
     confirmarVariacoesAtipicas: protectedProcedure.input(ConfirmacaoVariacoesAtipicasSchema).mutation(({ ctx, input }) => db.confirmarVariacoesAtipicasPlaquetas(input.variacoes, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     relatorioExcecoes: protectedProcedure.input(RelatorioExcecoesPlaquetasSchema.optional()).query(({ ctx, input }) => db.getRelatorioExcecoesPlaquetas(input, ctx.empresaAtiva!.empresa.id)),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({

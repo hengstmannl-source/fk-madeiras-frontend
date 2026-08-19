@@ -131,9 +131,8 @@ export function validarCsvTorasSerragemTerceiros(conteudo: string, maximoLinhas 
   dados.forEach((colunas, indice) => {
     const numeroLinha = indice + 2;
     const valor = (campo: typeof CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS[number]) => (colunas[indices[CABECALHOS_CSV_TORAS_SERRAGEM_TERCEIROS.indexOf(campo)]] ?? "").trim();
-    const referencia = valor("referencia");
+    const referencia = valor("referencia") || "-";
     const madeiraNome = valor("essencia");
-    if (!referencia) { erros.push(`Linha ${numeroLinha}: informe a referência ou use - quando não houver identificação`); return; }
     const referenciaNormalizada = referencia.toLocaleUpperCase("pt-BR");
     if (referencia !== "-" && referencias.has(referenciaNormalizada)) { erros.push(`Linha ${numeroLinha}: a referência ${referencia} está repetida na planilha`); return; }
     if (referencia !== "-") referencias.add(referenciaNormalizada);

@@ -22,7 +22,6 @@ import RelatorioPlaquetasPage from "./pages/RelatorioPlaquetasPage";
 import InventarioPage from "./pages/InventarioPage";
 import DieselPage from "./pages/DieselPage";
 import EquipePage from "./pages/EquipePage";
-import UtilizadoresPage from "./pages/UtilizadoresPage";
 import { CadastroEmpresaPage, ConvitePage, LoginPage } from "./pages/AcessoPage";
 import { tratarAtalhosProducao } from "./lib/producaoKeyboardShortcuts";
 
@@ -63,7 +62,6 @@ function Router() {
         <Route path="/diesel" component={DieselPage} />
             <Route path="/empresa" component={EmpresaPage} />
             <Route path="/equipe" component={EquipePage} />
-            <Route path="/utilizadores" component={UtilizadoresPage} />
         <Route path="/404" component={NotFound} />
             <Route component={NotFound} />
           </Switch>

@@ -57,9 +57,9 @@ describe("intercâmbio de plaquetas para produção", () => {
     expect(resultado.erros.join(" ")).toMatch(/quantidade.*inteiro.*medidas da peça/i);
   });
 
-  it("fornece modelo e prepara toras de terceiros, permitindo a referência externa - repetida", () => {
+  it("fornece modelo e prepara toras de terceiros sem referência externa", () => {
     expect(criarModeloCsvTorasSerragemTerceiros()).toContain("referencia;essencia;diametro_cm;comprimento_m");
-    expect(validarCsvTorasSerragemTerceiros("referencia;essencia;diametro_cm;comprimento_m\n-;Cedrinho;32;4,0\n-;Piqui;36;4,5")).toEqual({
+    expect(validarCsvTorasSerragemTerceiros("referencia;essencia;diametro_cm;comprimento_m\n;Cedrinho;32;4,0\n;Piqui;36;4,5")).toEqual({
       erros: [],
       toras: [
         { referencia: "-", madeiraNome: "Cedrinho", diametro: "32", comprimento: "4" },

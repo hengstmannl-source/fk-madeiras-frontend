@@ -59,7 +59,7 @@ describe("regras de produção", () => {
     expect(() => validarExclusaoRomaneioProducao({ possuiMovimentacoesPosteriores: false, saldoDasPecasFoiAlterado: true })).toThrow(/peças já movimentadas/i);
   });
 
-  it("valida a serragem de terceiros sem exigir plaquetas no estoque próprio ou referência externa", () => {
+  it("valida a serragem de terceiros sem exigir plaqueta ou referência", () => {
     expect(validarSerragemTerceiros({
       toras: [{ referencia: "CLI-01", madeiraNome: "Cedrinho", diametro: "50", comprimento: "6,1115498", volume: "1.2" }],
       itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 10 }],
@@ -67,7 +67,7 @@ describe("regras de produção", () => {
     expect(validarSerragemTerceiros({
       toras: [{ referencia: "", madeiraNome: "Cedrinho", diametro: "50", comprimento: "4", volume: "1" }],
       itens: [{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, quantidade: 1 }],
-    })).toMatchObject({ toras: [{ referencia: "-" }] });
+    })).toMatchObject({ toras: [{ referencia: "-", madeiraNome: "Cedrinho" }] });
   });
 
   it("aceita a referência externa não informada repetida na serragem de terceiros", () => {

@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gt, gte, isNull, lte, ne, inArray, or, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -16,7 +16,6 @@ import { ENV } from './_core/env';
 import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
-import { criarModeloCsvClientes, prepararImportacaoClientes } from "./clientes.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarRetiradaSerragemTerceiros, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
@@ -25,7 +24,6 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
 import { sugerirConciliacoes } from "./conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../shared/plaquetas";
-import { normalizarEmail } from "./autenticacao-local";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -143,43 +141,6 @@ export async function listarMembrosEmpresa(empresaId: number) {
     .orderBy(asc(users.name));
 }
 
-export async function removerMembroEmpresa(data: { empresaId: number; membroId: number }) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.transaction(async tx => {
-    const [encontrado] = await tx
-      .select({ membro: empresaMembros, usuario: users })
-      .from(empresaMembros)
-      .innerJoin(users, eq(users.id, empresaMembros.usuarioId))
-      .where(and(eq(empresaMembros.id, data.membroId), eq(empresaMembros.empresaId, data.empresaId)))
-      .limit(1);
-
-    if (!encontrado) throw new Error("MEMBRO_NAO_ENCONTRADO");
-    if (encontrado.membro.papel === "proprietario") throw new Error("PROPRIETARIO_NAO_REMOVIVEL");
-
-    await tx
-      .update(empresaMembros)
-      .set({ ativo: false })
-      .where(eq(empresaMembros.id, encontrado.membro.id));
-    await tx.delete(credenciaisUsuarios).where(eq(credenciaisUsuarios.usuarioId, encontrado.usuario.id));
-    await tx.delete(recuperacoesSenha).where(eq(recuperacoesSenha.usuarioId, encontrado.usuario.id));
-
-    if (encontrado.usuario.email) {
-      await tx
-        .update(convitesEmpresa)
-        .set({ canceladoEm: new Date() })
-        .where(and(
-          eq(convitesEmpresa.empresaId, data.empresaId),
-          eq(convitesEmpresa.emailNormalizado, normalizarEmail(encontrado.usuario.email)),
-          isNull(convitesEmpresa.aceitoEm),
-          isNull(convitesEmpresa.canceladoEm),
-        ));
-    }
-
-    return { membroId: encontrado.membro.id, usuarioId: encontrado.usuario.id };
-  });
-}
-
 export async function criarConviteEmpresa(data: {
   empresaId: number;
   emailNormalizado: string;
@@ -192,61 +153,6 @@ export async function criarConviteEmpresa(data: {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(convitesEmpresa).values(data);
   return getInsertedId(result as MysqlInsertResult);
-}
-
-export async function listarConvitesPendentesEmpresa(empresaId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({ convite: convitesEmpresa })
-    .from(convitesEmpresa)
-    .where(and(
-      eq(convitesEmpresa.empresaId, empresaId),
-      isNull(convitesEmpresa.aceitoEm),
-      isNull(convitesEmpresa.canceladoEm),
-      gt(convitesEmpresa.expiraEm, new Date()),
-    ))
-    .orderBy(desc(convitesEmpresa.createdAt));
-}
-
-export async function reenviarConviteEmpresa(data: {
-  conviteId: number;
-  empresaId: number;
-  convidadoPor: number;
-  tokenHash: string;
-  expiraEm: Date;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.transaction(async tx => {
-    const [conviteAnterior] = await tx
-      .select()
-      .from(convitesEmpresa)
-      .where(and(
-        eq(convitesEmpresa.id, data.conviteId),
-        eq(convitesEmpresa.empresaId, data.empresaId),
-        isNull(convitesEmpresa.aceitoEm),
-        isNull(convitesEmpresa.canceladoEm),
-      ))
-      .limit(1);
-
-    if (!conviteAnterior) throw new Error("CONVITE_NAO_DISPONIVEL");
-
-    await tx
-      .update(convitesEmpresa)
-      .set({ canceladoEm: new Date() })
-      .where(eq(convitesEmpresa.id, conviteAnterior.id));
-
-    const result = await tx.insert(convitesEmpresa).values({
-      empresaId: data.empresaId,
-      emailNormalizado: conviteAnterior.emailNormalizado,
-      papel: conviteAnterior.papel,
-      tokenHash: data.tokenHash,
-      expiraEm: data.expiraEm,
-      convidadoPor: data.convidadoPor,
-    });
-    return getInsertedId(result as MysqlInsertResult);
-  });
 }
 
 export async function getConviteValidoPorHash(tokenHash: string) {
@@ -476,53 +382,6 @@ export async function createCliente(data: InsertCliente) {
   if (!db) throw new Error("Database not available");
   const result = await db.insert(clientes).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
-}
-
-export function getModeloImportacaoClientesCsv() {
-  return criarModeloCsvClientes();
-}
-
-export async function prepararImportacaoClientesCsv(
-  conteudo: string,
-  dependencias?: { database?: any; empresaId?: number; clientesExistentes?: Array<{ id: number; nome: string; email?: string | null; nif?: string | null }> },
-) {
-  const db = dependencias?.database ?? await getDb();
-  if (!db) throw new Error("Database not available");
-  const clientesExistentes = dependencias?.clientesExistentes ?? await db.select({
-    id: clientes.id,
-    nome: clientes.nome,
-    email: clientes.email,
-    nif: clientes.nif,
-  }).from(clientes).where(eq(clientes.empresaId, dependencias?.empresaId ?? 1));
-  return prepararImportacaoClientes({ conteudo, clientesExistentes });
-}
-
-export async function importarClientesCsv(
-  conteudo: string,
-  userId: number,
-  empresaIdOuDependencias: number | { database?: any; clientesExistentes?: Array<{ id: number; nome: string; email?: string | null; nif?: string | null }> } = 1,
-  dependencias?: { database?: any; clientesExistentes?: Array<{ id: number; nome: string; email?: string | null; nif?: string | null }> },
-) {
-  const empresaId = typeof empresaIdOuDependencias === "number" ? empresaIdOuDependencias : 1;
-  const dependenciasResolvidas = typeof empresaIdOuDependencias === "number" ? dependencias : empresaIdOuDependencias;
-  const db = dependenciasResolvidas?.database ?? await getDb();
-  if (!db) throw new Error("Database not available");
-  const preparo = await prepararImportacaoClientesCsv(conteudo, { database: db, empresaId, clientesExistentes: dependenciasResolvidas?.clientesExistentes });
-  if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
-  await db.transaction(async (tx: any) => {
-    await tx.insert(clientes).values(preparo.linhas.map((linha) => ({
-      nome: linha.nome,
-      contacto: linha.contacto,
-      email: linha.email,
-      nif: linha.nif,
-      morada: linha.morada,
-      observacoes: linha.observacoes,
-      ativo: true,
-      criadoPor: userId,
-      empresaId,
-    })));
-  });
-  return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
 export async function updateCliente(id: number, data: Partial<InsertCliente>, empresaId = 1) {
@@ -958,13 +817,7 @@ export async function atribuirNumeroVendaAprovada(orcamentoId: number, database?
   if (!venda[0]) throw new Error("Venda não encontrada");
   if (venda[0].numero) return venda[0].numero;
 
-  if (!venda[0].empresaId) throw new Error("A venda não possui empresa vinculada para gerar a numeração");
-
-  const reserva = await db.insert(sequenciasVendas).values({
-    empresaId: venda[0].empresaId,
-    orcamentoId,
-    numero: `PENDENTE-${orcamentoId}`,
-  });
+  const reserva = await db.insert(sequenciasVendas).values({ orcamentoId, numero: `PENDENTE-${orcamentoId}` });
   const sequenciaId = getInsertedId(reserva as MysqlInsertResult);
   const numero = `VND-${String(sequenciaId).padStart(6, "0")}`;
   await db.update(sequenciasVendas).set({ numero }).where(eq(sequenciasVendas.id, sequenciaId));
@@ -2630,23 +2483,6 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
   const essenciasAtipicas = variacoesAtipicas.map((item) => item.essencia);
   const alertaVariacaoAtipica = variacoesAtipicas.length > 0;
   return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, variacoesAtipicas, proximoDeslocamento };
-}
-
-export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, empresaId = 1) {
-  const db = await getDb();
-  if (!db) return null;
-  const codigoNormalizado = normalizarCodigoPlaqueta(codigoInformado);
-  if (!codigoNormalizado) return null;
-  const brutas = await db.select().from(plaquetas).where(and(
-    eq(plaquetas.empresaId, empresaId),
-    eq(plaquetas.estado, "disponivel"),
-  )).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
-  const numeradas = numerarDuplicidadesPlaquetas(brutas);
-  return numeradas.find((plaqueta) =>
-    [plaqueta.codigo, plaqueta.codigoFisico].some((codigo) =>
-      Boolean(codigo) && normalizarCodigoPlaqueta(codigo ?? "") === codigoNormalizado,
-    ),
-  ) ?? null;
 }
 
 export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number, empresaId = 1) {

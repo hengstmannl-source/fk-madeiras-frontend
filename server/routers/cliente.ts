@@ -9,13 +9,6 @@ export const clienteRouter = router({
   listAll: protectedProcedure.query(async ({ ctx }) => {
     return db.listAllClientes(ctx.empresaAtiva!.empresa.id);
   }),
-  modeloCsv: protectedProcedure.query(() => db.getModeloImportacaoClientesCsv()),
-  prepararImportacaoCsv: protectedProcedure.input(z.object({
-    conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
-  })).mutation(({ ctx, input }) => db.prepararImportacaoClientesCsv(input.conteudo, { empresaId: ctx.empresaAtiva!.empresa.id })),
-  importarCsv: protectedProcedure.input(z.object({
-    conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
-  })).mutation(({ ctx, input }) => db.importarClientesCsv(input.conteudo, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
 
   create: protectedProcedure
     .input(z.object({

@@ -1,39 +1,16 @@
-import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { ENV } from "./_core/env";
 
 const scrypt = promisify(scryptCallback);
 const DURACAO_SESSAO_MS = 1000 * 60 * 60 * 12;
 export const COOKIE_SESSAO_LOCAL = "fk_sessao_local";
-const TAMANHO_MINIMO_SEGREDO = 32;
 
 function segredoObrigatorio() {
-  const segredoConfigurado = ENV.cookieSecret.trim();
-  if (segredoConfigurado.length >= TAMANHO_MINIMO_SEGREDO) return segredoConfigurado;
-
-  // DATABASE_URL é privada, obrigatória em projetos full-stack e estável entre
-  // reinicializações. Derivamos uma chave de domínio própria para a sessão
-  // local quando a plataforma não disponibiliza JWT_SECRET.
-  const origemPrivada = ENV.databaseUrl.trim();
-  if (origemPrivada) {
-    return createHash("sha256")
-      .update("fk-madeiras:sessao-local:v1:")
-      .update(origemPrivada)
-      .digest("hex");
-  }
-
-  if (!segredoConfigurado) {
+  if (!ENV.cookieSecret || ENV.cookieSecret.length < 32) {
     throw new Error("A chave segura da sessão não está configurada");
   }
-  throw new Error("A chave segura da sessão não atende ao tamanho mínimo");
-}
-
-/**
- * Garante que o servidor pode assinar a sessão local antes de gravar uma
- * ativação de convite ou o cadastro de uma nova empresa.
- */
-export function validarConfiguracaoSessaoLocal() {
-  segredoObrigatorio();
+  return ENV.cookieSecret;
 }
 
 export function normalizarEmail(email: string) {

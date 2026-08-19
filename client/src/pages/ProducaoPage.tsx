@@ -124,8 +124,6 @@ const formatarNumero = (valor: number | string, casas = 3) =>
   new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: casas === 2 ? 0 : casas,
   }).format(Number(valor ?? 0));
-const formatarVolumeCampo = (valor: number | string | null | undefined) =>
-  formatarNumero(valor ?? 0, 3);
 const formatarMoeda = (valor: number | string) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     Number(valor ?? 0)
@@ -232,14 +230,6 @@ const calcularItem = (item: ItemForm) => ({
 });
 const normalizarCodigo = (codigo: string) =>
   codigo.trim().toLocaleUpperCase("pt-BR").replace(/\s+/g, "-");
-const correspondeCodigoPlaqueta = (
-  plaqueta: { codigo: string; codigoFisico?: string | null },
-  codigoNormalizado: string
-) =>
-  [plaqueta.codigo, plaqueta.codigoFisico].some(
-    codigo =>
-      Boolean(codigo) && normalizarCodigo(codigo ?? "") === codigoNormalizado
-  );
 
 function AproveitamentoManualPortal({
   aberto,
@@ -702,7 +692,7 @@ export default function ProducaoPage() {
         madeiraNome: String(tora.madeiraNome ?? ""),
         diametro: String(tora.diametro ?? ""),
         comprimento: String(tora.comprimento ?? ""),
-        volume: formatarVolumeCampo(tora.volume),
+        volume: String(tora.volume ?? ""),
         origem: "estoque" as const,
         exigeConferenciaManual: Boolean(tora.medidasConferidasManual),
       }));
@@ -722,7 +712,7 @@ export default function ProducaoPage() {
         itens,
         aproveitamentos: (detalhe.aproveitamentos ?? []).map((item: any) => ({
           madeiraNome: String(item.madeiraNome ?? ""),
-          volume: formatarVolumeCampo(item.volume),
+          volume: String(item.volume ?? ""),
         })),
         incluirAproveitamentoNoRendimento: Boolean(
           detalhe.romaneio.incluirAproveitamentoNoRendimento
@@ -895,7 +885,7 @@ export default function ProducaoPage() {
       toast.error("Não foi possível ler o arquivo selecionado");
     }
   };
-  const adicionarTora = async () => {
+  const adicionarTora = () => {
     if (romaneioEmEdicaoId) {
       toast.error(
         "As toras de um romaneio confirmado permanecem bloqueadas para preservar a rastreabilidade"
@@ -915,17 +905,9 @@ export default function ProducaoPage() {
       toast.error("Essa plaqueta já foi adicionada ao romaneio diário");
       return;
     }
-    let plaqueta: any = null;
-    try {
-      plaqueta = await utils.producao.plaquetas.buscarDisponivel.fetch({
-        codigo: codigoNormalizado,
-      });
-    } catch {
-      toast.error(
-        "Não foi possível consultar a plaqueta no estoque. Tente novamente antes de registrá-la manualmente."
-      );
-      return;
-    }
+    const plaqueta: any = torasDisponiveis.find(
+      (item: any) => normalizarCodigo(item.codigo) === codigoNormalizado
+    );
     if (!plaqueta) {
       const toraAvulsa: ToraForm = {
         plaquetaId: "",
@@ -956,7 +938,7 @@ export default function ProducaoPage() {
         : String(plaqueta.comprimento ?? ""),
       volume: exigeConferenciaManual
         ? ""
-        : formatarVolumeCampo(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial),
+        : String(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial ?? ""),
       origem: "estoque",
       exigeConferenciaManual,
     };
@@ -1225,7 +1207,7 @@ export default function ProducaoPage() {
           madeiraNome: String(tora.madeiraNome ?? ""),
           diametro: String(tora.diametro ?? ""),
           comprimento: String(tora.comprimento ?? ""),
-          volume: formatarVolumeCampo(tora.volume),
+          volume: String(tora.volume ?? ""),
         })),
         itens: (detalhe.itens ?? []).map((item: any) => ({
           madeiraNome: String(item.madeiraNome ?? ""),
@@ -1315,13 +1297,12 @@ export default function ProducaoPage() {
     if (
       torasPreenchidas.some(
         tora =>
-          !tora.referencia.trim() ||
           num(tora.diametro) <= 0 ||
           num(tora.comprimento) <= 0
       )
     ) {
       toast.error(
-        "Preencha referência, diâmetro e comprimento de todas as toras informadas"
+        "Preencha diâmetro e comprimento de todas as toras informadas"
       );
       return;
     }
@@ -1347,7 +1328,7 @@ export default function ProducaoPage() {
       valorMetroCubico: valorServico,
       toras: torasPreenchidas.map(tora => ({
         ...tora,
-        referencia: tora.referencia.trim(),
+        referencia: tora.referencia.trim() || "-",
         madeiraNome: tora.madeiraNome.trim(),
       })),
       itens: itensPreenchidos.map(item => ({
@@ -3267,7 +3248,7 @@ export default function ProducaoPage() {
                         onKeyDown={evento => {
                           if (evento.key === "Enter") {
                             evento.preventDefault();
-                            void adicionarTora();
+                            adicionarTora();
                           }
                         }}
                         placeholder="Digite a plaqueta, ex.: TOR-0008"
@@ -3283,11 +3264,10 @@ export default function ProducaoPage() {
                         <p
                           className={`text-xs ${torasDisponiveis.some((item: any) => normalizarCodigo(item.codigo) === normalizarCodigo(codigoPlaqueta)) ? "text-emerald-700" : "text-amber-700"}`}
                         >
-                          {torasDisponiveis.some((item: any) =>
-                            correspondeCodigoPlaqueta(
-                              item,
+                          {torasDisponiveis.some(
+                            (item: any) =>
+                              normalizarCodigo(item.codigo) ===
                               normalizarCodigo(codigoPlaqueta)
-                            )
                           )
                             ? "Plaqueta disponível encontrada. Pressione Enter para adicionar."
                             : "Plaqueta ainda não cadastrada. Pressione Enter para adicioná-la com entrada imediata."}
