@@ -454,3 +454,5 @@
 - [x] Cobrir pacotes, produtos recorrentes, fornecedores e edições em lote com testes de regressão
 - [x] Confirmar e remover a validação remanescente que exige plaqueta ou referência na Serragem de Terceiros
 - [x] Cobrir o avanço publicado ao romaneio de peças sem identificação de tora
+- [x] Corrigir a busca da Produção Diária que não reconhece a plaqueta 1012 disponível no estoque
+- [x] Cobrir a identificação da plaqueta por código físico e código interno no fluxo de produção

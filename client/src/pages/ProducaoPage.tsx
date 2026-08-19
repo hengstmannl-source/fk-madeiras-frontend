@@ -489,10 +489,11 @@ export default function ProducaoPage() {
   });
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
-  const plaquetas = trpc.producao.plaquetas.list.useQuery({
-    busca: codigoPlaqueta.trim() ? normalizarCodigo(codigoPlaqueta) : undefined,
-    limite: 10,
-  });
+  const plaquetas = trpc.producao.plaquetas.list.useQuery({ limite: 10 });
+  const buscaPlaquetaDigitada = trpc.producao.plaquetas.buscar.useQuery(
+    { codigo: normalizarCodigo(codigoPlaqueta) },
+    { enabled: Boolean(codigoPlaqueta.trim()), retry: false }
+  );
   const confirmarVariacoesAtipicas =
     trpc.producao.plaquetas.confirmarVariacoesAtipicas.useMutation();
   const romaneios = trpc.producao.romaneios.list.useQuery();
@@ -885,7 +886,7 @@ export default function ProducaoPage() {
       toast.error("Não foi possível ler o arquivo selecionado");
     }
   };
-  const adicionarTora = () => {
+  const adicionarTora = async () => {
     if (romaneioEmEdicaoId) {
       toast.error(
         "As toras de um romaneio confirmado permanecem bloqueadas para preservar a rastreabilidade"
@@ -905,9 +906,17 @@ export default function ProducaoPage() {
       toast.error("Essa plaqueta já foi adicionada ao romaneio diário");
       return;
     }
-    const plaqueta: any = torasDisponiveis.find(
-      (item: any) => normalizarCodigo(item.codigo) === codigoNormalizado
-    );
+    let plaqueta: any;
+    try {
+      plaqueta = await utils.producao.plaquetas.buscar.fetch({
+        codigo: codigoNormalizado,
+      });
+    } catch (erro: any) {
+      toast.error(
+        erro?.message ?? "Não foi possível consultar a plaqueta no estoque"
+      );
+      return;
+    }
     if (!plaqueta) {
       const toraAvulsa: ToraForm = {
         plaquetaId: "",
@@ -3248,7 +3257,7 @@ export default function ProducaoPage() {
                         onKeyDown={evento => {
                           if (evento.key === "Enter") {
                             evento.preventDefault();
-                            adicionarTora();
+                            void adicionarTora();
                           }
                         }}
                         placeholder="Digite a plaqueta, ex.: TOR-0008"
@@ -3264,13 +3273,11 @@ export default function ProducaoPage() {
                         <p
                           className={`text-xs ${torasDisponiveis.some((item: any) => normalizarCodigo(item.codigo) === normalizarCodigo(codigoPlaqueta)) ? "text-emerald-700" : "text-amber-700"}`}
                         >
-                          {torasDisponiveis.some(
-                            (item: any) =>
-                              normalizarCodigo(item.codigo) ===
-                              normalizarCodigo(codigoPlaqueta)
-                          )
-                            ? "Plaqueta disponível encontrada. Pressione Enter para adicionar."
-                            : "Plaqueta ainda não cadastrada. Pressione Enter para adicioná-la com entrada imediata."}
+                          {buscaPlaquetaDigitada.isLoading
+                            ? "Consultando a plaqueta no estoque..."
+                            : buscaPlaquetaDigitada.data
+                              ? "Plaqueta disponível encontrada. Pressione Enter para adicionar."
+                              : "Plaqueta ainda não cadastrada. Pressione Enter para adicioná-la com entrada imediata."}
                         </p>
                       )}
                     </Campo>
@@ -3278,7 +3285,7 @@ export default function ProducaoPage() {
                       <Button
                         className="w-full"
                         type="button"
-                        onClick={adicionarTora}
+                        onClick={() => void adicionarTora()}
                         disabled={!codigoPlaqueta.trim()}
                       >
                         <Plus className="mr-1.5 h-4 w-4" />

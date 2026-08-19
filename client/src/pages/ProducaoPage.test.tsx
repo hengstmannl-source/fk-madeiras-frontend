@@ -29,13 +29,15 @@ vi.stubGlobal("ResizeObserver", class {
 });
 
 vi.mock("wouter", () => ({ useSearch: () => "", useLocation: () => ["/producao", definirLocalizacaoMock] }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
   const queryVazia = { useQuery: () => ({ data: [], isLoading: false }) };
   const plaquetas = [
     { id: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "4.20", volumeInicial: "0.380000", volumeDisponivel: "0.380000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" },
     { id: 9, codigo: "INT-009", codigoFisico: "TOR-DUP", situacaoIdentificacao: "duplicada", madeiraNome: "Piqui", diametro: "45.00", comprimento: "5.00", volumeInicial: "0.795000", volumeDisponivel: "0.795000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" },
   ];
+  const plaquetaForaDaLista = { id: 1012, codigo: "1012", codigoFisico: "1012", madeiraNome: "Cedrinho", diametro: "37.00", comprimento: "7.00", volumeInicial: "0.752647", volumeDisponivel: "0.752647", dataEntrada: "2026-07-24T12:00:00.000Z", estado: "disponivel" };
+  const buscarPlaqueta = vi.fn(async ({ codigo }: { codigo: string }) => [...plaquetas, plaquetaForaDaLista].find((item) => item.codigo === codigo || item.codigoFisico === codigo) ?? null);
   const romaneios = [{ id: 14, numero: "ROM-000014", dataProducao: "2026-08-12T12:00:00.000Z", plaquetaCodigo: "TOR-0008", madeiraTora: "Cedrinho", volumeTora: "0.380000", totalPecas: 12, volumeProduzido: "0.210000", aproveitamento: "55.26", fita: "Fita 1" }];
   const detalheRomaneio = { romaneio: { dataProducao: "2026-08-12T12:00:00.000Z", fita: "Fita 1", responsavel: "João", observacoes: "Ajuste de produção" }, toras: [{ plaquetaId: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30", comprimento: "4.2", volume: "0.38" }], itens: [{ madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2", quantidade: 11 }] };
   const serragens = [{ id: 31, numero: "SER-000031", clienteNome: "Marcenaria Silva", dataProducao: "2026-08-14T12:00:00.000Z", volumeToras: "0.750000", volumeProduzido: "0.390000", valorServico: "450.00" }];
@@ -44,9 +46,9 @@ vi.mock("@/lib/trpc", () => {
   const invalidar = { invalidate: vi.fn() };
   return {
     trpc: {
-      useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
+      useUtils: () => ({ producao: { plaquetas: { list: invalidar, buscar: { fetch: buscarPlaqueta } }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
+        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, buscar: { useQuery: ({ codigo }: { codigo: string }) => ({ data: [...plaquetas, plaquetaForaDaLista].find((item) => item.codigo === codigo || item.codigoFisico === codigo) ?? null, isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, atualizarCabecalhoEmLote: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, atualizarCabecalhoEmLote: mutationInerte, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
@@ -264,6 +266,19 @@ describe("ProducaoPage", () => {
     await user.click(screen.getAllByRole("button", { name: "PDF" })[0]);
     expect(screen.getByRole("heading", { name: "Romaneio de Produção ROM-000014" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
+  });
+
+  it("localiza por consulta direta a plaqueta existente que não está na lista limitada", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "1012");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByDisplayValue("Cedrinho")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("37.00")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0.752647")).toBeInTheDocument();
   });
 
   it("abre um romaneio confirmado para editar as peças e os dados operacionais", async () => {

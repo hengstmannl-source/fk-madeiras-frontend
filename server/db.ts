@@ -2429,6 +2429,26 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
   });
 }
 
+export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, empresaId = 1) {
+  const db = await getDb();
+  const codigo = normalizarCodigoPlaqueta(codigoInformado);
+  if (!db || !codigo) return null;
+
+  const candidatas = ordenarPlaquetasPorEntradaMaisRecente(
+    await db
+      .select()
+      .from(plaquetas)
+      .where(
+        and(
+          eq(plaquetas.empresaId, empresaId),
+          or(eq(plaquetas.codigo, codigo), eq(plaquetas.codigoFisico, codigo))
+        )
+      )
+      .orderBy(desc(plaquetas.createdAt), desc(plaquetas.id))
+  );
+  return candidatas.find(item => item.estado === "disponivel") ?? null;
+}
+
 export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, volumeMedioPorTora: 0, essenciasDisponiveis: [], alertaVariacaoAtipica: false, essenciasAtipicas: [], variacoesAtipicas: [], proximoDeslocamento: null };
