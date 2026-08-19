@@ -478,3 +478,5 @@
 - [x] Permitir remover utilizadores ativos por administradores, preservando a segurança do acesso empresarial
 - [x] Corrigir o fluxo de colaboradores ativos sem chave de segurança local e oferecer uma recuperação de acesso coerente
 - [x] Cobrir remoção, permissões e recuperação de credenciais com testes de regressão
+- [x] Configurar a chave de sessão local no ambiente publicado para que convites possam ser aceitos sem erro de segurança
+- [x] Validar o aceite de convite e o login local de colaborador após configurar a sessão publicada

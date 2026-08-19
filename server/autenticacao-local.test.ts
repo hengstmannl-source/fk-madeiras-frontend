@@ -1,7 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./_core/env", () => ({
-  ENV: { cookieSecret: "chave-de-teste-local-com-mais-de-trinta-e-dois-caracteres" },
+  ENV: {
+    cookieSecret: "",
+    forgeApiKey: "chave-integrada-de-teste-com-mais-de-trinta-e-dois-caracteres",
+  },
 }));
 
 import { criarSessaoLocal, gerarHashSenha, lerSessaoLocal, normalizarEmail, validarConfiguracaoSessaoLocal, validarSenha } from "./autenticacao-local";
@@ -24,7 +27,7 @@ describe("autenticação local", () => {
     expect(lerSessaoLocal(token, agora + 1000 * 60 * 60 * 13)).toBeUndefined();
   });
 
-  it("confirma a configuração de sessão antes de iniciar uma ativação", () => {
+  it("usa a chave integrada segura quando a chave de sessão não foi configurada", () => {
     expect(() => validarConfiguracaoSessaoLocal()).not.toThrow();
   });
 });

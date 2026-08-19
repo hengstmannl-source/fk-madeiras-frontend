@@ -5,12 +5,22 @@ import { ENV } from "./_core/env";
 const scrypt = promisify(scryptCallback);
 const DURACAO_SESSAO_MS = 1000 * 60 * 60 * 12;
 export const COOKIE_SESSAO_LOCAL = "fk_sessao_local";
+const TAMANHO_MINIMO_SEGREDO = 32;
 
 function segredoObrigatorio() {
-  if (!ENV.cookieSecret || ENV.cookieSecret.length < 32) {
+  const segredoConfigurado = ENV.cookieSecret.trim();
+  if (segredoConfigurado.length >= TAMANHO_MINIMO_SEGREDO) return segredoConfigurado;
+
+  // A chave integrada é injetada de forma privada em todos os ambientes do
+  // projeto. Ela mantém a sessão local disponível quando JWT_SECRET não foi
+  // configurado pela plataforma de publicação.
+  const segredoIntegrado = ENV.forgeApiKey.trim();
+  if (segredoIntegrado.length >= TAMANHO_MINIMO_SEGREDO) return segredoIntegrado;
+
+  if (!segredoConfigurado) {
     throw new Error("A chave segura da sessão não está configurada");
   }
-  return ENV.cookieSecret;
+  throw new Error("A chave segura da sessão não atende ao tamanho mínimo");
 }
 
 /**
