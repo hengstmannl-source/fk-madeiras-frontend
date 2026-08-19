@@ -466,3 +466,6 @@
 - [x] Gerar títulos financeiros idempotentes para salários e encargos da folha
 - [x] Adicionar página de RH, dashboard, relatórios, auditoria e permissões específicas
 - [x] Cobrir o módulo de RH e Folha com testes automatizados e validação visual
+- [x] Calcular o total de peças produzidas agrupado por bitola na Produção Diária
+- [x] Exibir os totais por bitola no painel-resumo de produção sem comprometer a responsividade
+- [x] Cobrir o resumo de peças por bitola com teste de regressão

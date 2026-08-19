@@ -567,6 +567,20 @@ export default function ProducaoPage() {
       ),
     [romaneio.itens]
   );
+  const pecasPorBitola = useMemo(() => {
+    const agrupadas = new Map<string, { medida: string; quantidade: number }>();
+    romaneio.itens.forEach(item => {
+      const quantidade = calcularItem(item).quantidade;
+      if (quantidade <= 0) return;
+      const medida = `${formatarNumero(item.espessura, 2)} × ${formatarNumero(item.largura, 2)} cm`;
+      const atual = agrupadas.get(medida) ?? { medida, quantidade: 0 };
+      atual.quantidade += quantidade;
+      agrupadas.set(medida, atual);
+    });
+    return Array.from(agrupadas.values()).sort(
+      (a, b) => b.quantidade - a.quantidade || a.medida.localeCompare(b.medida, "pt-BR")
+    );
+  }, [romaneio.itens]);
   const volumeAproveitamentoManual = useMemo(
     () =>
       romaneio.aproveitamentos.reduce(
@@ -3730,7 +3744,11 @@ export default function ProducaoPage() {
                     valor={`${formatarNumero(totalToras)} m³`}
                     destaque="primary"
                   />
-                  <Indicador texto="Peças" valor={totaisPecas.pecas} />
+                  <Indicador
+                    texto="Peças"
+                    valor={totaisPecas.pecas}
+                    detalhe={<ResumoPecasPorBitola itens={pecasPorBitola} />}
+                  />
                   <Indicador
                     texto="M. lineares"
                     valor={`${formatarNumero(totaisPecas.metrosLineares)} m`}
@@ -4084,10 +4102,12 @@ function Indicador({
   texto,
   valor,
   destaque,
+  detalhe,
 }: {
   texto: string;
   valor: ReactNode;
   destaque?: string;
+  detalhe?: ReactNode;
 }) {
   return (
     <div
@@ -4095,11 +4115,35 @@ function Indicador({
     >
       <p className="text-xs text-muted-foreground">{texto}</p>
       <p className="mt-1 break-words font-semibold">{valor}</p>
+      {detalhe}
       {texto === "Aproveitamento" && (
         <ResumoAproveitamentoPorEssencia
           resumos={resumoAproveitamentoEmExibicao}
         />
       )}
+    </div>
+  );
+}
+function ResumoPecasPorBitola({
+  itens,
+}: {
+  itens: Array<{ medida: string; quantidade: number }>;
+}) {
+  if (!itens.length) {
+    return <p className="mt-2 text-xs text-muted-foreground">Nenhuma peça informada</p>;
+  }
+  return (
+    <div
+      className="mt-2 max-h-24 space-y-1 overflow-y-auto pr-1 text-xs text-muted-foreground"
+      data-testid="pecas-por-bitola"
+      aria-label="Total de peças por bitola"
+    >
+      {itens.map(item => (
+        <p key={item.medida} className="flex items-center justify-between gap-2 whitespace-nowrap">
+          <span className="truncate">{item.medida}</span>
+          <span className="font-medium tabular-nums text-foreground">{formatarNumero(item.quantidade)} peças</span>
+        </p>
+      ))}
     </div>
   );
 }
@@ -4402,6 +4446,20 @@ function SerragemTerceirosUnificadaDialog({
     },
     { pecas: 0, metrosLineares: 0, volume: 0 }
   );
+  const pecasPorBitola = (() => {
+    const agrupadas = new Map<string, { medida: string; quantidade: number }>();
+    valor.itens.forEach(item => {
+      const quantidade = calcularItem(item).quantidade;
+      if (quantidade <= 0) return;
+      const medida = `${formatarNumero(item.espessura, 2)} × ${formatarNumero(item.largura, 2)} cm`;
+      const atual = agrupadas.get(medida) ?? { medida, quantidade: 0 };
+      atual.quantidade += quantidade;
+      agrupadas.set(medida, atual);
+    });
+    return Array.from(agrupadas.values()).sort(
+      (a, b) => b.quantidade - a.quantidade || a.medida.localeCompare(b.medida, "pt-BR")
+    );
+  })();
   const aproveitamento =
     totalToras > 0 ? (totaisPecas.volume / totalToras) * 100 : 0;
   const aproveitamentoPorEssencia = calcularAproveitamentoPorEssencia(
@@ -5146,7 +5204,11 @@ function SerragemTerceirosUnificadaDialog({
                   valor={`${formatarNumero(totalToras)} m³`}
                   destaque="primary"
                 />
-                <Indicador texto="Peças" valor={totaisPecas.pecas} />
+                <Indicador
+                  texto="Peças"
+                  valor={totaisPecas.pecas}
+                  detalhe={<ResumoPecasPorBitola itens={pecasPorBitola} />}
+                />
                 <Indicador
                   texto="M. lineares"
                   valor={`${formatarNumero(totaisPecas.metrosLineares)} m`}

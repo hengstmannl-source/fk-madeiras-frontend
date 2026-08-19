@@ -360,6 +360,8 @@ describe("ProducaoPage", () => {
     expect(screen.getByText(/11 peças/i)).toBeInTheDocument();
     expect(screen.getByText(/Cedrinho · 3 × 5 cm · 3 m/)).toBeInTheDocument();
     expect(screen.getByText(/7 peças/i)).toBeInTheDocument();
+    expect(screen.getByTestId("pecas-por-bitola")).toHaveTextContent("3 × 5 cm");
+    expect(screen.getByTestId("pecas-por-bitola")).toHaveTextContent("18 peças");
     expect(screen.getByLabelText("Essência da medida")).toHaveValue("Cedrinho");
     expect(screen.getByLabelText("Espessura da medida")).toHaveValue("3");
     expect(screen.getByLabelText("Largura da medida")).toHaveValue("5");
