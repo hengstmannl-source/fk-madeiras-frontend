@@ -29,11 +29,12 @@ vi.stubGlobal("ResizeObserver", class {
 });
 
 vi.mock("wouter", () => ({ useSearch: () => "", useLocation: () => ["/producao", definirLocalizacaoMock] }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn(), warning: vi.fn() } }));
 vi.mock("@/lib/trpc", () => {
   const queryVazia = { useQuery: () => ({ data: [], isLoading: false }) };
   const plaquetas = [
     { id: 8, codigo: "TOR-0008", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "4.20", volumeInicial: "0.380000", volumeDisponivel: "0.380000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" },
+    { id: 1012, codigo: "INT-1012", codigoFisico: "1012", situacaoIdentificacao: "identificada", madeiraNome: "Cedrinho", diametro: "44.00", comprimento: "4.95", volumeInicial: "0.752647", volumeDisponivel: "0.752647", dataEntrada: "2026-08-01T12:00:00.000Z", estado: "disponivel" },
     { id: 9, codigo: "INT-009", codigoFisico: "TOR-DUP", situacaoIdentificacao: "duplicada", madeiraNome: "Piqui", diametro: "45.00", comprimento: "5.00", volumeInicial: "0.795000", volumeDisponivel: "0.795000", dataEntrada: "2026-08-12T12:00:00.000Z", estado: "disponivel" },
   ];
   const romaneios = [{ id: 14, numero: "ROM-000014", dataProducao: "2026-08-12T12:00:00.000Z", plaquetaCodigo: "TOR-0008", madeiraTora: "Cedrinho", volumeTora: "0.380000", totalPecas: 12, volumeProduzido: "0.210000", aproveitamento: "55.26", fita: "Fita 1" }];
@@ -46,7 +47,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
+        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 3, ...resumoPlaquetasMock }, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: { itens: plaquetas, total: 3, ...resumoPlaquetasMock } }) }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, atualizarCabecalhoEmLote: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, atualizarCabecalhoEmLote: mutationInerte, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
@@ -245,6 +246,18 @@ describe("ProducaoPage", () => {
     await user.click(screen.getAllByRole("button", { name: "PDF" })[0]);
     expect(screen.getByRole("heading", { name: "Romaneio de Produção ROM-000014" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
+  });
+
+  it("localiza a plaqueta cadastrada pelo código físico antes de sugerir entrada imediata", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.type(screen.getByLabelText("Código da plaqueta"), "1012");
+    await user.keyboard("{Enter}");
+
+    expect(await screen.findByDisplayValue("0.752647")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeEnabled();
   });
 
   it("abre um romaneio confirmado para editar as peças e os dados operacionais", async () => {

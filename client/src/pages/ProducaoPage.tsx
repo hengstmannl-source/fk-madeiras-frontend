@@ -230,6 +230,14 @@ const calcularItem = (item: ItemForm) => ({
 });
 const normalizarCodigo = (codigo: string) =>
   codigo.trim().toLocaleUpperCase("pt-BR").replace(/\s+/g, "-");
+const correspondeCodigoPlaqueta = (
+  plaqueta: { codigo: string; codigoFisico?: string | null },
+  codigoNormalizado: string
+) =>
+  [plaqueta.codigo, plaqueta.codigoFisico].some(
+    codigo =>
+      Boolean(codigo) && normalizarCodigo(codigo ?? "") === codigoNormalizado
+  );
 
 function AproveitamentoManualPortal({
   aberto,
@@ -885,7 +893,7 @@ export default function ProducaoPage() {
       toast.error("Não foi possível ler o arquivo selecionado");
     }
   };
-  const adicionarTora = () => {
+  const adicionarTora = async () => {
     if (romaneioEmEdicaoId) {
       toast.error(
         "As toras de um romaneio confirmado permanecem bloqueadas para preservar a rastreabilidade"
@@ -905,8 +913,19 @@ export default function ProducaoPage() {
       toast.error("Essa plaqueta já foi adicionada ao romaneio diário");
       return;
     }
-    const plaqueta: any = torasDisponiveis.find(
-      (item: any) => normalizarCodigo(item.codigo) === codigoNormalizado
+    let plaquetasPesquisadas = plaquetas.data?.itens ?? [];
+    try {
+      const respostaBusca = await plaquetas.refetch();
+      plaquetasPesquisadas = respostaBusca.data?.itens ?? plaquetasPesquisadas;
+    } catch {
+      toast.error(
+        "Não foi possível consultar a plaqueta no estoque. Tente novamente antes de registrá-la manualmente."
+      );
+      return;
+    }
+    const plaqueta: any = plaquetasPesquisadas.find((item: any) =>
+      item.estado === "disponivel" &&
+      correspondeCodigoPlaqueta(item, codigoNormalizado)
     );
     if (!plaqueta) {
       const toraAvulsa: ToraForm = {
@@ -3249,7 +3268,7 @@ export default function ProducaoPage() {
                         onKeyDown={evento => {
                           if (evento.key === "Enter") {
                             evento.preventDefault();
-                            adicionarTora();
+                            void adicionarTora();
                           }
                         }}
                         placeholder="Digite a plaqueta, ex.: TOR-0008"
@@ -3265,10 +3284,11 @@ export default function ProducaoPage() {
                         <p
                           className={`text-xs ${torasDisponiveis.some((item: any) => normalizarCodigo(item.codigo) === normalizarCodigo(codigoPlaqueta)) ? "text-emerald-700" : "text-amber-700"}`}
                         >
-                          {torasDisponiveis.some(
-                            (item: any) =>
-                              normalizarCodigo(item.codigo) ===
+                          {torasDisponiveis.some((item: any) =>
+                            correspondeCodigoPlaqueta(
+                              item,
                               normalizarCodigo(codigoPlaqueta)
+                            )
                           )
                             ? "Plaqueta disponível encontrada. Pressione Enter para adicionar."
                             : "Plaqueta ainda não cadastrada. Pressione Enter para adicioná-la com entrada imediata."}

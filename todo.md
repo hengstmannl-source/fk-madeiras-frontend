@@ -471,3 +471,5 @@
 - [x] Cobrir permissões administrativas, listagem de estados e reenvio de convites com testes de regressão
 - [x] Corrigir o acesso pelo domínio publicado para direcionar colaboradores convidados ao login local, sem exigir autenticação Manus
 - [x] Cobrir o redirecionamento inicial e a autenticação local de colaboradores com testes de regressão
+- [x] Corrigir a validação de plaquetas na Produção Diária para não classificar como duplicada a tora adicionada manualmente no próprio romaneio
+- [x] Cobrir com teste o lançamento manual de plaqueta ausente e o bloqueio apenas para duplicidade real
