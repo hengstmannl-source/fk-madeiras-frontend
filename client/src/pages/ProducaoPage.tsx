@@ -124,6 +124,8 @@ const formatarNumero = (valor: number | string, casas = 3) =>
   new Intl.NumberFormat("pt-BR", {
     maximumFractionDigits: casas === 2 ? 0 : casas,
   }).format(Number(valor ?? 0));
+const formatarVolumeCampo = (valor: number | string | null | undefined) =>
+  formatarNumero(valor ?? 0, 3);
 const formatarMoeda = (valor: number | string) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(
     Number(valor ?? 0)
@@ -700,7 +702,7 @@ export default function ProducaoPage() {
         madeiraNome: String(tora.madeiraNome ?? ""),
         diametro: String(tora.diametro ?? ""),
         comprimento: String(tora.comprimento ?? ""),
-        volume: String(tora.volume ?? ""),
+        volume: formatarVolumeCampo(tora.volume),
         origem: "estoque" as const,
         exigeConferenciaManual: Boolean(tora.medidasConferidasManual),
       }));
@@ -720,7 +722,7 @@ export default function ProducaoPage() {
         itens,
         aproveitamentos: (detalhe.aproveitamentos ?? []).map((item: any) => ({
           madeiraNome: String(item.madeiraNome ?? ""),
-          volume: String(item.volume ?? ""),
+          volume: formatarVolumeCampo(item.volume),
         })),
         incluirAproveitamentoNoRendimento: Boolean(
           detalhe.romaneio.incluirAproveitamentoNoRendimento
@@ -954,7 +956,7 @@ export default function ProducaoPage() {
         : String(plaqueta.comprimento ?? ""),
       volume: exigeConferenciaManual
         ? ""
-        : String(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial ?? ""),
+        : formatarVolumeCampo(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial),
       origem: "estoque",
       exigeConferenciaManual,
     };
@@ -1223,7 +1225,7 @@ export default function ProducaoPage() {
           madeiraNome: String(tora.madeiraNome ?? ""),
           diametro: String(tora.diametro ?? ""),
           comprimento: String(tora.comprimento ?? ""),
-          volume: String(tora.volume ?? ""),
+          volume: formatarVolumeCampo(tora.volume),
         })),
         itens: (detalhe.itens ?? []).map((item: any) => ({
           madeiraNome: String(item.madeiraNome ?? ""),

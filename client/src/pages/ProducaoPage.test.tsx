@@ -251,7 +251,7 @@ describe("ProducaoPage", () => {
 
     expect(screen.getByDisplayValue("Cedrinho")).toBeInTheDocument();
     expect(screen.getByDisplayValue("30.00")).toBeInTheDocument();
-    expect(screen.getByDisplayValue("0.380000")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("0,38")).toBeInTheDocument();
     expect(screen.getByText("Resultado das toras serradas")).toBeInTheDocument();
     expect(screen.getByText(/0,38 m³ de Cedrinho/)).toBeInTheDocument();
 
@@ -269,7 +269,7 @@ describe("ProducaoPage", () => {
     await user.type(screen.getByLabelText("Código da plaqueta"), "1012");
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByDisplayValue("0.752647")).toBeInTheDocument();
+    expect(await screen.findByDisplayValue("0,753")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeEnabled();
   });
 

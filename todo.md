@@ -484,3 +484,5 @@
 - [x] Validar que uma senha válida conclui o convite e inicia a sessão local sem erro interno de chave
 - [x] Corrigir a divergência que impede a Produção Diária de localizar e baixar uma plaqueta ainda disponível no Estoque
 - [x] Cobrir a busca por código físico, código interno e situação disponível no fluxo de Produção
+- [x] Padronizar a exibição de todos os volumes cúbicos de toras com no máximo três casas decimais
+- [x] Cobrir a formatação de volumes de toras em interface e documentos com testes de regressão
