@@ -469,3 +469,5 @@
 - [x] Permitir reenviar de forma segura os convites pendentes, renovando a validade do acesso
 - [x] Adicionar acesso à Gestão de Utilizadores na navegação exclusiva de administradores
 - [x] Cobrir permissões administrativas, listagem de estados e reenvio de convites com testes de regressão
+- [x] Corrigir o acesso pelo domínio publicado para direcionar colaboradores convidados ao login local, sem exigir autenticação Manus
+- [x] Cobrir o redirecionamento inicial e a autenticação local de colaboradores com testes de regressão
