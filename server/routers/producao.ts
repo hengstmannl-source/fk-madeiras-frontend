@@ -125,7 +125,7 @@ const RomaneioSchema = z.object({
 });
 
 const ToraSerragemTerceirosSchema = z.object({
-  referencia: z.string().trim().min(1).max(120),
+  referencia: z.string().trim().max(120).default("-"),
   madeiraNome: z.string().trim().min(2).max(200),
   diametro: DecimalPositivo,
   comprimento: DecimalPositivo,

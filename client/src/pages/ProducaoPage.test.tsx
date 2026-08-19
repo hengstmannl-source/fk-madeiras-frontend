@@ -138,6 +138,23 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
   });
 
+  it("permite avançar para as peças quando a tora de terceiro não possui referência", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Serragem de terceiros" }));
+    await user.click(screen.getByRole("combobox", { name: "Cliente proprietário" }));
+    await user.click(screen.getAllByRole("option")[1]);
+    await user.type(screen.getByLabelText("Essência da tora 1"), "Cedrinho");
+    await user.type(screen.getByLabelText("Diâmetro da tora 1"), "50");
+    await user.type(screen.getByLabelText("Comprimento da tora 1"), "4");
+    await user.type(screen.getByLabelText("Tarifa por m³ (R$) *"), "50");
+
+    await user.click(screen.getByRole("button", { name: "Continuar para peças" }));
+
+    expect(screen.getByText("Romaneio de madeira serrada")).toBeInTheDocument();
+  });
+
   it("calcula o volume das toras de terceiros, mostra a cobrança por m³ e repete a última essência", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);

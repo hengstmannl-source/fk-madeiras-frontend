@@ -488,3 +488,5 @@
 - [x] Cobrir a formatação de volumes de toras em interface e documentos com testes de regressão
 - [x] Corrigir a geração da sequência de vendas que falha ao aprovar um pedido
 - [x] Cobrir aprovação de venda, unicidade de número e recuperação após sequência já existente
+- [x] Permitir avançar ao romaneio de peças na Serragem de Terceiros com toras sem plaqueta ou referência
+- [x] Cobrir a validação e navegação da serragem sem identificação de plaqueta com testes de regressão

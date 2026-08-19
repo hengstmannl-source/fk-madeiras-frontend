@@ -88,8 +88,8 @@ export function validarSerragemTerceiros(input: {
   if (!input.itens.length) throw new Error("Adicione ao menos uma peça serrada");
   const referencias = new Set<string>();
   const toras = input.toras.map((tora) => {
-    const referencia = tora.referencia.trim();
-    if (!referencia || !tora.madeiraNome.trim()) throw new Error("Informe referência e essência válidas para cada tora");
+    const referencia = tora.referencia.trim() || "-";
+    if (!tora.madeiraNome.trim()) throw new Error("Informe uma essência válida para cada tora");
     const referenciaNormalizada = referencia.toLocaleUpperCase("pt-BR");
     const referenciaNaoInformada = referencia === "-";
     if (!referenciaNaoInformada && referencias.has(referenciaNormalizada)) throw new Error(`A tora ${referencia} foi informada mais de uma vez`);

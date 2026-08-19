@@ -4673,7 +4673,6 @@ function SerragemTerceirosUnificadaDialog({
     valor.toras.length > 0 &&
     valor.toras.every(
       tora =>
-        tora.referencia.trim() &&
         tora.madeiraNome.trim().length >= 2 &&
         num(tora.diametro) > 0 &&
         num(tora.comprimento) > 0 &&
@@ -4690,7 +4689,7 @@ function SerragemTerceirosUnificadaDialog({
     }
     if (!torasValidas) {
       toast.error(
-        "Preencha a referência, essência e as medidas de todas as toras"
+        "Preencha a essência e as medidas de todas as toras"
       );
       return;
     }
