@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { trpc } from "@/lib/trpc";
+import { mensagemSenhaInvalida, REQUISITOS_SENHA, requisitosSenha } from "@shared/politicaSenha";
 import { Building2, CheckCircle2, LockKeyhole, Mail, ShieldCheck, Trees } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { Link, useLocation, useRoute } from "wouter";
@@ -9,6 +10,24 @@ import { toast } from "sonner";
 
 function mensagemErro(error: unknown) {
   return error instanceof Error ? error.message : "Não foi possível concluir a operação. Tente novamente.";
+}
+
+function mensagemErroConvite(error: unknown) {
+  const mensagem = mensagemErro(error);
+  if (mensagem.includes('"senha"') || mensagem.includes("expected string")) {
+    return "Revise a senha: use pelo menos 8 caracteres, uma letra maiúscula e um número.";
+  }
+  return mensagem;
+}
+
+function RequisitosSenha({ senha }: { senha: string }) {
+  const estado = requisitosSenha(senha);
+  return <div aria-live="polite" className="mt-2 grid gap-1 rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+    <p className="font-medium text-slate-700">A sua senha precisa ter:</p>
+    {REQUISITOS_SENHA.map((requisito) => <p key={requisito.id} className={estado[requisito.id] ? "font-medium text-emerald-700" : "text-slate-500"}>
+      <span aria-hidden="true" className="mr-1.5">{estado[requisito.id] ? "✓" : "○"}</span>{requisito.descricao}
+    </p>)}
+  </div>;
 }
 
 function AcessoShell({ children, titulo, descricao }: { children: React.ReactNode; titulo: string; descricao: string }) {
@@ -95,10 +114,18 @@ export function ConvitePage() {
   const convite = trpc.equipe.consultarConvite.useQuery({ token }, { enabled: Boolean(token), retry: false });
   const [nome, setNome] = useState("");
   const [senha, setSenha] = useState("");
-  const aceitar = trpc.equipe.aceitarConvite.useMutation({ onSuccess: async () => { await utils.auth.me.invalidate(); navegar("/"); }, onError: (error) => toast.error(error.message) });
-  const enviar = (event: FormEvent) => { event.preventDefault(); aceitar.mutate({ token, nome, senha }); };
+  const aceitar = trpc.equipe.aceitarConvite.useMutation({ onSuccess: async () => { await utils.auth.me.invalidate(); navegar("/"); }, onError: (error) => toast.error(mensagemErroConvite(error)) });
+  const enviar = (event: FormEvent) => {
+    event.preventDefault();
+    const erroSenha = mensagemSenhaInvalida(senha);
+    if (erroSenha) {
+      toast.error(erroSenha);
+      return;
+    }
+    aceitar.mutate({ token, nome, senha });
+  };
 
   return <AcessoShell titulo="Complete o seu acesso" descricao="Crie as suas credenciais para entrar no ambiente seguro da sua equipa.">
-    {convite.isLoading ? <p className="text-sm text-slate-500">A validar o convite…</p> : convite.error ? <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">Este convite é inválido ou já expirou. Peça um novo convite ao administrador.</div> : convite.data ? <><div className="mb-6 rounded-xl border border-[#e7dfd0] bg-[#fbf8f1] p-4 text-sm"><div className="flex gap-3"><Building2 className="mt-0.5 h-5 w-5 text-[#8b5721]" /><div><p className="font-semibold">{convite.data.empresa.nomeFantasia || convite.data.empresa.nome}</p><p className="mt-1 text-slate-600">Convite para <strong>{convite.data.email}</strong> como {convite.data.papel}.</p></div></div></div><form className="space-y-5" onSubmit={enviar}><div className="space-y-2"><Label htmlFor="nomeConvite">Nome completo</Label><Input id="nomeConvite" value={nome} onChange={(event) => setNome(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="senhaConvite">Crie a sua senha</Label><Input id="senhaConvite" type="password" autoComplete="new-password" value={senha} onChange={(event) => setSenha(event.target.value)} placeholder="Mínimo de 8 caracteres, maiúscula e número" required /></div><Button className="h-11 w-full bg-[#173b30] text-white hover:bg-[#0f2c23]" disabled={aceitar.isPending}>{aceitar.isPending ? "A preparar acesso…" : "Ativar o meu acesso"}</Button></form></> : null}
+    {convite.isLoading ? <p className="text-sm text-slate-500">A validar o convite…</p> : convite.error ? <div className="rounded-xl bg-red-50 p-4 text-sm text-red-700">Este convite é inválido ou já expirou. Peça um novo convite ao administrador.</div> : convite.data ? <><div className="mb-6 rounded-xl border border-[#e7dfd0] bg-[#fbf8f1] p-4 text-sm"><div className="flex gap-3"><Building2 className="mt-0.5 h-5 w-5 text-[#8b5721]" /><div><p className="font-semibold">{convite.data.empresa.nomeFantasia || convite.data.empresa.nome}</p><p className="mt-1 text-slate-600">Convite para <strong>{convite.data.email}</strong> como {convite.data.papel}.</p></div></div></div><form className="space-y-5" onSubmit={enviar}><div className="space-y-2"><Label htmlFor="nomeConvite">Nome completo</Label><Input id="nomeConvite" value={nome} onChange={(event) => setNome(event.target.value)} required /></div><div className="space-y-2"><Label htmlFor="senhaConvite">Crie a sua senha</Label><Input id="senhaConvite" type="password" autoComplete="new-password" value={senha} onChange={(event) => setSenha(event.target.value)} placeholder="Exemplo: Madeira2026" required /><RequisitosSenha senha={senha} /></div><Button className="h-11 w-full bg-[#173b30] text-white hover:bg-[#0f2c23]" disabled={aceitar.isPending}>{aceitar.isPending ? "A preparar acesso…" : "Ativar o meu acesso"}</Button></form></> : null}
   </AcessoShell>;
 }

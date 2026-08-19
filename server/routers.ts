@@ -17,6 +17,13 @@ import { financeiroRouter } from "./routers/financeiro";
 import { producaoRouter } from "./routers/producao";
 import { dieselRouter } from "./routers/diesel";
 
+const senhaSeguraSchema = z
+  .string()
+  .min(8, "A senha deve ter pelo menos 8 caracteres.")
+  .max(200)
+  .regex(/[A-Z]/, "A senha deve incluir uma letra maiúscula.")
+  .regex(/[0-9]/, "A senha deve incluir um número.");
+
 export const appRouter = router({
   system: systemRouter,
   auth: router({
@@ -54,7 +61,7 @@ export const appRouter = router({
         telefone: z.string().trim().max(100).optional(),
         nomeProprietario: z.string().trim().min(2).max(300),
         email: z.string().email(),
-        senha: z.string().min(8, "A senha deve ter pelo menos 8 caracteres.").max(200).regex(/[A-Z]/, "A senha deve ter letra maiúscula.").regex(/[0-9]/, "A senha deve ter número."),
+        senha: senhaSeguraSchema,
       }))
       .mutation(async ({ ctx, input }) => {
         const emailNormalizado = normalizarEmail(input.email);
@@ -116,7 +123,7 @@ export const appRouter = router({
         return { empresa: { nome: convite.empresa.nome, nomeFantasia: convite.empresa.nomeFantasia }, email: convite.convite.emailNormalizado, papel: convite.convite.papel };
       }),
     aceitarConvite: publicProcedure
-      .input(z.object({ token: z.string().min(20).max(200), nome: z.string().trim().min(2).max(300), senha: z.string().min(8).max(200).regex(/[A-Z]/).regex(/[0-9]/) }))
+      .input(z.object({ token: z.string().min(20).max(200), nome: z.string().trim().min(2).max(300), senha: senhaSeguraSchema }))
       .mutation(async ({ ctx, input }) => {
         try {
           const criado = await db.aceitarConviteCriandoUsuario({

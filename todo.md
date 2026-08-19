@@ -457,3 +457,6 @@
 - [x] Criar prévia e resultado detalhado das linhas aceites e recusadas na importação de clientes
 - [x] Adicionar controles de modelo e importação por planilha na tela de Clientes
 - [x] Cobrir importação válida, linhas inválidas, duplicidades e interface com testes de regressão
+- [x] Exibir requisitos claros de senha no fluxo de ativação de funcionários convidados
+- [x] Validar a senha no formulário antes do envio e traduzir erros técnicos para mensagens compreensíveis
+- [x] Cobrir senha curta, ausência de maiúscula e senha válida com testes de regressão
