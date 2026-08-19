@@ -1,4 +1,4 @@
-import { createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, scrypt as scryptCallback, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { ENV } from "./_core/env";
 
@@ -11,11 +11,16 @@ function segredoObrigatorio() {
   const segredoConfigurado = ENV.cookieSecret.trim();
   if (segredoConfigurado.length >= TAMANHO_MINIMO_SEGREDO) return segredoConfigurado;
 
-  // A chave integrada é injetada de forma privada em todos os ambientes do
-  // projeto. Ela mantém a sessão local disponível quando JWT_SECRET não foi
-  // configurado pela plataforma de publicação.
-  const segredoIntegrado = ENV.forgeApiKey.trim();
-  if (segredoIntegrado.length >= TAMANHO_MINIMO_SEGREDO) return segredoIntegrado;
+  // DATABASE_URL é privada, obrigatória em projetos full-stack e estável entre
+  // reinicializações. Derivamos uma chave de domínio própria para a sessão
+  // local quando a plataforma não disponibiliza JWT_SECRET.
+  const origemPrivada = ENV.databaseUrl.trim();
+  if (origemPrivada) {
+    return createHash("sha256")
+      .update("fk-madeiras:sessao-local:v1:")
+      .update(origemPrivada)
+      .digest("hex");
+  }
 
   if (!segredoConfigurado) {
     throw new Error("A chave segura da sessão não está configurada");

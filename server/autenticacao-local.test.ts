@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("./_core/env", () => ({
   ENV: {
     cookieSecret: "",
-    forgeApiKey: "chave-integrada-de-teste-com-mais-de-trinta-e-dois-caracteres",
+    databaseUrl: "mysql://usuario:senha@localhost:3306/fk_madeiras_testes",
   },
 }));
 
@@ -27,7 +27,7 @@ describe("autenticação local", () => {
     expect(lerSessaoLocal(token, agora + 1000 * 60 * 60 * 13)).toBeUndefined();
   });
 
-  it("usa a chave integrada segura quando a chave de sessão não foi configurada", () => {
+  it("deriva a chave de sessão da ligação privada quando JWT_SECRET não foi configurado", () => {
     expect(() => validarConfiguracaoSessaoLocal()).not.toThrow();
   });
 });

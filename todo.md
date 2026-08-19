@@ -480,3 +480,5 @@
 - [x] Cobrir remoção, permissões e recuperação de credenciais com testes de regressão
 - [x] Configurar a chave de sessão local no ambiente publicado para que convites possam ser aceitos sem erro de segurança
 - [x] Validar o aceite de convite e o login local de colaborador após configurar a sessão publicada
+- [x] Eliminar a dependência de chaves de ambiente ausentes na assinatura da sessão local de colaboradores
+- [x] Validar que uma senha válida conclui o convite e inicia a sessão local sem erro interno de chave
