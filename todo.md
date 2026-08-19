@@ -482,3 +482,5 @@
 - [x] Validar o aceite de convite e o login local de colaborador após configurar a sessão publicada
 - [x] Eliminar a dependência de chaves de ambiente ausentes na assinatura da sessão local de colaboradores
 - [x] Validar que uma senha válida conclui o convite e inicia a sessão local sem erro interno de chave
+- [x] Corrigir a divergência que impede a Produção Diária de localizar e baixar uma plaqueta ainda disponível no Estoque
+- [x] Cobrir a busca por código físico, código interno e situação disponível no fluxo de Produção

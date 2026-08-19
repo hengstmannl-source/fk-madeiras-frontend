@@ -43,11 +43,24 @@ vi.mock("@/lib/trpc", () => {
   const detalheSerragem = { servico: { clienteId: 1, dataProducao: "2026-08-14T12:00:00.000Z", dataVencimento: "2026-08-20T12:00:00.000Z", responsavel: "João", observacoes: "Sem observações", valorMetroCubico: "600.00" }, toras: [{ referencia: "CLI-01", madeiraNome: "Cedrinho", diametro: "50", comprimento: "4", volume: "0.785398" }], itens: [{ madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidade: 10 }], lotes: [{ id: 71, madeiraNome: "Cedrinho", espessura: "3", largura: "5", comprimento: "2", quantidadeDisponivel: 12 }] };
   const mutationInerte = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
   const invalidar = { invalidate: vi.fn() };
+  const normalizarCodigo = (codigo: string) => codigo.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLocaleUpperCase("pt-BR");
+  const buscarDisponivel = vi.fn(async ({ codigo }: { codigo: string }) => plaquetas.find((plaqueta) => [plaqueta.codigo, plaqueta.codigoFisico].some((valor) => Boolean(valor) && normalizarCodigo(valor ?? "") === normalizarCodigo(codigo))) ?? null);
   return {
     trpc: {
-      useUtils: () => ({ producao: { plaquetas: { list: invalidar }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
+      useUtils: () => ({ producao: { plaquetas: { list: invalidar, buscarDisponivel: { fetch: buscarDisponivel } }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 3, ...resumoPlaquetasMock }, isLoading: false, refetch: vi.fn().mockResolvedValue({ data: { itens: plaquetas, total: 3, ...resumoPlaquetasMock } }) }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
+        plaquetas: {
+          list: {
+            useQuery: () => ({
+              data: { itens: plaquetas.filter((plaqueta) => plaqueta.id !== 1012), total: 2, ...resumoPlaquetasMock },
+              isLoading: false,
+              refetch: vi.fn().mockResolvedValue({ data: { itens: plaquetas.filter((plaqueta) => plaqueta.id !== 1012), total: 2, ...resumoPlaquetasMock } }),
+            }),
+          },
+          buscarDisponivel: { useQuery: () => ({ data: undefined, isLoading: false }) },
+          confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) },
+          create: mutationInerte,
+        },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, atualizarCabecalhoEmLote: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, atualizarCabecalhoEmLote: mutationInerte, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
@@ -248,7 +261,7 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
   });
 
-  it("localiza a plaqueta cadastrada pelo código físico antes de sugerir entrada imediata", async () => {
+  it("localiza pelo código físico uma plaqueta disponível que não está na página carregada do estoque", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 

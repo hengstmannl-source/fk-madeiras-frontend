@@ -2626,6 +2626,23 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
   return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, variacoesAtipicas, proximoDeslocamento };
 }
 
+export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, empresaId = 1) {
+  const db = await getDb();
+  if (!db) return null;
+  const codigoNormalizado = normalizarCodigoPlaqueta(codigoInformado);
+  if (!codigoNormalizado) return null;
+  const brutas = await db.select().from(plaquetas).where(and(
+    eq(plaquetas.empresaId, empresaId),
+    eq(plaquetas.estado, "disponivel"),
+  )).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
+  const numeradas = numerarDuplicidadesPlaquetas(brutas);
+  return numeradas.find((plaqueta) =>
+    [plaqueta.codigo, plaqueta.codigoFisico].some((codigo) =>
+      Boolean(codigo) && normalizarCodigoPlaqueta(codigo ?? "") === codigoNormalizado,
+    ),
+  ) ?? null;
+}
+
 export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");

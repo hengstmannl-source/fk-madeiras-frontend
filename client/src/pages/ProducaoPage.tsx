@@ -913,20 +913,17 @@ export default function ProducaoPage() {
       toast.error("Essa plaqueta já foi adicionada ao romaneio diário");
       return;
     }
-    let plaquetasPesquisadas = plaquetas.data?.itens ?? [];
+    let plaqueta: any = null;
     try {
-      const respostaBusca = await plaquetas.refetch();
-      plaquetasPesquisadas = respostaBusca.data?.itens ?? plaquetasPesquisadas;
+      plaqueta = await utils.producao.plaquetas.buscarDisponivel.fetch({
+        codigo: codigoNormalizado,
+      });
     } catch {
       toast.error(
         "Não foi possível consultar a plaqueta no estoque. Tente novamente antes de registrá-la manualmente."
       );
       return;
     }
-    const plaqueta: any = plaquetasPesquisadas.find((item: any) =>
-      item.estado === "disponivel" &&
-      correspondeCodigoPlaqueta(item, codigoNormalizado)
-    );
     if (!plaqueta) {
       const toraAvulsa: ToraForm = {
         plaquetaId: "",
