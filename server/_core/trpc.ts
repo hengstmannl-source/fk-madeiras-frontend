@@ -10,16 +10,18 @@ const t = initTRPC.context<TrpcContext>().create({
 export const router = t.router;
 export const publicProcedure = t.procedure;
 
-type ModuloOperacional = "financeiro" | "vendas" | "producao";
+type ModuloOperacional = "financeiro" | "rh" | "vendas" | "producao";
 
 const acessosPorModulo: Record<ModuloOperacional, readonly string[]> = {
   financeiro: ["proprietario", "administrador", "financeiro"],
+  rh: ["proprietario", "administrador", "rh"],
   vendas: ["proprietario", "administrador", "vendas"],
   producao: ["proprietario", "administrador", "producao_estoque"],
 };
 
 const moduloDaRota: Record<string, ModuloOperacional> = {
   financeiro: "financeiro",
+  rh: "rh",
   orcamento: "vendas",
   cliente: "vendas",
   producao: "producao",

@@ -13,6 +13,7 @@ const papeis = [
   { value: "financeiro", label: "Financeiro", descricao: "Controla contas, pagamentos e conciliação." },
   { value: "vendas", label: "Vendas", descricao: "Gere clientes, vendas e recebimentos." },
   { value: "producao", label: "Produção e Estoque", descricao: "Regista romaneios, produção e inventário." },
+  { value: "rh", label: "RH e Folha", descricao: "Gere colaboradores, folha e informações de RH." },
   { value: "consulta", label: "Consulta", descricao: "Visualiza informações sem alterar registos." },
 ] as const;
 

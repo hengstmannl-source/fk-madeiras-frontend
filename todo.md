@@ -458,3 +458,11 @@
 - [x] Cobrir a identificação da plaqueta por código físico e código interno no fluxo de produção
 - [x] Destacar em verde o aviso de plaqueta encontrada na Produção Diária
 - [x] Validar o contraste visual do aviso de disponibilidade da plaqueta
+- [x] Analisar os requisitos da nova implantação descrita no ficheiro anexado
+- [x] Criar pessoas, cargos, departamentos e histórico salarial do módulo de RH
+- [x] Implementar dependentes, eventos de folha e adiantamentos com saldo controlado
+- [x] Criar tabelas tributárias versionadas e o motor de cálculo da folha
+- [x] Implementar competências, fechamento, reabertura e espelhos de pagamento
+- [x] Gerar títulos financeiros idempotentes para salários e encargos da folha
+- [x] Adicionar página de RH, dashboard, relatórios, auditoria e permissões específicas
+- [x] Cobrir o módulo de RH e Folha com testes automatizados e validação visual

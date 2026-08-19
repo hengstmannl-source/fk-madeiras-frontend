@@ -35,7 +35,7 @@ export const empresaMembros = mysqlTable("empresaMembros", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   usuarioId: int("usuarioId").notNull(),
-  papel: mysqlEnum("papel", ["proprietario", "administrador", "financeiro", "vendas", "producao", "consulta"]).notNull().default("consulta"),
+  papel: mysqlEnum("papel", ["proprietario", "administrador", "financeiro", "rh", "vendas", "producao", "consulta"]).notNull().default("consulta"),
   ativo: boolean("ativo").notNull().default(true),
   convidadoPor: int("convidadoPor"),
   entrouEm: timestamp("entrouEm").defaultNow().notNull(),
@@ -70,7 +70,7 @@ export const convitesEmpresa = mysqlTable("convitesEmpresa", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   emailNormalizado: varchar("emailNormalizado", { length: 320 }).notNull(),
-  papel: mysqlEnum("papel", ["administrador", "financeiro", "vendas", "producao", "consulta"]).notNull().default("consulta"),
+  papel: mysqlEnum("papel", ["administrador", "financeiro", "rh", "vendas", "producao", "consulta"]).notNull().default("consulta"),
   tokenHash: varchar("tokenHash", { length: 128 }).notNull().unique(),
   expiraEm: timestamp("expiraEm").notNull(),
   aceitoEm: timestamp("aceitoEm"),
@@ -696,7 +696,7 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   tipo: mysqlEnum("tipo", ["receber", "pagar"]).notNull(),
-  origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "nota_diesel", "serragem_terceiros", "manual", "recorrencia"]).notNull().default("manual"),
+  origem: mysqlEnum("origem", ["orcamento", "romaneio_carga", "nota_diesel", "serragem_terceiros", "folha_pagamento", "manual", "recorrencia"]).notNull().default("manual"),
   chaveImportacao: varchar("chaveImportacao", { length: 120 }).unique(),
   descricao: varchar("descricao", { length: 300 }).notNull(),
   clienteId: int("clienteId"),
@@ -896,3 +896,249 @@ export const alertasFinanceiros = mysqlTable("alertasFinanceiros", {
 
 export type AlertaFinanceiro = typeof alertasFinanceiros.$inferSelect;
 export type InsertAlertaFinanceiro = typeof alertasFinanceiros.$inferInsert;
+
+// ─── Recursos Humanos e folha de pagamento ───
+// Os valores tributários ficam em tabelas versionadas; não existem alíquotas fixas no código.
+export const departamentosRh = mysqlTable("departamentosRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  nome: varchar("nome", { length: 160 }).notNull(),
+  descricao: text("descricao"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaNomeUnico: uniqueIndex("departamentos_rh_empresa_nome_unico").on(table.empresaId, table.nome),
+}));
+
+export type DepartamentoRh = typeof departamentosRh.$inferSelect;
+
+export const cargosRh = mysqlTable("cargosRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  nome: varchar("nome", { length: 160 }).notNull(),
+  descricao: text("descricao"),
+  cbo: varchar("cbo", { length: 20 }),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaNomeUnico: uniqueIndex("cargos_rh_empresa_nome_unico").on(table.empresaId, table.nome),
+}));
+
+export type CargoRh = typeof cargosRh.$inferSelect;
+
+export const colaboradoresRh = mysqlTable("colaboradoresRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  usuarioId: int("usuarioId"),
+  departamentoId: int("departamentoId"),
+  cargoId: int("cargoId"),
+  nome: varchar("nome", { length: 300 }).notNull(),
+  cpf: varchar("cpf", { length: 20 }),
+  rg: varchar("rg", { length: 30 }),
+  pis: varchar("pis", { length: 30 }),
+  email: varchar("email", { length: 320 }),
+  telefone: varchar("telefone", { length: 100 }),
+  dataNascimento: timestamp("dataNascimento"),
+  dataAdmissao: timestamp("dataAdmissao").notNull(),
+  dataDesligamento: timestamp("dataDesligamento"),
+  tipoContrato: mysqlEnum("tipoContrato", ["clt", "temporario", "aprendiz", "estagiario", "autonomo"]).notNull().default("clt"),
+  situacao: mysqlEnum("situacao", ["ativo", "afastado", "desligado"]).notNull().default("ativo"),
+  salarioAtual: decimal("salarioAtual", { precision: 14, scale: 2 }).notNull(),
+  cargaHorariaSemanal: decimal("cargaHorariaSemanal", { precision: 6, scale: 2 }).notNull().default("44"),
+  banco: varchar("banco", { length: 120 }),
+  agencia: varchar("agencia", { length: 40 }),
+  contaBancaria: varchar("contaBancaria", { length: 80 }),
+  chavePix: varchar("chavePix", { length: 320 }),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaCpfUnico: uniqueIndex("colaboradores_rh_empresa_cpf_unico").on(table.empresaId, table.cpf),
+  empresaSituacaoIndice: index("colaboradores_rh_empresa_situacao_indice").on(table.empresaId, table.situacao),
+}));
+
+export type ColaboradorRh = typeof colaboradoresRh.$inferSelect;
+
+export const historicosSalariaisRh = mysqlTable("historicosSalariaisRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  salario: decimal("salario", { precision: 14, scale: 2 }).notNull(),
+  vigenciaInicio: timestamp("vigenciaInicio").notNull(),
+  motivo: varchar("motivo", { length: 300 }),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  colaboradorVigenciaUnica: uniqueIndex("historicos_salariais_rh_colaborador_vigencia_unico").on(table.empresaId, table.colaboradorId, table.vigenciaInicio),
+}));
+
+export type HistoricoSalarialRh = typeof historicosSalariaisRh.$inferSelect;
+
+export const dependentesRh = mysqlTable("dependentesRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  nome: varchar("nome", { length: 300 }).notNull(),
+  cpf: varchar("cpf", { length: 20 }),
+  dataNascimento: timestamp("dataNascimento"),
+  deduzIrrf: boolean("deduzIrrf").notNull().default(true),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type DependenteRh = typeof dependentesRh.$inferSelect;
+
+export const eventosFolhaRh = mysqlTable("eventosFolhaRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  codigo: varchar("codigo", { length: 30 }).notNull(),
+  nome: varchar("nome", { length: 200 }).notNull(),
+  tipo: mysqlEnum("tipo", ["provento", "desconto", "informativo"]).notNull(),
+  incideInss: boolean("incideInss").notNull().default(false),
+  incideIrrf: boolean("incideIrrf").notNull().default(false),
+  incideFgts: boolean("incideFgts").notNull().default(false),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaCodigoUnico: uniqueIndex("eventos_folha_rh_empresa_codigo_unico").on(table.empresaId, table.codigo),
+}));
+
+export type EventoFolhaRh = typeof eventosFolhaRh.$inferSelect;
+
+export const adiantamentosRh = mysqlTable("adiantamentosRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  dataAdiantamento: timestamp("dataAdiantamento").notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  saldoPendente: decimal("saldoPendente", { precision: 14, scale: 2 }).notNull(),
+  estado: mysqlEnum("estado", ["aberto", "descontado", "cancelado"]).notNull().default("aberto"),
+  tituloFinanceiroId: int("tituloFinanceiroId").unique(),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  colaboradorCompetenciaIndice: index("adiantamentos_rh_colaborador_competencia_indice").on(table.empresaId, table.colaboradorId, table.competencia, table.estado),
+}));
+
+export type AdiantamentoRh = typeof adiantamentosRh.$inferSelect;
+
+export const tabelasTributariasRh = mysqlTable("tabelasTributariasRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  nome: varchar("nome", { length: 200 }).notNull(),
+  tipo: mysqlEnum("tipo", ["inss", "irrf", "fgts"]).notNull(),
+  vigenciaInicio: timestamp("vigenciaInicio").notNull(),
+  vigenciaFim: timestamp("vigenciaFim"),
+  deducaoDependente: decimal("deducaoDependente", { precision: 14, scale: 2 }).notNull().default("0"),
+  aliquotaFixa: decimal("aliquotaFixa", { precision: 8, scale: 4 }).notNull().default("0"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaTipoVigenciaIndice: index("tabelas_tributarias_rh_empresa_tipo_vigencia_indice").on(table.empresaId, table.tipo, table.vigenciaInicio),
+}));
+
+export const faixasTributariasRh = mysqlTable("faixasTributariasRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  tabelaTributariaId: int("tabelaTributariaId").notNull(),
+  limiteInferior: decimal("limiteInferior", { precision: 14, scale: 2 }).notNull().default("0"),
+  limiteSuperior: decimal("limiteSuperior", { precision: 14, scale: 2 }),
+  aliquota: decimal("aliquota", { precision: 8, scale: 4 }).notNull(),
+  parcelaDeduzir: decimal("parcelaDeduzir", { precision: 14, scale: 2 }).notNull().default("0"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tabelaFaixaUnica: uniqueIndex("faixas_tributarias_rh_tabela_inferior_unico").on(table.tabelaTributariaId, table.limiteInferior),
+}));
+
+export type TabelaTributariaRh = typeof tabelasTributariasRh.$inferSelect;
+export type FaixaTributariaRh = typeof faixasTributariasRh.$inferSelect;
+
+export const folhasPagamentoRh = mysqlTable("folhasPagamentoRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  estado: mysqlEnum("estado", ["aberta", "fechada"]).notNull().default("aberta"),
+  observacoes: text("observacoes"),
+  fechadaEm: timestamp("fechadaEm"),
+  fechadaPor: int("fechadaPor"),
+  reabertaEm: timestamp("reabertaEm"),
+  reabertaPor: int("reabertaPor"),
+  motivoReabertura: text("motivoReabertura"),
+  tituloEncargosFinanceiroId: int("tituloEncargosFinanceiroId").unique(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaCompetenciaUnica: uniqueIndex("folhas_pagamento_rh_empresa_competencia_unico").on(table.empresaId, table.competencia),
+}));
+
+export type FolhaPagamentoRh = typeof folhasPagamentoRh.$inferSelect;
+
+export const itensFolhaPagamentoRh = mysqlTable("itensFolhaPagamentoRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  folhaId: int("folhaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  salarioBase: decimal("salarioBase", { precision: 14, scale: 2 }).notNull(),
+  totalProventos: decimal("totalProventos", { precision: 14, scale: 2 }).notNull().default("0"),
+  inss: decimal("inss", { precision: 14, scale: 2 }).notNull().default("0"),
+  irrf: decimal("irrf", { precision: 14, scale: 2 }).notNull().default("0"),
+  adiantamentos: decimal("adiantamentos", { precision: 14, scale: 2 }).notNull().default("0"),
+  outrosDescontos: decimal("outrosDescontos", { precision: 14, scale: 2 }).notNull().default("0"),
+  totalDescontos: decimal("totalDescontos", { precision: 14, scale: 2 }).notNull().default("0"),
+  salarioLiquido: decimal("salarioLiquido", { precision: 14, scale: 2 }).notNull(),
+  fgts: decimal("fgts", { precision: 14, scale: 2 }).notNull().default("0"),
+  custoEmpresa: decimal("custoEmpresa", { precision: 14, scale: 2 }).notNull(),
+  tituloFinanceiroId: int("tituloFinanceiroId").unique(),
+  criadoAt: timestamp("criadoAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  folhaColaboradorUnico: uniqueIndex("itens_folha_pagamento_rh_folha_colaborador_unico").on(table.empresaId, table.folhaId, table.colaboradorId),
+}));
+
+export type ItemFolhaPagamentoRh = typeof itensFolhaPagamentoRh.$inferSelect;
+
+export const eventosItensFolhaRh = mysqlTable("eventosItensFolhaRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  itemFolhaId: int("itemFolhaId").notNull(),
+  eventoId: int("eventoId"),
+  descricao: varchar("descricao", { length: 300 }).notNull(),
+  tipo: mysqlEnum("tipo", ["provento", "desconto", "informativo"]).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  incideInss: boolean("incideInss").notNull().default(false),
+  incideIrrf: boolean("incideIrrf").notNull().default(false),
+  incideFgts: boolean("incideFgts").notNull().default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type EventoItemFolhaRh = typeof eventosItensFolhaRh.$inferSelect;
+
+export const auditoriasRh = mysqlTable("auditoriasRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  entidade: varchar("entidade", { length: 80 }).notNull(),
+  entidadeId: int("entidadeId").notNull(),
+  acao: varchar("acao", { length: 80 }).notNull(),
+  detalhes: text("detalhes"),
+  usuarioId: int("usuarioId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  entidadeIndice: index("auditorias_rh_entidade_indice").on(table.empresaId, table.entidade, table.entidadeId),
+}));
+
+export type AuditoriaRh = typeof auditoriasRh.$inferSelect;

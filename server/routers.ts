@@ -16,6 +16,7 @@ import { empresaRouter } from "./routers/empresa";
 import { financeiroRouter } from "./routers/financeiro";
 import { producaoRouter } from "./routers/producao";
 import { dieselRouter } from "./routers/diesel";
+import { rhRouter } from "./routers/rh";
 
 export const appRouter = router({
   system: systemRouter,
@@ -88,7 +89,7 @@ export const appRouter = router({
   equipe: router({
     listar: adminProcedure.query(({ ctx }) => db.listarMembrosEmpresa(ctx.empresaAtiva!.empresa.id)),
     criarConvite: adminProcedure
-      .input(z.object({ email: z.string().email(), papel: z.enum(["administrador", "financeiro", "vendas", "producao", "consulta"]) }))
+      .input(z.object({ email: z.string().email(), papel: z.enum(["administrador", "financeiro", "rh", "vendas", "producao", "consulta"]) }))
       .mutation(async ({ ctx, input }) => {
         const papelAtual = ctx.empresaAtiva!.membro.papel;
         if (papelAtual !== "proprietario" && papelAtual !== "administrador") {
@@ -144,6 +145,7 @@ export const appRouter = router({
   financeiro: financeiroRouter,
   producao: producaoRouter,
   diesel: dieselRouter,
+  rh: rhRouter,
 });
 
 export type AppRouter = typeof appRouter;

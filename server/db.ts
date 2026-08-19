@@ -144,7 +144,7 @@ export async function listarMembrosEmpresa(empresaId: number) {
 export async function criarConviteEmpresa(data: {
   empresaId: number;
   emailNormalizado: string;
-  papel: "administrador" | "financeiro" | "vendas" | "producao" | "consulta";
+  papel: "administrador" | "financeiro" | "rh" | "vendas" | "producao" | "consulta";
   tokenHash: string;
   expiraEm: Date;
   convidadoPor: number;
