@@ -1,0 +1,1 @@
+ALTER TABLE `configuracoesCustosRh` ADD `descontoInssEstimadoAtivo` boolean DEFAULT false NOT NULL;

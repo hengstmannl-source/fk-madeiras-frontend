@@ -83,13 +83,13 @@ const colaboradorSchema = z.object({
 });
 const eventoSchema = z.object({ codigo: z.string().trim().min(1).max(30), nome: z.string().trim().min(2).max(200), tipo: z.enum(["provento", "desconto", "informativo"]), incideInss: z.boolean().default(false), incideIrrf: z.boolean().default(false), deduzIrrf: z.boolean().default(false), incideFgts: z.boolean().default(false), ativo: z.boolean().default(true) });
 const dependenteSchema = z.object({ nome: z.string().trim().min(2).max(300), cpf: z.string().trim().max(20).nullable().optional(), dataNascimento: dataSchema.nullable().optional(), deduzIrrf: z.boolean().default(true), ativo: z.boolean().default(true) });
-const configuracaoCustosSchema = z.object({ fgtsPercentual: valorSchema, provisaoDecimoTerceiroAtiva: z.boolean(), provisaoFeriasAtiva: z.boolean(), provisaoTercoFeriasAtiva: z.boolean(), observacoes: z.string().trim().max(3000).nullable().optional() });
+const configuracaoCustosSchema = z.object({ fgtsPercentual: valorSchema, descontoInssEstimadoAtivo: z.boolean(), provisaoDecimoTerceiroAtiva: z.boolean(), provisaoFeriasAtiva: z.boolean(), provisaoTercoFeriasAtiva: z.boolean(), observacoes: z.string().trim().max(3000).nullable().optional() });
 const categoriasBeneficioRh = ["vale_alimentacao", "vale_refeicao", "vale_transporte", "plano_saude", "plano_odontologico", "seguro_vida", "auxilio_educacao", "auxilio_combustivel", "outro"] as const;
 const custoGerencialSchema = z.object({ descricao: z.string().trim().min(2).max(200), tipo: z.enum(["fixo", "percentual"]), valor: valorPositivoSchema, recorrente: z.boolean().default(true), dataInicio: dataSchema, dataFim: dataSchema.nullable().optional(), ativo: z.boolean().default(true) });
 const beneficioColaboradorSchema = custoGerencialSchema.extend({ categoria: z.enum(categoriasBeneficioRh).default("outro") });
 const custoEmpresaSchema = custoGerencialSchema.extend({ escopo: z.enum(["por_colaborador", "equipe"]).default("por_colaborador") });
 
-const CONFIGURACAO_CUSTOS_PADRAO: ConfiguracaoCustosGerenciaisRh = { fgtsPercentual: 8, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true };
+const CONFIGURACAO_CUSTOS_PADRAO: ConfiguracaoCustosGerenciaisRh = { fgtsPercentual: 8, descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true };
 function regraCustoGerencial(regra: { id: number; descricao: string; tipo: "fixo" | "percentual"; valor: string | number; recorrente: boolean; ativo: boolean; dataInicio: Date; dataFim: Date | null }): RegraCustoGerencialRh {
   return { id: regra.id, descricao: regra.descricao, tipo: regra.tipo, valor: numero(regra.valor), recorrente: regra.recorrente, ativo: regra.ativo, dataInicio: regra.dataInicio, dataFim: regra.dataFim };
 }
@@ -106,14 +106,15 @@ export const rhRouter = router({
     painel: rhProcedure.input(z.object({ referencia: z.string().regex(/^\d{4}-\d{2}$/).optional() }).optional()).query(async ({ ctx, input }) => {
       const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id;
       const referencia = competenciaData(input?.referencia ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`);
-      const [configuracaoExistente, colaboradores, departamentos, cargos, custosEmpresa] = await Promise.all([
+      const [configuracaoExistente, colaboradores, departamentos, cargos, custosEmpresa, regras] = await Promise.all([
         db.select().from(configuracoesCustosRh).where(eq(configuracoesCustosRh.empresaId, empresaId)).limit(1),
         db.select().from(colaboradoresRh).where(and(eq(colaboradoresRh.empresaId, empresaId), eq(colaboradoresRh.situacao, "ativo"))).orderBy(asc(colaboradoresRh.nome)),
         db.select().from(departamentosRh).where(eq(departamentosRh.empresaId, empresaId)),
         db.select().from(cargosRh).where(eq(cargosRh.empresaId, empresaId)),
         db.select().from(custosEmpresaRh).where(eq(custosEmpresaRh.empresaId, empresaId)),
+        regrasDaCompetencia(empresaId, referencia),
       ]);
-      const configuracao = configuracaoExistente[0] ? { fgtsPercentual: numero(configuracaoExistente[0].fgtsPercentual), provisaoDecimoTerceiroAtiva: configuracaoExistente[0].provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: configuracaoExistente[0].provisaoFeriasAtiva, provisaoTercoFeriasAtiva: configuracaoExistente[0].provisaoTercoFeriasAtiva } : CONFIGURACAO_CUSTOS_PADRAO;
+      const configuracao = configuracaoExistente[0] ? { fgtsPercentual: numero(configuracaoExistente[0].fgtsPercentual), descontoInssEstimadoAtivo: configuracaoExistente[0].descontoInssEstimadoAtivo, provisaoDecimoTerceiroAtiva: configuracaoExistente[0].provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: configuracaoExistente[0].provisaoFeriasAtiva, provisaoTercoFeriasAtiva: configuracaoExistente[0].provisaoTercoFeriasAtiva } : CONFIGURACAO_CUSTOS_PADRAO;
       const ids = colaboradores.map((colaborador) => colaborador.id);
       const custosIndividuais = ids.length ? await db.select().from(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, empresaId), inArray(custosColaboradorRh.colaboradorId, ids))) : [];
       const custosPorColaborador = new Map<number, RegraCustoGerencialRh[]>();
@@ -122,7 +123,7 @@ export const rhRouter = router({
       const custosEquipe = custosEmpresa.filter((custo) => custo.escopo === "equipe").map(regraCustoGerencial);
       const departamentoPorId = new Map(departamentos.map((item) => [item.id, item])); const cargoPorId = new Map(cargos.map((item) => [item.id, item]));
       const linhas = colaboradores.map((colaborador) => {
-        const custo = calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobaisIndividuais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia });
+        const custo = calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobaisIndividuais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia, faixasInss: regras.faixasInss });
         return { ...colaborador, departamento: colaborador.departamentoId ? departamentoPorId.get(colaborador.departamentoId) ?? null : null, cargo: colaborador.cargoId ? cargoPorId.get(colaborador.cargoId) ?? null : null, custo };
       });
       const resumo = somarCustosEquipeGerencialRh(linhas.map((linha) => linha.custo), custosEquipe, referencia);
@@ -133,14 +134,15 @@ export const rhRouter = router({
     relatorio: rhProcedure.input(z.object({ referencia: z.string().regex(/^\d{4}-\d{2}$/).optional(), busca: z.string().trim().max(200).optional(), departamentoId: idSchema.optional(), cargoId: idSchema.optional(), situacao: z.enum(situacoesColaborador).optional() }).optional()).query(async ({ ctx, input }) => {
       const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id;
       const referencia = competenciaData(input?.referencia ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`);
-      const [configuracaoExistente, todosColaboradores, departamentos, cargos, custosEmpresa] = await Promise.all([
+      const [configuracaoExistente, todosColaboradores, departamentos, cargos, custosEmpresa, regras] = await Promise.all([
         db.select().from(configuracoesCustosRh).where(eq(configuracoesCustosRh.empresaId, empresaId)).limit(1),
         db.select().from(colaboradoresRh).where(and(eq(colaboradoresRh.empresaId, empresaId), input?.situacao ? eq(colaboradoresRh.situacao, input.situacao) : undefined)).orderBy(asc(colaboradoresRh.nome)),
         db.select().from(departamentosRh).where(eq(departamentosRh.empresaId, empresaId)),
         db.select().from(cargosRh).where(eq(cargosRh.empresaId, empresaId)),
         db.select().from(custosEmpresaRh).where(eq(custosEmpresaRh.empresaId, empresaId)),
+        regrasDaCompetencia(empresaId, referencia),
       ]);
-      const configuracao = configuracaoExistente[0] ? { fgtsPercentual: numero(configuracaoExistente[0].fgtsPercentual), provisaoDecimoTerceiroAtiva: configuracaoExistente[0].provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: configuracaoExistente[0].provisaoFeriasAtiva, provisaoTercoFeriasAtiva: configuracaoExistente[0].provisaoTercoFeriasAtiva } : CONFIGURACAO_CUSTOS_PADRAO;
+      const configuracao = configuracaoExistente[0] ? { fgtsPercentual: numero(configuracaoExistente[0].fgtsPercentual), descontoInssEstimadoAtivo: configuracaoExistente[0].descontoInssEstimadoAtivo, provisaoDecimoTerceiroAtiva: configuracaoExistente[0].provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: configuracaoExistente[0].provisaoFeriasAtiva, provisaoTercoFeriasAtiva: configuracaoExistente[0].provisaoTercoFeriasAtiva } : CONFIGURACAO_CUSTOS_PADRAO;
       const departamentoPorId = new Map(departamentos.map((item) => [item.id, item])); const cargoPorId = new Map(cargos.map((item) => [item.id, item]));
       const busca = input?.busca?.toLocaleLowerCase("pt-BR");
       const colaboradoresFiltrados = todosColaboradores.filter((item) => (!input?.departamentoId || item.departamentoId === input.departamentoId) && (!input?.cargoId || item.cargoId === input.cargoId) && (!busca || `${item.nome} ${departamentoPorId.get(item.departamentoId ?? 0)?.nome ?? ""} ${cargoPorId.get(item.cargoId ?? 0)?.nome ?? ""}`.toLocaleLowerCase("pt-BR").includes(busca)));
@@ -150,7 +152,7 @@ export const rhRouter = router({
       for (const custo of custosIndividuais) custosPorColaborador.set(custo.colaboradorId, [...(custosPorColaborador.get(custo.colaboradorId) ?? []), regraCustoGerencial(custo)]);
       const custosGlobais = custosEmpresa.filter((custo) => custo.escopo === "por_colaborador").map(regraCustoGerencial);
       const linhas = colaboradoresFiltrados.map((colaborador) => {
-        const custo = colaborador.situacao === "desligado" ? calcularCustoColaboradorGerencialRh({ salarioBruto: 0, configuracao, custos: [], referencia }) : calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia });
+        const custo = colaborador.situacao === "desligado" ? calcularCustoColaboradorGerencialRh({ salarioBruto: 0, configuracao, custos: [], referencia, faixasInss: regras.faixasInss }) : calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia, faixasInss: regras.faixasInss });
         return { ...colaborador, departamento: colaborador.departamentoId ? departamentoPorId.get(colaborador.departamentoId) ?? null : null, cargo: colaborador.cargoId ? cargoPorId.get(colaborador.cargoId) ?? null : null, custo };
       });
       return { referencia, linhas, totais: somarCustosEquipeGerencialRh(linhas.map((linha) => linha.custo), [], referencia) };
@@ -159,7 +161,7 @@ export const rhRouter = router({
       get: rhProcedure.query(async ({ ctx }) => { const db = await bancoObrigatorio(); const [existente] = await db.select().from(configuracoesCustosRh).where(eq(configuracoesCustosRh.empresaId, ctx.empresaAtiva!.empresa.id)).limit(1); return existente ?? { ...CONFIGURACAO_CUSTOS_PADRAO, observacoes: null, id: null }; }),
       save: rhProcedure.input(configuracaoCustosSchema).mutation(async ({ ctx, input }) => {
         const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const [existente] = await db.select().from(configuracoesCustosRh).where(eq(configuracoesCustosRh.empresaId, empresaId)).limit(1);
-        const valores = { fgtsPercentual: decimal(input.fgtsPercentual), provisaoDecimoTerceiroAtiva: input.provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: input.provisaoFeriasAtiva, provisaoTercoFeriasAtiva: input.provisaoTercoFeriasAtiva, observacoes: textoNulo(input.observacoes) };
+        const valores = { fgtsPercentual: decimal(input.fgtsPercentual), descontoInssEstimadoAtivo: input.descontoInssEstimadoAtivo, provisaoDecimoTerceiroAtiva: input.provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: input.provisaoFeriasAtiva, provisaoTercoFeriasAtiva: input.provisaoTercoFeriasAtiva, observacoes: textoNulo(input.observacoes) };
         if (existente) { await db.update(configuracoesCustosRh).set(valores).where(eq(configuracoesCustosRh.id, existente.id)); await auditar(empresaId, ctx.user.id, "configuracao_custos", existente.id, "atualizada"); return { id: existente.id }; }
         const criado = await db.insert(configuracoesCustosRh).values({ ...valores, empresaId, criadoPor: ctx.user.id }); const id = Number(criado[0].insertId); await auditar(empresaId, ctx.user.id, "configuracao_custos", id, "criada"); return { id };
       }),
@@ -207,7 +209,7 @@ export const rhRouter = router({
       const colaboradoresComDependentes = new Set(dependentes.map((item) => item.colaboradorId));
       const colaboradoresComAdiantamentos = new Set(adiantamentos.map((item) => item.colaboradorId));
       const colaboradoresComFolha = new Set(itensFolha.map((item) => item.colaboradorId));
-      return filtrados.map((item) => ({ ...item, departamentoNome: departamentos.find((departamento) => departamento.id === item.departamentoId)?.nome ?? null, cargoNome: cargos.find((cargo) => cargo.id === item.cargoId)?.nome ?? null, vinculos: { dependentes: colaboradoresComDependentes.has(item.id), alteracoesSalariais: (historicosPorColaborador.get(item.id) ?? 0) > 1, adiantamentos: colaboradoresComAdiantamentos.has(item.id), itensFolha: colaboradoresComFolha.has(item.id) } }));
+      return filtrados.map((item) => { const vinculos = { dependentes: colaboradoresComDependentes.has(item.id), alteracoesSalariais: (historicosPorColaborador.get(item.id) ?? 0) > 1, adiantamentos: colaboradoresComAdiantamentos.has(item.id), itensFolha: colaboradoresComFolha.has(item.id) }; const bloqueioRemocao = motivoBloqueioRemocaoColaboradorRh(vinculos, item.situacao); return { ...item, departamentoNome: departamentos.find((departamento) => departamento.id === item.departamentoId)?.nome ?? null, cargoNome: cargos.find((cargo) => cargo.id === item.cargoId)?.nome ?? null, vinculos, podeRemover: !bloqueioRemocao, bloqueioRemocao }; });
     }),
     create: rhProcedure.input(colaboradorSchema).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const criado = await db.insert(colaboradoresRh).values({ ...input, empresaId, criadoPor: ctx.user.id, cpf: textoNulo(input.cpf), rg: textoNulo(input.rg), pis: textoNulo(input.pis), email: textoNulo(input.email), telefone: textoNulo(input.telefone), banco: textoNulo(input.banco), agencia: textoNulo(input.agencia), contaBancaria: textoNulo(input.contaBancaria), chavePix: textoNulo(input.chavePix), observacoes: textoNulo(input.observacoes), dataAdmissao: dataLocal(input.dataAdmissao), dataNascimento: input.dataNascimento ? dataLocal(input.dataNascimento) : null, dataDesligamento: input.dataDesligamento ? dataLocal(input.dataDesligamento) : null, salarioAtual: decimal(input.salarioAtual), cargaHorariaSemanal: decimal(input.cargaHorariaSemanal) }); const id = Number(criado[0].insertId); await db.insert(historicosSalariaisRh).values({ empresaId, colaboradorId: id, salario: decimal(input.salarioAtual), vigenciaInicio: dataLocal(input.dataAdmissao), motivo: "Salário de admissão", criadoPor: ctx.user.id }); await auditar(empresaId, ctx.user.id, "colaborador", id, "criado", { nome: input.nome }); return { id }; }),
     update: rhProcedure.input(colaboradorSchema.extend({ id: idSchema, motivoAlteracaoSalarial: z.string().trim().max(300).nullable().optional() })).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const anterior = await db.select().from(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId))).limit(1); if (!anterior[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Colaborador não encontrado." }); await db.update(colaboradoresRh).set({ ...input, cpf: textoNulo(input.cpf), rg: textoNulo(input.rg), pis: textoNulo(input.pis), email: textoNulo(input.email), telefone: textoNulo(input.telefone), banco: textoNulo(input.banco), agencia: textoNulo(input.agencia), contaBancaria: textoNulo(input.contaBancaria), chavePix: textoNulo(input.chavePix), observacoes: textoNulo(input.observacoes), dataAdmissao: dataLocal(input.dataAdmissao), dataNascimento: input.dataNascimento ? dataLocal(input.dataNascimento) : null, dataDesligamento: input.dataDesligamento ? dataLocal(input.dataDesligamento) : null, salarioAtual: decimal(input.salarioAtual), cargaHorariaSemanal: decimal(input.cargaHorariaSemanal) }).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId))); if (numero(anterior[0].salarioAtual) !== Number(input.salarioAtual)) await db.insert(historicosSalariaisRh).values({ empresaId, colaboradorId: input.id, salario: decimal(input.salarioAtual), vigenciaInicio: new Date(), motivo: textoNulo(input.motivoAlteracaoSalarial) ?? "Alteração salarial", criadoPor: ctx.user.id }); await auditar(empresaId, ctx.user.id, "colaborador", input.id, "atualizado"); return { success: true }; }),
@@ -233,8 +235,12 @@ export const rhRouter = router({
         db.select({ id: adiantamentosRh.id }).from(adiantamentosRh).where(and(eq(adiantamentosRh.empresaId, empresaId), eq(adiantamentosRh.colaboradorId, input.id))).limit(1),
         db.select({ id: itensFolhaPagamentoRh.id }).from(itensFolhaPagamentoRh).where(and(eq(itensFolhaPagamentoRh.empresaId, empresaId), eq(itensFolhaPagamentoRh.colaboradorId, input.id))).limit(1),
       ]);
-      const bloqueio = motivoBloqueioRemocaoColaboradorRh({ dependentes: Boolean(dependentes[0]), alteracoesSalariais: historicosSalariais.length > 1, adiantamentos: Boolean(adiantamentos[0]), itensFolha: Boolean(itensFolha[0]) });
+      const bloqueio = motivoBloqueioRemocaoColaboradorRh({ dependentes: Boolean(dependentes[0]), alteracoesSalariais: historicosSalariais.length > 1, adiantamentos: Boolean(adiantamentos[0]), itensFolha: Boolean(itensFolha[0]) }, colaborador.situacao);
       if (bloqueio) throw new TRPCError({ code: "CONFLICT", message: bloqueio });
+      if (colaborador.situacao === "desligado") {
+        await db.delete(dependentesRh).where(and(eq(dependentesRh.empresaId, empresaId), eq(dependentesRh.colaboradorId, input.id)));
+        await db.delete(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, empresaId), eq(custosColaboradorRh.colaboradorId, input.id)));
+      }
       await db.delete(historicosSalariaisRh).where(and(eq(historicosSalariaisRh.empresaId, empresaId), eq(historicosSalariaisRh.colaboradorId, input.id)));
       await db.delete(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId)));
       await auditar(empresaId, ctx.user.id, "colaborador", input.id, "removido", { nome: colaborador.nome });

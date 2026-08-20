@@ -244,7 +244,13 @@ export function competenciaRh(data: Date) { return new Date(data.getFullYear(), 
 
 export type VinculosRemocaoColaboradorRh = { dependentes: boolean; alteracoesSalariais: boolean; adiantamentos: boolean; itensFolha: boolean; };
 
-export function motivoBloqueioRemocaoColaboradorRh(vinculos: VinculosRemocaoColaboradorRh) {
-  const encontrados = [vinculos.dependentes ? "dependentes" : null, vinculos.alteracoesSalariais ? "alterações salariais" : null, vinculos.adiantamentos ? "adiantamentos" : null, vinculos.itensFolha ? "lançamentos de folha" : null].filter((item): item is string => Boolean(item));
-  return encontrados.length ? `Este colaborador não pode ser removido porque possui ${encontrados.join(", ")}. Preserve o histórico ou registre o desligamento.` : null;
+export function motivoBloqueioRemocaoColaboradorRh(vinculos: VinculosRemocaoColaboradorRh, situacao: "ativo" | "afastado" | "desligado" = "ativo") {
+  const encontrados = situacao === "desligado"
+    ? [vinculos.adiantamentos ? "adiantamentos" : null, vinculos.itensFolha ? "lançamentos de folha" : null]
+    : [vinculos.dependentes ? "dependentes" : null, vinculos.alteracoesSalariais ? "alterações salariais" : null, vinculos.adiantamentos ? "adiantamentos" : null, vinculos.itensFolha ? "lançamentos de folha" : null];
+  const bloqueios = encontrados.filter((item): item is string => Boolean(item));
+  if (!bloqueios.length) return null;
+  return situacao === "desligado"
+    ? `Este colaborador inativo não pode ser removido porque possui movimentações financeiras vinculadas: ${bloqueios.join(", ")}.`
+    : `Este colaborador não pode ser removido porque possui ${bloqueios.join(", ")}. Preserve o histórico ou registre o desligamento.`;
 }

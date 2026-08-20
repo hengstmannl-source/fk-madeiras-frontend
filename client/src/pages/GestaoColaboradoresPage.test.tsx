@@ -20,13 +20,13 @@ vi.mock("@/lib/trpc", () => ({
       adiantamentos: { list: consulta([]), create: mutacao },
       gestao: {
         painel: consulta({
-          configuracao: { fgtsPercentual: "8", provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true },
-          resumo: { colaboradoresAtivos: 1, salariosBrutos: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33, custoAnualEstimado: 45879.96 },
-          colaboradores: [{ id: 1, nome: "Ana da Silva", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "ativo", salarioAtual: "3000", cargo: { nome: "Serrador" }, departamento: { nome: "Produção" }, custo: { salarioBruto: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33 } }],
+          configuracao: { fgtsPercentual: "8", descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true },
+          resumo: { colaboradoresAtivos: 1, salariosBrutos: 3000, inssEstimado: 0, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33, custoAnualEstimado: 45879.96 },
+          colaboradores: [{ id: 1, nome: "Ana da Silva", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "ativo", salarioAtual: "3000", cargo: { nome: "Serrador" }, departamento: { nome: "Produção" }, custo: { salarioBruto: 3000, inssEstimado: 0, salarioLiquidoEstimado: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33 } }],
           porDepartamento: [{ nome: "Produção", colaboradores: 1, custoMensalEstimado: 3823.33 }],
         }),
-        relatorio: consulta({ linhas: [{ id: 1, nome: "Ana da Silva", situacao: "ativo", departamento: { nome: "Produção" }, cargo: { nome: "Serrador" }, custo: { salarioBruto: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33 } }], totais: { custoMensalEstimado: 3823.33, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33 } }),
-        configuracao: { get: consulta({ fgtsPercentual: "8", provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true, observacoes: null }), save: mutacao },
+        relatorio: consulta({ linhas: [{ id: 1, nome: "Ana da Silva", situacao: "ativo", departamento: { nome: "Produção" }, cargo: { nome: "Serrador" }, custo: { salarioBruto: 3000, inssEstimado: 0, salarioLiquidoEstimado: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33 } }], totais: { custoMensalEstimado: 3823.33, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33 } }),
+        configuracao: { get: consulta({ fgtsPercentual: "8", descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true, observacoes: null }), save: mutacao },
         custosEmpresa: { list: consulta([]), create: mutacao, update: mutacao, remove: mutacao },
         custosColaborador: { list: consulta([]), create: mutacao, update: mutacao, remove: mutacao },
       },
@@ -105,14 +105,14 @@ describe("Gestão de Colaboradores", () => {
 
   it("mostra o vínculo e bloqueia a remoção quando há movimentação", async () => {
     const user = userEvent.setup();
-    state.colaboradores = [{ id: 1, situacao: "ativo", vinculos: { dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false } }];
+    state.colaboradores = [{ id: 1, situacao: "ativo", vinculos: { dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false }, podeRemover: false, bloqueioRemocao: "A exclusão está bloqueada por adiantamentos." }];
     render(<GestaoColaboradoresPage />);
 
     await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
-    expect(screen.getByText(/Vínculos: adiantamentos/i)).toBeTruthy();
+    expect(screen.getByText(/A exclusão está bloqueada por adiantamentos/i)).toBeTruthy();
     await user.click(screen.getByTitle("Remover colaborador"));
 
-    expect(screen.getByText(/A exclusão está bloqueada por adiantamentos/i)).toBeTruthy();
+    expect(screen.getAllByText(/A exclusão está bloqueada por adiantamentos/i).length).toBeGreaterThan(0);
     expect((screen.getByRole("button", { name: "Remover colaborador" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -154,6 +154,44 @@ describe("Gestão de Colaboradores", () => {
     expect(screen.getByRole("heading", { name: "Reativar colaborador?" })).toBeTruthy();
     await user.click(screen.getByRole("button", { name: "Reativar colaborador" }));
     expect(state.alterarSituacao).toHaveBeenCalledWith({ id: 1, situacao: "ativo", motivo: null });
+  });
+
+  it("permite reativar um colaborador afastado", async () => {
+    const user = userEvent.setup();
+    state.colaboradores = [{ id: 1, nome: "Ana da Silva", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "afastado", salarioAtual: "3000", vinculos: {} }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.selectOptions(screen.getByLabelText("Situação da lista"), "afastado");
+    await user.click(screen.getByTitle("Reativar colaborador"));
+    await user.click(screen.getByRole("button", { name: "Reativar colaborador" }));
+    expect(state.alterarSituacao).toHaveBeenCalledWith({ id: 1, situacao: "ativo", motivo: null });
+  });
+
+  it("permite remover colaborador inativo sem movimentações financeiras mesmo com histórico não financeiro", async () => {
+    const user = userEvent.setup();
+    state.colaboradores = [{ id: 1, nome: "Ana da Silva", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "desligado", salarioAtual: "3000", vinculos: { dependentes: true, alteracoesSalariais: true, adiantamentos: false, itensFolha: false }, podeRemover: true, bloqueioRemocao: null }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.selectOptions(screen.getByLabelText("Situação da lista"), "desligado");
+    await user.click(screen.getByTitle("Remover colaborador"));
+    expect(screen.getByText(/sem movimentações financeiras/i)).toBeTruthy();
+    const remover = screen.getByRole("button", { name: "Remover colaborador" }) as HTMLButtonElement;
+    expect(remover.disabled).toBe(false);
+    await user.click(remover);
+    expect(state.removerColaborador).toHaveBeenCalledWith({ id: 1 });
+  });
+
+  it("oferece a ativação do desconto estimado de INSS nos parâmetros gerenciais", async () => {
+    const user = userEvent.setup();
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("button", { name: "Parâmetros" }));
+    const opcaoInss = screen.getByRole("checkbox", { name: /Contabilizar desconto estimado de INSS/i }) as HTMLInputElement;
+    expect(opcaoInss.checked).toBe(false);
+    await user.click(opcaoInss);
+    expect(opcaoInss.checked).toBe(true);
   });
 
   it("permite consultar o relatório de custo com filtros gerenciais", async () => {

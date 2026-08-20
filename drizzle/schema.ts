@@ -984,6 +984,7 @@ export const configuracoesCustosRh = mysqlTable("configuracoesCustosRh", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   fgtsPercentual: decimal("fgtsPercentual", { precision: 8, scale: 4 }).notNull().default("8"),
+  descontoInssEstimadoAtivo: boolean("descontoInssEstimadoAtivo").notNull().default(false),
   provisaoDecimoTerceiroAtiva: boolean("provisaoDecimoTerceiroAtiva").notNull().default(true),
   provisaoFeriasAtiva: boolean("provisaoFeriasAtiva").notNull().default(true),
   provisaoTercoFeriasAtiva: boolean("provisaoTercoFeriasAtiva").notNull().default(true),

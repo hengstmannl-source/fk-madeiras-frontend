@@ -70,6 +70,12 @@ describe("cálculo de folha de RH", () => {
     expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: true, adiantamentos: false, itensFolha: true })).toMatch(/alterações salariais.*lançamentos de folha/i);
   });
 
+  it("permite remover colaborador inativo sem lançamentos financeiros, sem considerar alterações salariais", () => {
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: true, alteracoesSalariais: true, adiantamentos: false, itensFolha: false }, "desligado")).toBeNull();
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: true, alteracoesSalariais: true, adiantamentos: true, itensFolha: false }, "desligado")).toMatch(/adiantamentos/i);
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: true, adiantamentos: false, itensFolha: true }, "desligado")).toMatch(/lançamentos de folha/i);
+  });
+
   it("identifica cada categoria de vínculo que deve continuar bloqueando a exclusão", () => {
     expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: true, alteracoesSalariais: false, adiantamentos: false, itensFolha: false })).toMatch(/dependentes/i);
     expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false })).toMatch(/adiantamentos/i);

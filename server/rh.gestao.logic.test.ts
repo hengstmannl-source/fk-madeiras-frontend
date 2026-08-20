@@ -3,6 +3,7 @@ import { calcularCustoColaboradorGerencialRh, custoVigenteNoMes, somarCustosEqui
 
 const configuracaoPadrao = {
   fgtsPercentual: 8,
+  descontoInssEstimadoAtivo: false,
   provisaoDecimoTerceiroAtiva: true,
   provisaoFeriasAtiva: true,
   provisaoTercoFeriasAtiva: true,
@@ -26,6 +27,17 @@ describe("RH gerencial — composição de custos", () => {
       custoMensalEstimado: 3823.33,
       custoAnualEstimado: 45879.96,
     });
+  });
+
+  it("calcula o desconto estimado de INSS sem reduzir o custo empresarial", () => {
+    const resultado = calcularCustoColaboradorGerencialRh({
+      salarioBruto: 3000,
+      configuracao: { ...configuracaoPadrao, descontoInssEstimadoAtivo: true },
+      custos: [],
+      referencia: new Date(2026, 7, 1),
+      faixasInss: [{ limiteInferior: 0, limiteSuperior: null, aliquota: 10, parcelaDeduzir: 0 }],
+    });
+    expect(resultado).toMatchObject({ inssEstimado: 300, salarioLiquidoEstimado: 2700, custoMensalEstimado: 3823.33 });
   });
 
   it("inclui custos fixos e percentuais apenas dentro da vigência", () => {

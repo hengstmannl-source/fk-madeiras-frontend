@@ -517,3 +517,7 @@
 - [x] Ajustar listas e cálculos para considerar somente colaboradores ativos por padrão
 - [x] Criar ações confirmadas de inativar e reativar na Gestão de Colaboradores
 - [x] Cobrir inativação, reativação e preservação de histórico com testes de regressão
+- [x] Permitir reativar colaboradores afastados e inativos pela Gestão de Colaboradores
+- [x] Permitir excluir colaboradores inativos sem lançamentos financeiros, preservando os demais bloqueios de histórico
+- [x] Adicionar desconto estimado de INSS opcional aos custos gerenciais de colaboradores
+- [x] Atualizar interface e testes de regressão das novas regras de situação, exclusão e INSS
