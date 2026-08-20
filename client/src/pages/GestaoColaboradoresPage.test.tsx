@@ -21,7 +21,7 @@ vi.mock("@/lib/trpc", () => ({
       gestao: {
         painel: consulta({
           configuracao: { fgtsPercentual: "8", descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true },
-          resumo: { colaboradoresAtivos: 1, salariosBrutos: 3000, inssEstimado: 0, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33, custoAnualEstimado: 45879.96 },
+          resumo: { colaboradoresAtivos: 1, salariosBrutos: 3000, inssEstimado: 0, salariosLiquidosEstimados: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33, custoAnualEstimado: 45879.96 },
           colaboradores: [{ id: 1, nome: "Ana da Silva", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "ativo", salarioAtual: "3000", cargo: { nome: "Serrador" }, departamento: { nome: "Produção" }, custo: { salarioBruto: 3000, inssEstimado: 0, salarioLiquidoEstimado: 3000, fgtsEstimado: 240, provisaoDecimoTerceiro: 250, provisaoFerias: 250, provisaoTercoFerias: 83.33, custoMensalEstimado: 3823.33 } }],
           porDepartamento: [{ nome: "Produção", colaboradores: 1, custoMensalEstimado: 3823.33 }],
         }),
@@ -192,6 +192,19 @@ describe("Gestão de Colaboradores", () => {
     expect(opcaoInss.checked).toBe(false);
     await user.click(opcaoInss);
     expect(opcaoInss.checked).toBe(true);
+  });
+
+  it("exibe a previsão de salário líquido com detalhamento do INSS estimado", async () => {
+    const user = userEvent.setup();
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Salários líquidos" }));
+
+    expect(screen.getByRole("heading", { name: "Previsão de salário líquido" })).toBeTruthy();
+    expect(screen.getByText("Total líquido previsto")).toBeTruthy();
+    expect(screen.getByText(/Esta previsão considera o salário bruto menos o INSS estimado/i)).toBeTruthy();
+    expect(screen.getByText("Ana da Silva")).toBeTruthy();
+    expect(screen.getByText("Líquido previsto")).toBeTruthy();
   });
 
   it("permite consultar o relatório de custo com filtros gerenciais", async () => {

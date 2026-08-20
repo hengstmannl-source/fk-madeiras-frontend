@@ -521,3 +521,7 @@
 - [x] Permitir excluir colaboradores inativos sem lançamentos financeiros, preservando os demais bloqueios de histórico
 - [x] Adicionar desconto estimado de INSS opcional aos custos gerenciais de colaboradores
 - [x] Atualizar interface e testes de regressão das novas regras de situação, exclusão e INSS
+- [x] Mapear descontos e componentes disponíveis para previsão de salário líquido
+- [x] Implementar cálculo gerencial de salário líquido estimado por colaborador
+- [x] Criar dashboard de previsão de salário líquido na Gestão de Colaboradores
+- [x] Cobrir cálculo, filtros e interface do dashboard com testes de regressão
