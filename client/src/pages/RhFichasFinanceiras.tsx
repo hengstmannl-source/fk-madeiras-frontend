@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { RhConfiguracoesEncargos } from "@/pages/RhConfiguracoesEncargos";
-import { Banknote, CircleDollarSign, FileClock, HandCoins, Landmark, MinusCircle, Plus, ReceiptText, RotateCcw, UserRound, WalletCards, XCircle } from "lucide-react";
+import { Banknote, CircleDollarSign, FileClock, HandCoins, Landmark, MinusCircle, Plus, ReceiptText, UserRound, WalletCards, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -80,7 +80,6 @@ export function RhFichasFinanceiras() {
       utils.rh.fichas.ficha.invalidate(),
       utils.rh.fichas.competencias.invalidate(),
       utils.rh.fichas.competencias.salarios.invalidate(),
-      utils.rh.adiantamentos.list.invalidate(),
     ]);
   };
   const criarLancamento = trpc.rh.fichas.lancamentos.criar.useMutation({ onSuccess: async ({ tituloFinanceiroId }) => { toast.success(tituloFinanceiroId ? "Lançamento criado e enviado para Contas a Pagar." : "Lançamento registrado na ficha."); setDialogLancamento(false); setLancamento(novoLancamento(referencia)); await invalidar(); }, onError: (erro) => toast.error(erro.message) });
@@ -91,7 +90,6 @@ export function RhFichasFinanceiras() {
   const fecharCompetencia = trpc.rh.fichas.competencias.fechar.useMutation({ onSuccess: async () => { toast.success("Competência fechada para alterações."); await utils.rh.fichas.competencias.invalidate(); }, onError: (erro) => toast.error(erro.message) });
   const reabrirCompetencia = trpc.rh.fichas.competencias.reabrir.useMutation({ onSuccess: async () => { toast.success("Competência reaberta."); await utils.rh.fichas.competencias.invalidate(); }, onError: (erro) => toast.error(erro.message) });
   const gerarSalarios = trpc.rh.fichas.competencias.gerarSalarios.useMutation({ onSuccess: async ({ colaboradores: total }) => { toast.success(`Custos gerenciais atualizados para ${total} colaborador(es).`); await utils.rh.fichas.competencias.salarios.invalidate(); }, onError: (erro) => toast.error(erro.message) });
-  const migrarAdiantamentos = trpc.rh.fichas.migracao.importarSaldosAdiantamentos.useMutation({ onSuccess: async ({ criados }) => { toast.success(criados ? `${criados} saldo(s) de adiantamento migrado(s).` : "Não há saldos novos de adiantamento para migrar."); await invalidar(); }, onError: (erro) => toast.error(erro.message) });
 
   const colaboradoresAtivos = useMemo(() => (colaboradores.data ?? []).filter((item) => item.situacao === "ativo"), [colaboradores.data]);
   const resumoPorColaborador = useMemo(() => new Map((painel.data?.colaboradoresComSaldo ?? []).map((item) => [item.id, item.resumo])), [painel.data?.colaboradoresComSaldo]);
@@ -121,7 +119,7 @@ export function RhFichasFinanceiras() {
   const totaisCustos = salariosCompetencia.data?.totais;
   return <section className="space-y-5">
     <div className="rounded-2xl border border-emerald-200 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-5 dark:border-emerald-900 dark:from-emerald-950/40 dark:via-slate-950 dark:to-sky-950/30">
-      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><div className="mb-2 flex flex-wrap items-center gap-2"><Badge className="bg-emerald-700 hover:bg-emerald-700">Controle financeiro interno</Badge><span className="text-xs text-slate-500">Não substitui a contabilidade ou a folha oficial</span></div><h2 className="text-xl font-semibold text-slate-950 dark:text-white">Fichas financeiras de colaboradores</h2><p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Registre valores a pagar, descontos, pagamentos e saldos por pessoa, com custos e encargos mostrados separadamente.</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" onClick={() => migrarAdiantamentos.mutate({ competencia: referencia })} disabled={migrarAdiantamentos.isPending}><RotateCcw className="mr-2 h-4 w-4" />Migrar adiantamentos</Button><Button onClick={() => abrirLancamento()}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button></div></div>
+      <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center"><div><div className="mb-2 flex flex-wrap items-center gap-2"><Badge className="bg-emerald-700 hover:bg-emerald-700">Controle financeiro interno</Badge><span className="text-xs text-slate-500">Não substitui a contabilidade ou a folha oficial</span></div><h2 className="text-xl font-semibold text-slate-950 dark:text-white">RH Financeiro</h2><p className="mt-1 max-w-3xl text-sm text-slate-600 dark:text-slate-300">Acompanhe fichas, valores a pagar, pagamentos e custos internos sem misturar os fluxos históricos de folha.</p></div><div className="flex flex-wrap gap-2"><Button onClick={() => abrirLancamento()}><Plus className="mr-2 h-4 w-4" />Novo lançamento</Button></div></div>
       <div className="mt-4 flex flex-wrap gap-2 border-t border-emerald-200/70 pt-4 dark:border-emerald-900"><Button size="sm" variant="outline" onClick={() => abrirLancamento("credito", "Salário mensal")}><CircleDollarSign className="mr-2 h-4 w-4" />Lançar salário</Button><Button size="sm" variant="outline" onClick={() => abrirLancamento("debito", "Adiantamento salarial")}><HandCoins className="mr-2 h-4 w-4" />Registrar adiantamento</Button><Button size="sm" variant="outline" onClick={() => abrirLancamento("debito", "Desconto")}><MinusCircle className="mr-2 h-4 w-4" />Registrar desconto</Button><Button size="sm" variant="outline" onClick={() => abrirLancamento("credito", "Bonificação / provento")}><Plus className="mr-2 h-4 w-4" />Registrar provento</Button><Button size="sm" variant="outline" onClick={() => abrirLancamento("pagamento", "Pagamento ao colaborador")}><ReceiptText className="mr-2 h-4 w-4" />Registrar pagamento</Button></div>
     </div>
 

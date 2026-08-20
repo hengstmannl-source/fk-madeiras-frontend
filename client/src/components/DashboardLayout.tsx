@@ -67,7 +67,7 @@ export const dashboardNavigation = {
   gestao: [
     { icon: Users, label: "Clientes", path: "/clientes" },
     { icon: Building2, label: "Empresa", path: "/empresa" },
-    { icon: Users, label: "RH e Fichas Financeiras", path: "/rh" },
+    { icon: Users, label: "RH Financeiro", path: "/rh" },
   ],
   producao: [
     { icon: Factory, label: "Produção", path: "/producao" },

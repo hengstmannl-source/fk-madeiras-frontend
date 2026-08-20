@@ -547,3 +547,9 @@
 - [x] Completar filtros de ficha e valores a pagar por situação, categoria e tipo de lançamento
 - [x] Exibir a composição por colaborador e os totais de salários, FGTS, INSS patronal, encargos e provisões na competência
 - [x] Validar a complementação de filtros e encargos com testes de regressão e revisão visual
+- [x] Mapear cada seção legada do RH e retirar da navegação os fluxos que duplicam informações
+- [x] Criar uma rota e uma interface de RH inteiramente novas, isoladas de Gestão de Colaboradores e Folha
+- [x] Recriar o cadastro essencial de colaboradores, ficha financeira, lançamentos e pagamentos conforme o novo escopo
+- [x] Recriar custos, encargos e competências apenas como planejamento interno, sem obrigações oficiais
+- [x] Preservar dados existentes em estruturas históricas, sem os reutilizar na nova experiência visual
+- [x] Validar a substituição completa do RH com testes, migração não destrutiva e revisão visual

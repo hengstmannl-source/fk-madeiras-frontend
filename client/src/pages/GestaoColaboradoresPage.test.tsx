@@ -55,7 +55,7 @@ describe("Gestão de Colaboradores", () => {
 
     expect(screen.getByRole("heading", { name: "RH e Fichas Financeiras" })).toBeTruthy();
     expect(screen.getByText(/Valores estimados para gestão/i)).toBeTruthy();
-    expect(screen.getByText("Fichas financeiras de colaboradores")).toBeTruthy();
+    expect(screen.getByText("RH Financeiro")).toBeTruthy();
     expect(screen.getByText("A pagar aos colaboradores")).toBeTruthy();
 
     await user.click(screen.getByRole("tab", { name: "Custos estimados" }));
