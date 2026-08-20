@@ -43,4 +43,10 @@ describe("cálculo de folha de RH", () => {
     expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: false, adiantamentos: false, itensFolha: false })).toBeNull();
     expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: true, adiantamentos: false, itensFolha: true })).toMatch(/alterações salariais.*lançamentos de folha/i);
   });
+
+  it("identifica cada categoria de vínculo que deve continuar bloqueando a exclusão", () => {
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: true, alteracoesSalariais: false, adiantamentos: false, itensFolha: false })).toMatch(/dependentes/i);
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false })).toMatch(/adiantamentos/i);
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: false, adiantamentos: false, itensFolha: true })).toMatch(/lançamentos de folha/i);
+  });
 });

@@ -478,3 +478,7 @@
 - [x] Distinguir histórico salarial cadastral de movimentações efetivas na remoção de RH
 - [x] Permitir remover colaboradores sem folha, adiantamento, evento lançado ou vínculo financeiro
 - [x] Cobrir a remoção de cadastro sem movimentação e os bloqueios preservados
+- [x] Exibir na tabela de colaboradores os vínculos específicos que bloqueiam a exclusão
+- [x] Permitir editar cargos, departamentos e eventos de folha
+- [x] Permitir remover cargos, departamentos e eventos sem vínculos de uso
+- [x] Cobrir indicadores de vínculo e manutenção de cadastros auxiliares com testes de regressão
