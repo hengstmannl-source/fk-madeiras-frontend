@@ -307,6 +307,20 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
   });
 
+  it("aceita uma tora sem plaqueta física e exige suas medidas para gerar rastreabilidade interna", async () => {
+    const user = userEvent.setup();
+    render(<ProducaoPage />);
+
+    await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
+    await user.click(screen.getByRole("checkbox", { name: /Aceitar tora sem plaqueta/i }));
+    await user.click(screen.getByLabelText("Código da plaqueta"));
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByText("Sem plaqueta")).toBeInTheDocument();
+    expect(screen.getAllByText(/Ajuste as medidas/i)).not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
+  });
+
   it("não preenche automaticamente as medidas quando a plaqueta física está duplicada", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);

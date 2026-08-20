@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-const state = vi.hoisted(() => ({ invalidar: vi.fn(), removerColaborador: vi.fn(), alterarSituacao: vi.fn(), colaboradores: [] as any[] }));
+const state = vi.hoisted(() => ({ invalidar: vi.fn(), removerColaborador: vi.fn(), alterarSituacao: vi.fn(), colaboradores: [] as any[], adiantamentos: [] as any[] }));
 
 vi.mock("@/lib/trpc", () => ({
   trpc: (() => {
@@ -17,7 +17,7 @@ vi.mock("@/lib/trpc", () => ({
       colaboradores: { list: { useQuery: () => ({ data: state.colaboradores, isLoading: false }) }, create: mutacao, update: mutacao, alterarSituacao: { useMutation: () => ({ mutate: state.alterarSituacao, isPending: false }) }, remove: { useMutation: () => ({ mutate: state.removerColaborador, isPending: false }) } },
       departamentos: { list: consulta([]) },
       cargos: { list: consulta([]) },
-      adiantamentos: { list: consulta([]), create: mutacao },
+      adiantamentos: { list: { useQuery: () => ({ data: state.adiantamentos, isLoading: false }) }, create: mutacao },
       gestao: {
         painel: consulta({
           configuracao: { fgtsPercentual: "8", descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true },
@@ -38,7 +38,7 @@ vi.mock("@/lib/trpc", () => ({
 import GestaoColaboradoresPage from "./GestaoColaboradoresPage";
 
 describe("Gestão de Colaboradores", () => {
-  afterEach(() => { cleanup(); state.colaboradores = []; state.removerColaborador.mockClear(); state.alterarSituacao.mockClear(); });
+  afterEach(() => { cleanup(); state.colaboradores = []; state.adiantamentos = []; state.removerColaborador.mockClear(); state.alterarSituacao.mockClear(); });
 
   it("deixa explícito o caráter estimado do painel e exibe provisões de custo", async () => {
     const user = userEvent.setup();
@@ -56,6 +56,28 @@ describe("Gestão de Colaboradores", () => {
     await user.click(screen.getByRole("tab", { name: "Custos & benefícios" }));
     expect(screen.getByText("Custos e benefícios gerais")).toBeTruthy();
     expect(screen.getByText(/Cadastre benefícios, seguros ou outros custos gerais/i)).toBeTruthy();
+  });
+
+  it("exibe plano, parcelas pendentes e próxima competência do adiantamento parcelado", async () => {
+    const user = userEvent.setup();
+    state.adiantamentos = [{
+      id: 9,
+      colaboradorNome: "Ana da Silva",
+      dataAdiantamento: new Date(2026, 7, 20),
+      valor: "900.00",
+      estado: "aberto",
+      observacoes: "Compra de ferramentas",
+      quantidadeParcelas: 3,
+      parcelasPendentes: 2,
+      proximaCompetencia: new Date(2026, 8, 1),
+      parcelas: [],
+    }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Adiantamentos" }));
+    expect(screen.getByText("3 parcelas")).toBeTruthy();
+    expect(screen.getByText("2 de 3")).toBeTruthy();
+    expect(screen.getByText("09/2026")).toBeTruthy();
   });
 
   it("mantém a criação de conta a pagar desmarcada ao abrir um adiantamento", async () => {

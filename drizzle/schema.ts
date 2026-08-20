@@ -1096,6 +1096,24 @@ export const adiantamentosRh = mysqlTable("adiantamentosRh", {
 
 export type AdiantamentoRh = typeof adiantamentosRh.$inferSelect;
 
+export const parcelasAdiantamentosRh = mysqlTable("parcelasAdiantamentosRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  adiantamentoId: int("adiantamentoId").notNull(),
+  numero: int("numero").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  estado: mysqlEnum("estado", ["pendente", "descontada", "cancelada"]).notNull().default("pendente"),
+  folhaId: int("folhaId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  adiantamentoNumeroUnico: uniqueIndex("parcelas_adiantamentos_rh_numero_unico").on(table.adiantamentoId, table.numero),
+  competenciaIndice: index("parcelas_adiantamentos_rh_competencia_indice").on(table.empresaId, table.competencia, table.estado),
+}));
+
+export type ParcelaAdiantamentoRh = typeof parcelasAdiantamentosRh.$inferSelect;
+
 export const tabelasTributariasRh = mysqlTable("tabelasTributariasRh", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),

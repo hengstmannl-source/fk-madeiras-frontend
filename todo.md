@@ -529,3 +529,7 @@
 - [x] Permitir definir benefícios e vales como descontos gerenciais em folha
 - [x] Descontar adiantamentos pendentes e benefícios marcados no salário líquido previsto
 - [x] Atualizar o dashboard líquido, formulários e testes de regressão dos descontos
+- [x] Mapear o lançamento de toras sem plaqueta e o parcelamento de adiantamentos
+- [x] Permitir registrar tora sem plaqueta na Produção Diária com identificação rastreável
+- [x] Permitir parcelar adiantamentos e descontar somente a parcela da referência mensal
+- [x] Atualizar a Produção Diária, os adiantamentos, o dashboard líquido e os testes de regressão

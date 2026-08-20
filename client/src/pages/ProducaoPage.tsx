@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Table,
   TableBody,
@@ -74,6 +75,7 @@ type LinhaComprimento = LinhaComprimentoVenda;
 type ToraForm = {
   plaquetaId: string;
   codigo: string;
+  semPlaqueta: boolean;
   madeiraNome: string;
   diametro: string;
   comprimento: string;
@@ -396,6 +398,7 @@ export default function ProducaoPage() {
   const [dialogRomaneio, setDialogRomaneio] = useState(false);
   const [etapa, setEtapa] = useState<"toras" | "pecas">("toras");
   const [codigoPlaqueta, setCodigoPlaqueta] = useState("");
+  const [aceitarToraSemPlaqueta, setAceitarToraSemPlaqueta] = useState(false);
   const [dialogImportacao, setDialogImportacao] = useState(false);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
   const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
@@ -689,6 +692,7 @@ export default function ProducaoPage() {
     setRomaneioEmEdicaoId(null);
     setEtapa("toras");
     setCodigoPlaqueta("");
+    setAceitarToraSemPlaqueta(false);
     setGrupoPecas(novoGrupoPecas());
     setLinhasComprimento(criarLinhasComprimentoVazias());
     setRomaneio(novoRomaneio());
@@ -704,6 +708,7 @@ export default function ProducaoPage() {
         plaquetaId: String(tora.plaquetaId),
         codigo:
           tora.codigo ?? tora.plaquetaCodigo ?? `Plaqueta ${tora.plaquetaId}`,
+        semPlaqueta: Boolean(tora.situacaoIdentificacao === "sem_plaqueta"),
         madeiraNome: String(tora.madeiraNome ?? ""),
         diametro: String(tora.diametro ?? ""),
         comprimento: String(tora.comprimento ?? ""),
@@ -909,6 +914,27 @@ export default function ProducaoPage() {
     }
     const codigoNormalizado = normalizarCodigo(codigoPlaqueta);
     if (!codigoNormalizado) {
+      if (aceitarToraSemPlaqueta) {
+        const toraSemPlaqueta: ToraForm = {
+          plaquetaId: "",
+          codigo: "Sem plaqueta",
+          semPlaqueta: true,
+          madeiraNome: "",
+          diametro: "",
+          comprimento: "",
+          volume: "",
+          origem: "entrada_imediata",
+          exigeConferenciaManual: true,
+        };
+        setRomaneio(atual => ({
+          ...atual,
+          toras: [toraSemPlaqueta, ...atual.toras],
+        }));
+        toast.message(
+          "Tora sem plaqueta adicionada. Informe as medidas para criar uma identificação interna e registrar o consumo."
+        );
+        return;
+      }
       toast.error("Digite o código da plaqueta");
       return;
     }
@@ -935,6 +961,7 @@ export default function ProducaoPage() {
       const toraAvulsa: ToraForm = {
         plaquetaId: "",
         codigo: codigoNormalizado,
+        semPlaqueta: false,
         madeiraNome: "",
         diametro: "",
         comprimento: "",
@@ -954,6 +981,7 @@ export default function ProducaoPage() {
     const tora: ToraForm = {
       plaquetaId: String(plaqueta.id),
       codigo: plaqueta.codigoFisico ?? plaqueta.codigo,
+      semPlaqueta: false,
       madeiraNome: exigeConferenciaManual ? "" : (plaqueta.madeiraNome ?? ""),
       diametro: exigeConferenciaManual ? "" : String(plaqueta.diametro ?? ""),
       comprimento: exigeConferenciaManual
@@ -1160,7 +1188,7 @@ export default function ProducaoPage() {
         toras: romaneio.toras.map(tora =>
           tora.origem === "entrada_imediata"
             ? {
-                novaPlaqueta: { codigo: tora.codigo },
+                novaPlaqueta: { codigo: tora.semPlaqueta ? null : tora.codigo },
                 medidasConferidasManual: tora.exigeConferenciaManual,
                 tora: {
                   madeiraNome: tora.madeiraNome,
@@ -3283,6 +3311,24 @@ export default function ProducaoPage() {
                         informe as medidas no cartão para registrar entrada e
                         consumo imediato.
                       </p>
+                      <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50/70 p-2.5 dark:border-amber-900/70 dark:bg-amber-950/20">
+                        <Checkbox
+                          id="aceitar-tora-sem-plaqueta"
+                          checked={aceitarToraSemPlaqueta}
+                          onCheckedChange={valor =>
+                            setAceitarToraSemPlaqueta(valor === true)
+                          }
+                        />
+                        <Label
+                          htmlFor="aceitar-tora-sem-plaqueta"
+                          className="cursor-pointer text-xs font-medium leading-5 text-amber-950 dark:text-amber-100"
+                        >
+                          Aceitar tora sem plaqueta
+                          <span className="mt-0.5 block font-normal text-amber-800 dark:text-amber-200">
+                            Use quando a identificação física foi perdida. O sistema exigirá as medidas e criará um código interno rastreável.
+                          </span>
+                        </Label>
+                      </div>
                       {codigoPlaqueta.trim() && !plaquetas.isLoading && (
                         <p
                           className={`rounded-md px-2 py-1 text-xs font-medium ${
@@ -3306,7 +3352,9 @@ export default function ProducaoPage() {
                         className="w-full"
                         type="button"
                         onClick={() => void adicionarTora()}
-                        disabled={!codigoPlaqueta.trim()}
+                        disabled={
+                          !codigoPlaqueta.trim() && !aceitarToraSemPlaqueta
+                        }
                       >
                         <Plus className="mr-1.5 h-4 w-4" />
                         Adicionar tora
@@ -3344,8 +3392,9 @@ export default function ProducaoPage() {
                                 </span>
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                Ajuste as medidas se a serragem aproveitou menos
-                                madeira que a medida registrada no estoque.
+                                {tora.semPlaqueta
+                                  ? "Sem identificação física: informe as medidas conferidas para gerar um código interno e registrar o consumo."
+                                  : "Ajuste as medidas se a serragem aproveitou menos madeira que a medida registrada no estoque."}
                               </p>
                             </div>
                             <Button
