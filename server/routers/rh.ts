@@ -104,12 +104,13 @@ export const rhRouter = router({
       if (!colaborador) throw new TRPCError({ code: "NOT_FOUND", message: "Colaborador não encontrado." });
       const [dependentes, historicosSalariais, adiantamentos, itensFolha] = await Promise.all([
         db.select({ id: dependentesRh.id }).from(dependentesRh).where(and(eq(dependentesRh.empresaId, empresaId), eq(dependentesRh.colaboradorId, input.id))).limit(1),
-        db.select({ id: historicosSalariaisRh.id }).from(historicosSalariaisRh).where(and(eq(historicosSalariaisRh.empresaId, empresaId), eq(historicosSalariaisRh.colaboradorId, input.id))).limit(1),
+        db.select({ id: historicosSalariaisRh.id }).from(historicosSalariaisRh).where(and(eq(historicosSalariaisRh.empresaId, empresaId), eq(historicosSalariaisRh.colaboradorId, input.id))).limit(2),
         db.select({ id: adiantamentosRh.id }).from(adiantamentosRh).where(and(eq(adiantamentosRh.empresaId, empresaId), eq(adiantamentosRh.colaboradorId, input.id))).limit(1),
         db.select({ id: itensFolhaPagamentoRh.id }).from(itensFolhaPagamentoRh).where(and(eq(itensFolhaPagamentoRh.empresaId, empresaId), eq(itensFolhaPagamentoRh.colaboradorId, input.id))).limit(1),
       ]);
-      const bloqueio = motivoBloqueioRemocaoColaboradorRh({ dependentes: Boolean(dependentes[0]), historicosSalariais: Boolean(historicosSalariais[0]), adiantamentos: Boolean(adiantamentos[0]), itensFolha: Boolean(itensFolha[0]) });
+      const bloqueio = motivoBloqueioRemocaoColaboradorRh({ dependentes: Boolean(dependentes[0]), alteracoesSalariais: historicosSalariais.length > 1, adiantamentos: Boolean(adiantamentos[0]), itensFolha: Boolean(itensFolha[0]) });
       if (bloqueio) throw new TRPCError({ code: "CONFLICT", message: bloqueio });
+      await db.delete(historicosSalariaisRh).where(and(eq(historicosSalariaisRh.empresaId, empresaId), eq(historicosSalariaisRh.colaboradorId, input.id)));
       await db.delete(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId)));
       await auditar(empresaId, ctx.user.id, "colaborador", input.id, "removido", { nome: colaborador.nome });
       return { success: true };

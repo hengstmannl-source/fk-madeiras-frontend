@@ -39,8 +39,8 @@ describe("cálculo de folha de RH", () => {
     expect(competenciaRh(new Date(2026, 7, 19, 9, 30)).toISOString()).toContain("2026-08-01");
   });
 
-  it("bloqueia a remoção de colaborador com histórico ou movimentações", () => {
-    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, historicosSalariais: true, adiantamentos: false, itensFolha: true })).toMatch(/histórico salarial.*lançamentos de folha/i);
-    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, historicosSalariais: false, adiantamentos: false, itensFolha: false })).toBeNull();
+  it("permite remover cadastro com apenas histórico salarial inicial e bloqueia movimentações efetivas", () => {
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: false, adiantamentos: false, itensFolha: false })).toBeNull();
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, alteracoesSalariais: true, adiantamentos: false, itensFolha: true })).toMatch(/alterações salariais.*lançamentos de folha/i);
   });
 });

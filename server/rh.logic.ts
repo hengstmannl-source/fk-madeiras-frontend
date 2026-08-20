@@ -119,7 +119,7 @@ export function competenciaRh(data: Date) {
 
 export type VinculosRemocaoColaboradorRh = {
   dependentes: boolean;
-  historicosSalariais: boolean;
+  alteracoesSalariais: boolean;
   adiantamentos: boolean;
   itensFolha: boolean;
 };
@@ -127,7 +127,7 @@ export type VinculosRemocaoColaboradorRh = {
 export function motivoBloqueioRemocaoColaboradorRh(vinculos: VinculosRemocaoColaboradorRh) {
   const encontrados = [
     vinculos.dependentes ? "dependentes" : null,
-    vinculos.historicosSalariais ? "histórico salarial" : null,
+    vinculos.alteracoesSalariais ? "alterações salariais" : null,
     vinculos.adiantamentos ? "adiantamentos" : null,
     vinculos.itensFolha ? "lançamentos de folha" : null,
   ].filter((item): item is string => Boolean(item));

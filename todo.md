@@ -475,3 +475,6 @@
 - [x] Mapear os vínculos que impedem remover um colaborador de RH com segurança
 - [x] Adicionar remoção confirmada de colaboradores sem vínculos no módulo de RH
 - [x] Cobrir a remoção e os bloqueios de histórico com testes de regressão
+- [x] Distinguir histórico salarial cadastral de movimentações efetivas na remoção de RH
+- [x] Permitir remover colaboradores sem folha, adiantamento, evento lançado ou vínculo financeiro
+- [x] Cobrir a remoção de cadastro sem movimentação e os bloqueios preservados
