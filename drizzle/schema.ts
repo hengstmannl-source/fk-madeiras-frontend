@@ -1003,6 +1003,7 @@ export const eventosFolhaRh = mysqlTable("eventosFolhaRh", {
   tipo: mysqlEnum("tipo", ["provento", "desconto", "informativo"]).notNull(),
   incideInss: boolean("incideInss").notNull().default(false),
   incideIrrf: boolean("incideIrrf").notNull().default(false),
+  deduzIrrf: boolean("deduzIrrf").notNull().default(false),
   incideFgts: boolean("incideFgts").notNull().default(false),
   ativo: boolean("ativo").notNull().default(true),
   criadoPor: int("criadoPor").notNull(),
@@ -1042,6 +1043,7 @@ export const tabelasTributariasRh = mysqlTable("tabelasTributariasRh", {
   vigenciaInicio: timestamp("vigenciaInicio").notNull(),
   vigenciaFim: timestamp("vigenciaFim"),
   deducaoDependente: decimal("deducaoDependente", { precision: 14, scale: 2 }).notNull().default("0"),
+  descontoSimplificado: decimal("descontoSimplificado", { precision: 14, scale: 2 }).notNull().default("0"),
   aliquotaFixa: decimal("aliquotaFixa", { precision: 8, scale: 4 }).notNull().default("0"),
   ativo: boolean("ativo").notNull().default(true),
   criadoPor: int("criadoPor").notNull(),
@@ -1064,8 +1066,26 @@ export const faixasTributariasRh = mysqlTable("faixasTributariasRh", {
   tabelaFaixaUnica: uniqueIndex("faixas_tributarias_rh_tabela_inferior_unico").on(table.tabelaTributariaId, table.limiteInferior),
 }));
 
+/** Regras adicionais do IRRF aplicadas após a tabela progressiva e versionadas junto da tabela tributária. */
+export const regrasReducaoIrrfRh = mysqlTable("regrasReducaoIrrfRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  tabelaTributariaId: int("tabelaTributariaId").notNull(),
+  tipo: mysqlEnum("tipo", ["zera_imposto", "formula_linear"]).notNull(),
+  limiteInferior: decimal("limiteInferior", { precision: 14, scale: 2 }).notNull().default("0"),
+  limiteSuperior: decimal("limiteSuperior", { precision: 14, scale: 2 }),
+  valorMaximo: decimal("valorMaximo", { precision: 14, scale: 2 }).notNull().default("0"),
+  constante: decimal("constante", { precision: 16, scale: 6 }).notNull().default("0"),
+  coeficiente: decimal("coeficiente", { precision: 16, scale: 6 }).notNull().default("0"),
+  ordem: int("ordem").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  tabelaOrdemUnica: uniqueIndex("regras_reducao_irrf_rh_tabela_ordem_unico").on(table.tabelaTributariaId, table.ordem),
+}));
+
 export type TabelaTributariaRh = typeof tabelasTributariasRh.$inferSelect;
 export type FaixaTributariaRh = typeof faixasTributariasRh.$inferSelect;
+export type RegraReducaoIrrfRh = typeof regrasReducaoIrrfRh.$inferSelect;
 
 export const folhasPagamentoRh = mysqlTable("folhasPagamentoRh", {
   id: int("id").autoincrement().primaryKey(),
@@ -1096,7 +1116,13 @@ export const itensFolhaPagamentoRh = mysqlTable("itensFolhaPagamentoRh", {
   salarioBase: decimal("salarioBase", { precision: 14, scale: 2 }).notNull(),
   totalProventos: decimal("totalProventos", { precision: 14, scale: 2 }).notNull().default("0"),
   inss: decimal("inss", { precision: 14, scale: 2 }).notNull().default("0"),
+  baseIrrf: decimal("baseIrrf", { precision: 14, scale: 2 }).notNull().default("0"),
   irrf: decimal("irrf", { precision: 14, scale: 2 }).notNull().default("0"),
+  deducoesLegaisIrrf: decimal("deducoesLegaisIrrf", { precision: 14, scale: 2 }).notNull().default("0"),
+  descontoSimplificadoIrrf: decimal("descontoSimplificadoIrrf", { precision: 14, scale: 2 }).notNull().default("0"),
+  metodoDeducaoIrrf: mysqlEnum("metodoDeducaoIrrf", ["legal", "simplificado", "nenhum"]),
+  tabelaIrrfId: int("tabelaIrrfId"),
+  memoriaIrrf: text("memoriaIrrf"),
   adiantamentos: decimal("adiantamentos", { precision: 14, scale: 2 }).notNull().default("0"),
   outrosDescontos: decimal("outrosDescontos", { precision: 14, scale: 2 }).notNull().default("0"),
   totalDescontos: decimal("totalDescontos", { precision: 14, scale: 2 }).notNull().default("0"),
@@ -1122,6 +1148,7 @@ export const eventosItensFolhaRh = mysqlTable("eventosItensFolhaRh", {
   valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
   incideInss: boolean("incideInss").notNull().default(false),
   incideIrrf: boolean("incideIrrf").notNull().default(false),
+  deduzIrrf: boolean("deduzIrrf").notNull().default(false),
   incideFgts: boolean("incideFgts").notNull().default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });

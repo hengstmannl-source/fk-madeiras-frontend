@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   atualizarCargo: vi.fn(),
   removerCargo: vi.fn(),
+  salvarRegra: vi.fn(),
   invalidar: vi.fn(),
   colaboradores: [{
     id: 1,
@@ -46,7 +47,7 @@ vi.mock("@/lib/trpc", () => {
         colaboradores: { list: consulta(state.colaboradores), create: inerte, remove: inerte, historicoSalarial: consulta() },
         eventos: { list: consulta(state.eventos), create: inerte, update: inerte, remove: inerte },
         adiantamentos: { list: consulta(), create: inerte },
-        tributos: { list: consulta(), salvar: inerte },
+        tributos: { list: consulta(), salvar: { useMutation: (opcoes?: { onSuccess?: () => void }) => ({ isPending: false, mutate: (input: unknown) => { state.salvarRegra(input); opcoes?.onSuccess?.(); } }) } },
         folha: { list: consulta(), detalhe: consulta(), abrir: inerte, recalcular: inerte, fechar: inerte, reabrir: inerte, salvarEventos: inerte },
         auditoria: consulta(),
         dependentes: { list: consulta(), create: inerte },
@@ -95,5 +96,17 @@ describe("página de RH — vínculos e cadastros auxiliares", () => {
     expect(screen.getByText(/remoção é permitida apenas quando o cadastro não estiver vinculado/i)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Remover cadastro" }));
     expect(state.removerCargo).toHaveBeenCalledWith({ id: 11 });
+  });
+
+  it("permite configurar desconto simplificado e regras de redução do IRRF por vigência", async () => {
+    const user = userEvent.setup();
+    render(<RhPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Regras tributárias" }));
+    await user.selectOptions(screen.getByRole("combobox"), "irrf");
+    expect(screen.getByText("Deduções e reduções do IRRF")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("607,20")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/zera_imposto\|0\|5000/i)).toBeInTheDocument();
+    expect(screen.getByText(/O motor compara deduções legais e desconto simplificado/i)).toBeInTheDocument();
   });
 });

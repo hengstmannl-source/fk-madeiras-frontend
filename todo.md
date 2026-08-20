@@ -485,3 +485,9 @@
 - [x] Investigar a falha de aprovação de venda ao criar a reserva de número sequencial
 - [x] Corrigir a persistência da sequência definitiva para vendas aprovadas
 - [x] Adicionar teste de regressão para a aprovação da venda PENDENTE-390001
+- [x] Mapear o cálculo atual da folha, IRRF, INSS, dependentes e regras tributárias do RH
+- [x] Modelar regras de IRRF versionadas com deduções, desconto simplificado e redução configurável
+- [x] Implementar cálculo separado de base, progressivo, redução e IRRF final
+- [x] Integrar a regra de IRRF 2026 à folha e à tela de regras tributárias
+- [x] Exibir memória de cálculo do IRRF para conferência na folha
+- [x] Cobrir cenários de IRRF 2026 e regressões da folha com testes automatizados
