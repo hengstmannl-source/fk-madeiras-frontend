@@ -482,3 +482,6 @@
 - [x] Permitir editar cargos, departamentos e eventos de folha
 - [x] Permitir remover cargos, departamentos e eventos sem vínculos de uso
 - [x] Cobrir indicadores de vínculo e manutenção de cadastros auxiliares com testes de regressão
+- [x] Investigar a falha de aprovação de venda ao criar a reserva de número sequencial
+- [x] Corrigir a persistência da sequência definitiva para vendas aprovadas
+- [x] Adicionar teste de regressão para a aprovação da venda PENDENTE-390001
