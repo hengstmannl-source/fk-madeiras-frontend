@@ -72,6 +72,23 @@ describe("Gestão de Colaboradores", () => {
     expect((integracaoFinanceira as HTMLInputElement).checked).toBe(true);
   });
 
+  it("permite cadastrar um benefício recorrente por colaborador com categoria", async () => {
+    const user = userEvent.setup();
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.click(screen.getByRole("button", { name: "Benefícios" }));
+
+    expect(screen.getByText(/Benefícios recorrentes · Ana da Silva/i)).toBeTruthy();
+    expect(screen.getByText("Tipo de benefício")).toBeTruthy();
+    expect(screen.getByRole("option", { name: "Plano de saúde" })).toBeTruthy();
+
+    const [categoria] = screen.getAllByRole("combobox");
+    await user.selectOptions(categoria, "plano_saude");
+    expect((categoria as HTMLSelectElement).value).toBe("plano_saude");
+    expect(screen.getByRole("button", { name: "Salvar benefício" })).toBeTruthy();
+  });
+
   it("permite consultar o relatório de custo com filtros gerenciais", async () => {
     const user = userEvent.setup();
     render(<GestaoColaboradoresPage />);

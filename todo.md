@@ -503,3 +503,8 @@
 - [x] Integrar opcionalmente lançamentos estimados ao Financeiro sem criar títulos oficiais por padrão
 - [x] Cobrir a reformulação do RH gerencial com testes de cálculo, segurança e interface
 - [x] Criar relatório de custo de colaboradores com filtros por pessoa, departamento, cargo e situação
+- [x] Mapear os custos recorrentes atuais e definir o contrato de benefícios por colaborador
+- [x] Implementar cadastro, alteração e remoção segura de benefícios recorrentes por colaborador
+- [x] Integrar benefícios individuais ao custo mensal, às projeções e aos relatórios
+- [x] Criar controles de benefícios recorrentes na Gestão de Colaboradores
+- [x] Cobrir benefícios recorrentes com testes de cálculo, segurança e interface

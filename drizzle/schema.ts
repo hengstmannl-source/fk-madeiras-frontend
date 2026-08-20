@@ -1019,6 +1019,7 @@ export const custosColaboradorRh = mysqlTable("custosColaboradorRh", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   colaboradorId: int("colaboradorId").notNull(),
+  categoria: mysqlEnum("categoria", ["vale_alimentacao", "vale_refeicao", "vale_transporte", "plano_saude", "plano_odontologico", "seguro_vida", "auxilio_educacao", "auxilio_combustivel", "outro"]).notNull().default("outro"),
   descricao: varchar("descricao", { length: 200 }).notNull(),
   tipo: mysqlEnum("tipo", ["fixo", "percentual"]).notNull(),
   valor: decimal("valor", { precision: 14, scale: 4 }).notNull(),

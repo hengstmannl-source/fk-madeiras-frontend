@@ -1,0 +1,1 @@
+ALTER TABLE `custosColaboradorRh` ADD `categoria` enum('vale_alimentacao','vale_refeicao','vale_transporte','plano_saude','plano_odontologico','seguro_vida','auxilio_educacao','auxilio_combustivel','outro') DEFAULT 'outro' NOT NULL;
