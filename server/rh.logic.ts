@@ -116,3 +116,23 @@ export function podeEditarFolhaRh(estado: "aberta" | "fechada") {
 export function competenciaRh(data: Date) {
   return new Date(data.getFullYear(), data.getMonth(), 1, 12, 0, 0, 0);
 }
+
+export type VinculosRemocaoColaboradorRh = {
+  dependentes: boolean;
+  historicosSalariais: boolean;
+  adiantamentos: boolean;
+  itensFolha: boolean;
+};
+
+export function motivoBloqueioRemocaoColaboradorRh(vinculos: VinculosRemocaoColaboradorRh) {
+  const encontrados = [
+    vinculos.dependentes ? "dependentes" : null,
+    vinculos.historicosSalariais ? "histórico salarial" : null,
+    vinculos.adiantamentos ? "adiantamentos" : null,
+    vinculos.itensFolha ? "lançamentos de folha" : null,
+  ].filter((item): item is string => Boolean(item));
+
+  return encontrados.length
+    ? `Este colaborador não pode ser removido porque possui ${encontrados.join(", ")}. Preserve o histórico ou registre o desligamento.`
+    : null;
+}

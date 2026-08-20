@@ -8,7 +8,7 @@ import {
 } from "../../drizzle/schema";
 import { getDb } from "../db";
 import { protectedProcedure, router } from "../_core/trpc";
-import { calcularFolhaColaboradorRh, competenciaRh, podeEditarFolhaRh, type EventoCalculoFolhaRh } from "../rh.logic";
+import { calcularFolhaColaboradorRh, competenciaRh, motivoBloqueioRemocaoColaboradorRh, podeEditarFolhaRh, type EventoCalculoFolhaRh } from "../rh.logic";
 
 const rhProcedure = protectedProcedure;
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
@@ -97,6 +97,23 @@ export const rhRouter = router({
     }),
     create: rhProcedure.input(colaboradorSchema).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const criado = await db.insert(colaboradoresRh).values({ ...input, empresaId, criadoPor: ctx.user.id, cpf: textoNulo(input.cpf), rg: textoNulo(input.rg), pis: textoNulo(input.pis), email: textoNulo(input.email), telefone: textoNulo(input.telefone), banco: textoNulo(input.banco), agencia: textoNulo(input.agencia), contaBancaria: textoNulo(input.contaBancaria), chavePix: textoNulo(input.chavePix), observacoes: textoNulo(input.observacoes), dataAdmissao: dataLocal(input.dataAdmissao), dataNascimento: input.dataNascimento ? dataLocal(input.dataNascimento) : null, dataDesligamento: input.dataDesligamento ? dataLocal(input.dataDesligamento) : null, salarioAtual: decimal(input.salarioAtual), cargaHorariaSemanal: decimal(input.cargaHorariaSemanal) }); const id = Number(criado[0].insertId); await db.insert(historicosSalariaisRh).values({ empresaId, colaboradorId: id, salario: decimal(input.salarioAtual), vigenciaInicio: dataLocal(input.dataAdmissao), motivo: "Salário de admissão", criadoPor: ctx.user.id }); await auditar(empresaId, ctx.user.id, "colaborador", id, "criado", { nome: input.nome }); return { id }; }),
     update: rhProcedure.input(colaboradorSchema.extend({ id: idSchema, motivoAlteracaoSalarial: z.string().trim().max(300).nullable().optional() })).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const anterior = await db.select().from(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId))).limit(1); if (!anterior[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Colaborador não encontrado." }); await db.update(colaboradoresRh).set({ ...input, cpf: textoNulo(input.cpf), rg: textoNulo(input.rg), pis: textoNulo(input.pis), email: textoNulo(input.email), telefone: textoNulo(input.telefone), banco: textoNulo(input.banco), agencia: textoNulo(input.agencia), contaBancaria: textoNulo(input.contaBancaria), chavePix: textoNulo(input.chavePix), observacoes: textoNulo(input.observacoes), dataAdmissao: dataLocal(input.dataAdmissao), dataNascimento: input.dataNascimento ? dataLocal(input.dataNascimento) : null, dataDesligamento: input.dataDesligamento ? dataLocal(input.dataDesligamento) : null, salarioAtual: decimal(input.salarioAtual), cargaHorariaSemanal: decimal(input.cargaHorariaSemanal) }).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId))); if (numero(anterior[0].salarioAtual) !== Number(input.salarioAtual)) await db.insert(historicosSalariaisRh).values({ empresaId, colaboradorId: input.id, salario: decimal(input.salarioAtual), vigenciaInicio: new Date(), motivo: textoNulo(input.motivoAlteracaoSalarial) ?? "Alteração salarial", criadoPor: ctx.user.id }); await auditar(empresaId, ctx.user.id, "colaborador", input.id, "atualizado"); return { success: true }; }),
+    remove: rhProcedure.input(z.object({ id: idSchema })).mutation(async ({ ctx, input }) => {
+      const db = await bancoObrigatorio();
+      const empresaId = ctx.empresaAtiva!.empresa.id;
+      const [colaborador] = await db.select().from(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId))).limit(1);
+      if (!colaborador) throw new TRPCError({ code: "NOT_FOUND", message: "Colaborador não encontrado." });
+      const [dependentes, historicosSalariais, adiantamentos, itensFolha] = await Promise.all([
+        db.select({ id: dependentesRh.id }).from(dependentesRh).where(and(eq(dependentesRh.empresaId, empresaId), eq(dependentesRh.colaboradorId, input.id))).limit(1),
+        db.select({ id: historicosSalariaisRh.id }).from(historicosSalariaisRh).where(and(eq(historicosSalariaisRh.empresaId, empresaId), eq(historicosSalariaisRh.colaboradorId, input.id))).limit(1),
+        db.select({ id: adiantamentosRh.id }).from(adiantamentosRh).where(and(eq(adiantamentosRh.empresaId, empresaId), eq(adiantamentosRh.colaboradorId, input.id))).limit(1),
+        db.select({ id: itensFolhaPagamentoRh.id }).from(itensFolhaPagamentoRh).where(and(eq(itensFolhaPagamentoRh.empresaId, empresaId), eq(itensFolhaPagamentoRh.colaboradorId, input.id))).limit(1),
+      ]);
+      const bloqueio = motivoBloqueioRemocaoColaboradorRh({ dependentes: Boolean(dependentes[0]), historicosSalariais: Boolean(historicosSalariais[0]), adiantamentos: Boolean(adiantamentos[0]), itensFolha: Boolean(itensFolha[0]) });
+      if (bloqueio) throw new TRPCError({ code: "CONFLICT", message: bloqueio });
+      await db.delete(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.id), eq(colaboradoresRh.empresaId, empresaId)));
+      await auditar(empresaId, ctx.user.id, "colaborador", input.id, "removido", { nome: colaborador.nome });
+      return { success: true };
+    }),
     historicoSalarial: rhProcedure.input(z.object({ colaboradorId: idSchema })).query(async ({ ctx, input }) => { const db = await bancoObrigatorio(); return db.select().from(historicosSalariaisRh).where(and(eq(historicosSalariaisRh.empresaId, ctx.empresaAtiva!.empresa.id), eq(historicosSalariaisRh.colaboradorId, input.colaboradorId))).orderBy(desc(historicosSalariaisRh.vigenciaInicio)); }),
   }),
   dependentes: router({

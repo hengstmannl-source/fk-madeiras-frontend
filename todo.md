@@ -472,3 +472,6 @@
 - [x] Mapear a sequência operacional do tutorial guiado de RH e Folha
 - [x] Criar um tutorial interativo dentro da página de RH
 - [x] Cobrir a abertura, navegação e conclusão do tutorial com testes de regressão
+- [x] Mapear os vínculos que impedem remover um colaborador de RH com segurança
+- [x] Adicionar remoção confirmada de colaboradores sem vínculos no módulo de RH
+- [x] Cobrir a remoção e os bloqueios de histórico com testes de regressão

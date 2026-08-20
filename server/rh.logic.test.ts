@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularFolhaColaboradorRh, calcularImpostoProgressivoRh, competenciaRh, podeEditarFolhaRh } from "./rh.logic";
+import { calcularFolhaColaboradorRh, calcularImpostoProgressivoRh, competenciaRh, motivoBloqueioRemocaoColaboradorRh, podeEditarFolhaRh } from "./rh.logic";
 
 const regras = {
   faixasInss: [
@@ -37,5 +37,10 @@ describe("cálculo de folha de RH", () => {
 
   it("normaliza competências para o primeiro dia do mês", () => {
     expect(competenciaRh(new Date(2026, 7, 19, 9, 30)).toISOString()).toContain("2026-08-01");
+  });
+
+  it("bloqueia a remoção de colaborador com histórico ou movimentações", () => {
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, historicosSalariais: true, adiantamentos: false, itensFolha: true })).toMatch(/histórico salarial.*lançamentos de folha/i);
+    expect(motivoBloqueioRemocaoColaboradorRh({ dependentes: false, historicosSalariais: false, adiantamentos: false, itensFolha: false })).toBeNull();
   });
 });
