@@ -89,6 +89,19 @@ describe("Gestão de Colaboradores", () => {
     expect(screen.getByRole("button", { name: "Salvar benefício" })).toBeTruthy();
   });
 
+  it("permite marcar um benefício para desconto no líquido previsto", async () => {
+    const user = userEvent.setup();
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.click(screen.getByRole("button", { name: "Benefícios" }));
+
+    const desconto = screen.getByRole("checkbox", { name: "Descontar benefício do líquido previsto", hidden: true }) as HTMLInputElement;
+    expect(desconto.checked).toBe(false);
+    desconto.click();
+    expect(desconto.checked).toBe(true);
+  });
+
   it("pede confirmação e remove um colaborador sem vínculos", async () => {
     const user = userEvent.setup();
     render(<GestaoColaboradoresPage />);

@@ -1,0 +1,1 @@
+ALTER TABLE `custosColaboradorRh` ADD `descontarDoLiquido` boolean DEFAULT false NOT NULL;

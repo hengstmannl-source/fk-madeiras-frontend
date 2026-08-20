@@ -8,6 +8,7 @@ export type RegraCustoGerencialRh = {
   tipo: TipoCustoGerencialRh;
   valor: number;
   recorrente: boolean;
+  descontarDoLiquido?: boolean;
   ativo: boolean;
   dataInicio: Date;
   dataFim?: Date | null;
@@ -24,6 +25,9 @@ export type ConfiguracaoCustosGerenciaisRh = {
 export type ComposicaoCustoColaboradorRh = {
   salarioBruto: number;
   inssEstimado: number;
+  beneficiosDescontados: number;
+  adiantamentosDescontados: number;
+  totalDescontosGerenciais: number;
   salarioLiquidoEstimado: number;
   fgtsEstimado: number;
   provisaoDecimoTerceiro: number;
@@ -61,10 +65,10 @@ export function calcularCustoColaboradorGerencialRh(entrada: {
   custos: RegraCustoGerencialRh[];
   referencia: Date;
   faixasInss?: FaixaTributariaRhCalculo[];
+  adiantamentosDescontados?: number;
 }) : ComposicaoCustoColaboradorRh {
   const salarioBruto = arredondarDinheiroRh(numeroPositivo(entrada.salarioBruto));
   const inssEstimado = entrada.configuracao.descontoInssEstimadoAtivo ? calcularImpostoProgressivoRh(salarioBruto, entrada.faixasInss ?? []) : 0;
-  const salarioLiquidoEstimado = arredondarDinheiroRh(Math.max(0, salarioBruto - inssEstimado));
   const fgtsEstimado = arredondarDinheiroRh(salarioBruto * (numeroPositivo(entrada.configuracao.fgtsPercentual) / 100));
   const provisaoDecimoTerceiro = entrada.configuracao.provisaoDecimoTerceiroAtiva ? arredondarDinheiroRh(salarioBruto / 12) : 0;
   const provisaoFerias = entrada.configuracao.provisaoFeriasAtiva ? arredondarDinheiroRh(salarioBruto / 12) : 0;
@@ -72,6 +76,10 @@ export function calcularCustoColaboradorGerencialRh(entrada: {
   const detalhesOutrosCustos = entrada.custos
     .filter((custo) => custoVigenteNoMes(custo, entrada.referencia))
     .map((custo) => ({ descricao: custo.descricao.trim(), valor: valorRegraCustoGerencial(custo, salarioBruto) }));
+  const beneficiosDescontados = arredondarDinheiroRh(entrada.custos.filter((custo) => custo.descontarDoLiquido && custoVigenteNoMes(custo, entrada.referencia)).reduce((soma, custo) => soma + valorRegraCustoGerencial(custo, salarioBruto), 0));
+  const adiantamentosDescontados = arredondarDinheiroRh(numeroPositivo(entrada.adiantamentosDescontados ?? 0));
+  const totalDescontosGerenciais = arredondarDinheiroRh(inssEstimado + beneficiosDescontados + adiantamentosDescontados);
+  const salarioLiquidoEstimado = arredondarDinheiroRh(Math.max(0, salarioBruto - totalDescontosGerenciais));
   const beneficiosECustos = arredondarDinheiroRh(detalhesOutrosCustos.reduce((soma, custo) => soma + custo.valor, 0));
   const custoMensalEstimado = arredondarDinheiroRh(salarioBruto + fgtsEstimado + provisaoDecimoTerceiro + provisaoFerias + provisaoTercoFerias + beneficiosECustos);
   const baseRecorrente = salarioBruto + fgtsEstimado + provisaoDecimoTerceiro + provisaoFerias + provisaoTercoFerias;
@@ -79,7 +87,7 @@ export function calcularCustoColaboradorGerencialRh(entrada: {
     .filter((custo) => custoVigenteNoMes(custo, entrada.referencia))
     .reduce((soma, custo) => soma + valorRegraCustoGerencial(custo, salarioBruto) * (custo.recorrente ? 12 : 1), 0);
   const custoAnualEstimado = arredondarDinheiroRh(baseRecorrente * 12 + outrosCustosAnuais);
-  return { salarioBruto, inssEstimado, salarioLiquidoEstimado, fgtsEstimado, provisaoDecimoTerceiro, provisaoFerias, provisaoTercoFerias, beneficiosECustos, custoMensalEstimado, custoAnualEstimado, detalhesOutrosCustos };
+  return { salarioBruto, inssEstimado, beneficiosDescontados, adiantamentosDescontados, totalDescontosGerenciais, salarioLiquidoEstimado, fgtsEstimado, provisaoDecimoTerceiro, provisaoFerias, provisaoTercoFerias, beneficiosECustos, custoMensalEstimado, custoAnualEstimado, detalhesOutrosCustos };
 }
 
 export function somarCustosEquipeGerencialRh(entradas: ComposicaoCustoColaboradorRh[], custosEquipe: RegraCustoGerencialRh[], referencia: Date) {
@@ -87,6 +95,9 @@ export function somarCustosEquipeGerencialRh(entradas: ComposicaoCustoColaborado
     colaboradoresAtivos: total.colaboradoresAtivos + 1,
     salariosBrutos: total.salariosBrutos + item.salarioBruto,
     inssEstimado: total.inssEstimado + item.inssEstimado,
+    beneficiosDescontados: total.beneficiosDescontados + item.beneficiosDescontados,
+    adiantamentosDescontados: total.adiantamentosDescontados + item.adiantamentosDescontados,
+    totalDescontosGerenciais: total.totalDescontosGerenciais + item.totalDescontosGerenciais,
     salariosLiquidosEstimados: total.salariosLiquidosEstimados + item.salarioLiquidoEstimado,
     fgtsEstimado: total.fgtsEstimado + item.fgtsEstimado,
     provisaoDecimoTerceiro: total.provisaoDecimoTerceiro + item.provisaoDecimoTerceiro,
@@ -95,7 +106,7 @@ export function somarCustosEquipeGerencialRh(entradas: ComposicaoCustoColaborado
     outrosCustos: total.outrosCustos + item.beneficiosECustos,
     custoMensalEstimado: total.custoMensalEstimado + item.custoMensalEstimado,
     custoAnualEstimado: total.custoAnualEstimado + item.custoAnualEstimado,
-  }), { colaboradoresAtivos: 0, salariosBrutos: 0, inssEstimado: 0, salariosLiquidosEstimados: 0, fgtsEstimado: 0, provisaoDecimoTerceiro: 0, provisaoFerias: 0, provisaoTercoFerias: 0, outrosCustos: 0, custoMensalEstimado: 0, custoAnualEstimado: 0 });
+  }), { colaboradoresAtivos: 0, salariosBrutos: 0, inssEstimado: 0, beneficiosDescontados: 0, adiantamentosDescontados: 0, totalDescontosGerenciais: 0, salariosLiquidosEstimados: 0, fgtsEstimado: 0, provisaoDecimoTerceiro: 0, provisaoFerias: 0, provisaoTercoFerias: 0, outrosCustos: 0, custoMensalEstimado: 0, custoAnualEstimado: 0 });
 
   const totalEquipe = custosEquipe.filter((custo) => custoVigenteNoMes(custo, referencia)).reduce((soma, custo) => soma + valorRegraCustoGerencial(custo, base.salariosBrutos), 0);
   const anualEquipe = custosEquipe.filter((custo) => custoVigenteNoMes(custo, referencia)).reduce((soma, custo) => soma + valorRegraCustoGerencial(custo, base.salariosBrutos) * (custo.recorrente ? 12 : 1), 0);

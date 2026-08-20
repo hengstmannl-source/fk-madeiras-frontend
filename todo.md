@@ -525,3 +525,7 @@
 - [x] Implementar cálculo gerencial de salário líquido estimado por colaborador
 - [x] Criar dashboard de previsão de salário líquido na Gestão de Colaboradores
 - [x] Cobrir cálculo, filtros e interface do dashboard com testes de regressão
+- [x] Mapear os adiantamentos e benefícios aplicáveis à previsão de líquido a pagar
+- [x] Permitir definir benefícios e vales como descontos gerenciais em folha
+- [x] Descontar adiantamentos pendentes e benefícios marcados no salário líquido previsto
+- [x] Atualizar o dashboard líquido, formulários e testes de regressão dos descontos

@@ -86,12 +86,12 @@ const dependenteSchema = z.object({ nome: z.string().trim().min(2).max(300), cpf
 const configuracaoCustosSchema = z.object({ fgtsPercentual: valorSchema, descontoInssEstimadoAtivo: z.boolean(), provisaoDecimoTerceiroAtiva: z.boolean(), provisaoFeriasAtiva: z.boolean(), provisaoTercoFeriasAtiva: z.boolean(), observacoes: z.string().trim().max(3000).nullable().optional() });
 const categoriasBeneficioRh = ["vale_alimentacao", "vale_refeicao", "vale_transporte", "plano_saude", "plano_odontologico", "seguro_vida", "auxilio_educacao", "auxilio_combustivel", "outro"] as const;
 const custoGerencialSchema = z.object({ descricao: z.string().trim().min(2).max(200), tipo: z.enum(["fixo", "percentual"]), valor: valorPositivoSchema, recorrente: z.boolean().default(true), dataInicio: dataSchema, dataFim: dataSchema.nullable().optional(), ativo: z.boolean().default(true) });
-const beneficioColaboradorSchema = custoGerencialSchema.extend({ categoria: z.enum(categoriasBeneficioRh).default("outro") });
+const beneficioColaboradorSchema = custoGerencialSchema.extend({ categoria: z.enum(categoriasBeneficioRh).default("outro"), descontarDoLiquido: z.boolean().default(false) });
 const custoEmpresaSchema = custoGerencialSchema.extend({ escopo: z.enum(["por_colaborador", "equipe"]).default("por_colaborador") });
 
 const CONFIGURACAO_CUSTOS_PADRAO: ConfiguracaoCustosGerenciaisRh = { fgtsPercentual: 8, descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true };
-function regraCustoGerencial(regra: { id: number; descricao: string; tipo: "fixo" | "percentual"; valor: string | number; recorrente: boolean; ativo: boolean; dataInicio: Date; dataFim: Date | null }): RegraCustoGerencialRh {
-  return { id: regra.id, descricao: regra.descricao, tipo: regra.tipo, valor: numero(regra.valor), recorrente: regra.recorrente, ativo: regra.ativo, dataInicio: regra.dataInicio, dataFim: regra.dataFim };
+function regraCustoGerencial(regra: { id: number; descricao: string; tipo: "fixo" | "percentual"; valor: string | number; recorrente: boolean; descontarDoLiquido?: boolean; ativo: boolean; dataInicio: Date; dataFim: Date | null }): RegraCustoGerencialRh {
+  return { id: regra.id, descricao: regra.descricao, tipo: regra.tipo, valor: numero(regra.valor), recorrente: regra.recorrente, descontarDoLiquido: regra.descontarDoLiquido ?? false, ativo: regra.ativo, dataInicio: regra.dataInicio, dataFim: regra.dataFim };
 }
 
 export const rhRouter = router({
@@ -116,14 +116,19 @@ export const rhRouter = router({
       ]);
       const configuracao = configuracaoExistente[0] ? { fgtsPercentual: numero(configuracaoExistente[0].fgtsPercentual), descontoInssEstimadoAtivo: configuracaoExistente[0].descontoInssEstimadoAtivo, provisaoDecimoTerceiroAtiva: configuracaoExistente[0].provisaoDecimoTerceiroAtiva, provisaoFeriasAtiva: configuracaoExistente[0].provisaoFeriasAtiva, provisaoTercoFeriasAtiva: configuracaoExistente[0].provisaoTercoFeriasAtiva } : CONFIGURACAO_CUSTOS_PADRAO;
       const ids = colaboradores.map((colaborador) => colaborador.id);
-      const custosIndividuais = ids.length ? await db.select().from(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, empresaId), inArray(custosColaboradorRh.colaboradorId, ids))) : [];
+      const [custosIndividuais, adiantamentosAbertos] = ids.length ? await Promise.all([
+        db.select().from(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, empresaId), inArray(custosColaboradorRh.colaboradorId, ids))),
+        db.select().from(adiantamentosRh).where(and(eq(adiantamentosRh.empresaId, empresaId), inArray(adiantamentosRh.colaboradorId, ids), eq(adiantamentosRh.competencia, referencia), eq(adiantamentosRh.estado, "aberto"))),
+      ]) : [[], []];
       const custosPorColaborador = new Map<number, RegraCustoGerencialRh[]>();
       for (const custo of custosIndividuais) custosPorColaborador.set(custo.colaboradorId, [...(custosPorColaborador.get(custo.colaboradorId) ?? []), regraCustoGerencial(custo)]);
+      const adiantamentosPorColaborador = new Map<number, number>();
+      for (const adiantamento of adiantamentosAbertos) adiantamentosPorColaborador.set(adiantamento.colaboradorId, (adiantamentosPorColaborador.get(adiantamento.colaboradorId) ?? 0) + numero(adiantamento.saldoPendente));
       const custosGlobaisIndividuais = custosEmpresa.filter((custo) => custo.escopo === "por_colaborador").map(regraCustoGerencial);
       const custosEquipe = custosEmpresa.filter((custo) => custo.escopo === "equipe").map(regraCustoGerencial);
       const departamentoPorId = new Map(departamentos.map((item) => [item.id, item])); const cargoPorId = new Map(cargos.map((item) => [item.id, item]));
       const linhas = colaboradores.map((colaborador) => {
-        const custo = calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobaisIndividuais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia, faixasInss: regras.faixasInss });
+        const custo = calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobaisIndividuais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia, faixasInss: regras.faixasInss, adiantamentosDescontados: adiantamentosPorColaborador.get(colaborador.id) ?? 0 });
         return { ...colaborador, departamento: colaborador.departamentoId ? departamentoPorId.get(colaborador.departamentoId) ?? null : null, cargo: colaborador.cargoId ? cargoPorId.get(colaborador.cargoId) ?? null : null, custo };
       });
       const resumo = somarCustosEquipeGerencialRh(linhas.map((linha) => linha.custo), custosEquipe, referencia);
@@ -147,12 +152,17 @@ export const rhRouter = router({
       const busca = input?.busca?.toLocaleLowerCase("pt-BR");
       const colaboradoresFiltrados = todosColaboradores.filter((item) => (!input?.departamentoId || item.departamentoId === input.departamentoId) && (!input?.cargoId || item.cargoId === input.cargoId) && (!busca || `${item.nome} ${departamentoPorId.get(item.departamentoId ?? 0)?.nome ?? ""} ${cargoPorId.get(item.cargoId ?? 0)?.nome ?? ""}`.toLocaleLowerCase("pt-BR").includes(busca)));
       const ids = colaboradoresFiltrados.map((item) => item.id);
-      const custosIndividuais = ids.length ? await db.select().from(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, empresaId), inArray(custosColaboradorRh.colaboradorId, ids))) : [];
+      const [custosIndividuais, adiantamentosAbertos] = ids.length ? await Promise.all([
+        db.select().from(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, empresaId), inArray(custosColaboradorRh.colaboradorId, ids))),
+        db.select().from(adiantamentosRh).where(and(eq(adiantamentosRh.empresaId, empresaId), inArray(adiantamentosRh.colaboradorId, ids), eq(adiantamentosRh.competencia, referencia), eq(adiantamentosRh.estado, "aberto"))),
+      ]) : [[], []];
       const custosPorColaborador = new Map<number, RegraCustoGerencialRh[]>();
       for (const custo of custosIndividuais) custosPorColaborador.set(custo.colaboradorId, [...(custosPorColaborador.get(custo.colaboradorId) ?? []), regraCustoGerencial(custo)]);
+      const adiantamentosPorColaborador = new Map<number, number>();
+      for (const adiantamento of adiantamentosAbertos) adiantamentosPorColaborador.set(adiantamento.colaboradorId, (adiantamentosPorColaborador.get(adiantamento.colaboradorId) ?? 0) + numero(adiantamento.saldoPendente));
       const custosGlobais = custosEmpresa.filter((custo) => custo.escopo === "por_colaborador").map(regraCustoGerencial);
       const linhas = colaboradoresFiltrados.map((colaborador) => {
-        const custo = colaborador.situacao === "desligado" ? calcularCustoColaboradorGerencialRh({ salarioBruto: 0, configuracao, custos: [], referencia, faixasInss: regras.faixasInss }) : calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia, faixasInss: regras.faixasInss });
+        const custo = colaborador.situacao === "desligado" ? calcularCustoColaboradorGerencialRh({ salarioBruto: 0, configuracao, custos: [], referencia, faixasInss: regras.faixasInss }) : calcularCustoColaboradorGerencialRh({ salarioBruto: numero(colaborador.salarioAtual), configuracao, custos: [...custosGlobais, ...(custosPorColaborador.get(colaborador.id) ?? [])], referencia, faixasInss: regras.faixasInss, adiantamentosDescontados: adiantamentosPorColaborador.get(colaborador.id) ?? 0 });
         return { ...colaborador, departamento: colaborador.departamentoId ? departamentoPorId.get(colaborador.departamentoId) ?? null : null, cargo: colaborador.cargoId ? cargoPorId.get(colaborador.cargoId) ?? null : null, custo };
       });
       return { referencia, linhas, totais: somarCustosEquipeGerencialRh(linhas.map((linha) => linha.custo), [], referencia) };
@@ -175,7 +185,7 @@ export const rhRouter = router({
     custosColaborador: router({
       list: rhProcedure.input(z.object({ colaboradorId: idSchema })).query(async ({ ctx, input }) => { const db = await bancoObrigatorio(); return db.select().from(custosColaboradorRh).where(and(eq(custosColaboradorRh.empresaId, ctx.empresaAtiva!.empresa.id), eq(custosColaboradorRh.colaboradorId, input.colaboradorId))).orderBy(desc(custosColaboradorRh.ativo), asc(custosColaboradorRh.descricao)); }),
       create: rhProcedure.input(beneficioColaboradorSchema.extend({ colaboradorId: idSchema })).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const [colaborador] = await db.select({ id: colaboradoresRh.id }).from(colaboradoresRh).where(and(eq(colaboradoresRh.id, input.colaboradorId), eq(colaboradoresRh.empresaId, empresaId))).limit(1); if (!colaborador) throw new TRPCError({ code: "NOT_FOUND", message: "Colaborador não encontrado." }); const criado = await db.insert(custosColaboradorRh).values({ ...input, valor: decimal(input.valor), dataInicio: dataLocal(input.dataInicio), dataFim: input.dataFim ? dataLocal(input.dataFim) : null, empresaId, criadoPor: ctx.user.id }); const id = Number(criado[0].insertId); await auditar(empresaId, ctx.user.id, "beneficio_colaborador", id, "criado", { colaboradorId: input.colaboradorId, categoria: input.categoria, descricao: input.descricao }); return { id }; }),
-      update: rhProcedure.input(beneficioColaboradorSchema.extend({ id: idSchema, colaboradorId: idSchema })).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); await db.update(custosColaboradorRh).set({ categoria: input.categoria, descricao: input.descricao, tipo: input.tipo, valor: decimal(input.valor), recorrente: input.recorrente, dataInicio: dataLocal(input.dataInicio), dataFim: input.dataFim ? dataLocal(input.dataFim) : null, ativo: input.ativo }).where(and(eq(custosColaboradorRh.id, input.id), eq(custosColaboradorRh.colaboradorId, input.colaboradorId), eq(custosColaboradorRh.empresaId, ctx.empresaAtiva!.empresa.id))); await auditar(ctx.empresaAtiva!.empresa.id, ctx.user.id, "beneficio_colaborador", input.id, "atualizado", { categoria: input.categoria }); return { success: true }; }),
+      update: rhProcedure.input(beneficioColaboradorSchema.extend({ id: idSchema, colaboradorId: idSchema })).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); await db.update(custosColaboradorRh).set({ categoria: input.categoria, descricao: input.descricao, tipo: input.tipo, valor: decimal(input.valor), recorrente: input.recorrente, descontarDoLiquido: input.descontarDoLiquido, dataInicio: dataLocal(input.dataInicio), dataFim: input.dataFim ? dataLocal(input.dataFim) : null, ativo: input.ativo }).where(and(eq(custosColaboradorRh.id, input.id), eq(custosColaboradorRh.colaboradorId, input.colaboradorId), eq(custosColaboradorRh.empresaId, ctx.empresaAtiva!.empresa.id))); await auditar(ctx.empresaAtiva!.empresa.id, ctx.user.id, "beneficio_colaborador", input.id, "atualizado", { categoria: input.categoria, descontarDoLiquido: input.descontarDoLiquido }); return { success: true }; }),
       remove: rhProcedure.input(z.object({ id: idSchema, colaboradorId: idSchema })).mutation(async ({ ctx, input }) => { const db = await bancoObrigatorio(); await db.delete(custosColaboradorRh).where(and(eq(custosColaboradorRh.id, input.id), eq(custosColaboradorRh.colaboradorId, input.colaboradorId), eq(custosColaboradorRh.empresaId, ctx.empresaAtiva!.empresa.id))); await auditar(ctx.empresaAtiva!.empresa.id, ctx.user.id, "custo_colaborador", input.id, "removido"); return { success: true }; }),
     }),
   }),

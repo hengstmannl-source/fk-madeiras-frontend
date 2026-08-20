@@ -1025,6 +1025,7 @@ export const custosColaboradorRh = mysqlTable("custosColaboradorRh", {
   tipo: mysqlEnum("tipo", ["fixo", "percentual"]).notNull(),
   valor: decimal("valor", { precision: 14, scale: 4 }).notNull(),
   recorrente: boolean("recorrente").notNull().default(true),
+  descontarDoLiquido: boolean("descontarDoLiquido").notNull().default(false),
   dataInicio: timestamp("dataInicio").notNull(),
   dataFim: timestamp("dataFim"),
   ativo: boolean("ativo").notNull().default(true),

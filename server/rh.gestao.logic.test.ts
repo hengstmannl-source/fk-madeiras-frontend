@@ -40,6 +40,20 @@ describe("RH gerencial — composição de custos", () => {
     expect(resultado).toMatchObject({ inssEstimado: 300, salarioLiquidoEstimado: 2700, custoMensalEstimado: 3823.33 });
   });
 
+  it("desconta do líquido apenas os benefícios marcados e os adiantamentos pendentes", () => {
+    const resultado = calcularCustoColaboradorGerencialRh({
+      salarioBruto: 3000,
+      configuracao: { ...configuracaoPadrao, fgtsPercentual: 0, provisaoDecimoTerceiroAtiva: false, provisaoFeriasAtiva: false, provisaoTercoFeriasAtiva: false },
+      custos: [
+        { descricao: "Vale-transporte", tipo: "fixo", valor: 180, recorrente: true, descontarDoLiquido: true, ativo: true, dataInicio: new Date(2026, 0, 1) },
+        { descricao: "Plano de saúde custeado", tipo: "fixo", valor: 250, recorrente: true, descontarDoLiquido: false, ativo: true, dataInicio: new Date(2026, 0, 1) },
+      ],
+      adiantamentosDescontados: 400,
+      referencia: new Date(2026, 7, 1),
+    });
+    expect(resultado).toMatchObject({ beneficiosDescontados: 180, adiantamentosDescontados: 400, totalDescontosGerenciais: 580, salarioLiquidoEstimado: 2420, custoMensalEstimado: 3430 });
+  });
+
   it("inclui custos fixos e percentuais apenas dentro da vigência", () => {
     const resultado = calcularCustoColaboradorGerencialRh({
       salarioBruto: 2000,
