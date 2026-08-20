@@ -491,3 +491,15 @@
 - [x] Integrar a regra de IRRF 2026 à folha e à tela de regras tributárias
 - [x] Exibir memória de cálculo do IRRF para conferência na folha
 - [x] Cobrir cenários de IRRF 2026 e regressões da folha com testes automatizados
+- [x] Definir o escopo do RH simplificado focado em gestão interna e custos
+- [x] Desenhar as telas e os fluxos prioritários de colaboradores, pagamentos e adiantamentos
+- [x] Especificar o cálculo gerencial de provisões de férias e 13º proporcional
+- [x] Separar funcionalidades gerenciais das obrigações conduzidas pela contabilidade
+- [x] Mapear todas as estruturas atuais de folha que serão descontinuadas do fluxo principal
+- [x] Criar configurações versionadas de custos trabalhistas estimados e outros custos
+- [x] Criar custos adicionais específicos por colaborador com vigência e recorrência
+- [x] Implementar cálculo de custo mensal e anual estimado por colaborador e equipe
+- [x] Reformular a página RH como Gestão de Colaboradores, custos e previsões
+- [x] Integrar opcionalmente lançamentos estimados ao Financeiro sem criar títulos oficiais por padrão
+- [x] Cobrir a reformulação do RH gerencial com testes de cálculo, segurança e interface
+- [x] Criar relatório de custo de colaboradores com filtros por pessoa, departamento, cargo e situação

@@ -22,7 +22,7 @@ import RelatorioPlaquetasPage from "./pages/RelatorioPlaquetasPage";
 import InventarioPage from "./pages/InventarioPage";
 import DieselPage from "./pages/DieselPage";
 import EquipePage from "./pages/EquipePage";
-import RhPage from "./pages/RhPage";
+import GestaoColaboradoresPage from "./pages/GestaoColaboradoresPage";
 import { CadastroEmpresaPage, ConvitePage, LoginPage } from "./pages/AcessoPage";
 import { tratarAtalhosProducao } from "./lib/producaoKeyboardShortcuts";
 
@@ -61,7 +61,7 @@ function Router() {
         <Route path="/estoque/plaquetas" component={RelatorioPlaquetasPage} />
         <Route path="/inventario" component={InventarioPage} />
         <Route path="/diesel" component={DieselPage} />
-        <Route path="/rh" component={RhPage} />
+        <Route path="/rh" component={GestaoColaboradoresPage} />
             <Route path="/empresa" component={EmpresaPage} />
             <Route path="/equipe" component={EquipePage} />
         <Route path="/404" component={NotFound} />

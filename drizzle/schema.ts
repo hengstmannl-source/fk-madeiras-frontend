@@ -979,6 +979,64 @@ export const historicosSalariaisRh = mysqlTable("historicosSalariaisRh", {
 
 export type HistoricoSalarialRh = typeof historicosSalariaisRh.$inferSelect;
 
+/** Parâmetros internos de planejamento de custo, sem valor legal ou de folha oficial. */
+export const configuracoesCustosRh = mysqlTable("configuracoesCustosRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  fgtsPercentual: decimal("fgtsPercentual", { precision: 8, scale: 4 }).notNull().default("8"),
+  provisaoDecimoTerceiroAtiva: boolean("provisaoDecimoTerceiroAtiva").notNull().default(true),
+  provisaoFeriasAtiva: boolean("provisaoFeriasAtiva").notNull().default(true),
+  provisaoTercoFeriasAtiva: boolean("provisaoTercoFeriasAtiva").notNull().default(true),
+  observacoes: text("observacoes"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaUnica: uniqueIndex("configuracoes_custos_rh_empresa_unica").on(table.empresaId),
+}));
+
+/** Custos recorrentes definidos para toda a equipe, como benefícios ou encargos estimados. */
+export const custosEmpresaRh = mysqlTable("custosEmpresaRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  descricao: varchar("descricao", { length: 200 }).notNull(),
+  tipo: mysqlEnum("tipo", ["fixo", "percentual"]).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 4 }).notNull(),
+  escopo: mysqlEnum("escopo", ["por_colaborador", "equipe"]).notNull().default("por_colaborador"),
+  recorrente: boolean("recorrente").notNull().default(true),
+  dataInicio: timestamp("dataInicio").notNull(),
+  dataFim: timestamp("dataFim"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaAtivoIndice: index("custos_empresa_rh_empresa_ativo_indice").on(table.empresaId, table.ativo),
+}));
+
+/** Benefícios e outros custos internos vinculados a um colaborador específico. */
+export const custosColaboradorRh = mysqlTable("custosColaboradorRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  descricao: varchar("descricao", { length: 200 }).notNull(),
+  tipo: mysqlEnum("tipo", ["fixo", "percentual"]).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 4 }).notNull(),
+  recorrente: boolean("recorrente").notNull().default(true),
+  dataInicio: timestamp("dataInicio").notNull(),
+  dataFim: timestamp("dataFim"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  colaboradorAtivoIndice: index("custos_colaborador_rh_colaborador_ativo_indice").on(table.empresaId, table.colaboradorId, table.ativo),
+}));
+
+export type ConfiguracaoCustosRh = typeof configuracoesCustosRh.$inferSelect;
+export type CustoEmpresaRh = typeof custosEmpresaRh.$inferSelect;
+export type CustoColaboradorRh = typeof custosColaboradorRh.$inferSelect;
+
 export const dependentesRh = mysqlTable("dependentesRh", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
