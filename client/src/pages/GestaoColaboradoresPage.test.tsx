@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-const state = vi.hoisted(() => ({ invalidar: vi.fn() }));
+const state = vi.hoisted(() => ({ invalidar: vi.fn(), removerColaborador: vi.fn(), colaboradores: [] as any[] }));
 
 vi.mock("@/lib/trpc", () => ({
   trpc: (() => {
@@ -14,7 +14,7 @@ vi.mock("@/lib/trpc", () => ({
     return {
     useUtils: () => ({ rh: { gestao: { painel: invalidar, relatorio: invalidar, configuracao: invalidar, custosEmpresa: invalidar, custosColaborador: invalidar }, colaboradores: { list: invalidar }, adiantamentos: { list: invalidar } } }),
     rh: {
-      colaboradores: { list: consulta([]), create: mutacao, update: mutacao },
+      colaboradores: { list: { useQuery: () => ({ data: state.colaboradores, isLoading: false }) }, create: mutacao, update: mutacao, remove: { useMutation: () => ({ mutate: state.removerColaborador, isPending: false }) } },
       departamentos: { list: consulta([]) },
       cargos: { list: consulta([]) },
       adiantamentos: { list: consulta([]), create: mutacao },
@@ -38,7 +38,7 @@ vi.mock("@/lib/trpc", () => ({
 import GestaoColaboradoresPage from "./GestaoColaboradoresPage";
 
 describe("Gestão de Colaboradores", () => {
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); state.colaboradores = []; state.removerColaborador.mockClear(); });
 
   it("deixa explícito o caráter estimado do painel e exibe provisões de custo", async () => {
     const user = userEvent.setup();
@@ -87,6 +87,33 @@ describe("Gestão de Colaboradores", () => {
     await user.selectOptions(categoria, "plano_saude");
     expect((categoria as HTMLSelectElement).value).toBe("plano_saude");
     expect(screen.getByRole("button", { name: "Salvar benefício" })).toBeTruthy();
+  });
+
+  it("pede confirmação e remove um colaborador sem vínculos", async () => {
+    const user = userEvent.setup();
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.click(screen.getByTitle("Remover colaborador"));
+
+    expect(screen.getByRole("heading", { name: "Remover colaborador?" })).toBeTruthy();
+    expect(screen.getByText(/Sem movimentações vinculadas/i)).toBeTruthy();
+
+    await user.click(screen.getByRole("button", { name: "Remover colaborador" }));
+    expect(state.removerColaborador).toHaveBeenCalledWith({ id: 1 });
+  });
+
+  it("mostra o vínculo e bloqueia a remoção quando há movimentação", async () => {
+    const user = userEvent.setup();
+    state.colaboradores = [{ id: 1, vinculos: { dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false } }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    expect(screen.getByText(/Vínculos: adiantamentos/i)).toBeTruthy();
+    await user.click(screen.getByTitle("Remover colaborador"));
+
+    expect(screen.getByText(/A exclusão está bloqueada por adiantamentos/i)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Remover colaborador" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("permite consultar o relatório de custo com filtros gerenciais", async () => {

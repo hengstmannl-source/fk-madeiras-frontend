@@ -508,3 +508,7 @@
 - [x] Integrar benefícios individuais ao custo mensal, às projeções e aos relatórios
 - [x] Criar controles de benefícios recorrentes na Gestão de Colaboradores
 - [x] Cobrir benefícios recorrentes com testes de cálculo, segurança e interface
+- [x] Revisar e reutilizar as regras de bloqueio para remoção de colaboradores
+- [x] Adicionar ação de remoção com confirmação explícita na Gestão de Colaboradores
+- [x] Exibir os vínculos que impedem a remoção e preservar dados movimentados
+- [x] Cobrir a remoção de colaboradores na nova interface com testes de regressão
