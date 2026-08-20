@@ -12,12 +12,21 @@ vi.mock("@/lib/trpc", () => ({
     const consulta = (dados: unknown) => ({ useQuery: () => ({ data: dados, isLoading: false, refetch: vi.fn() }) });
     const invalidar = { invalidate: state.invalidar };
     return {
-    useUtils: () => ({ rh: { gestao: { painel: invalidar, relatorio: invalidar, configuracao: invalidar, custosEmpresa: invalidar, custosColaborador: invalidar }, colaboradores: { list: invalidar }, adiantamentos: { list: invalidar } } }),
+    useUtils: () => ({ rh: { gestao: { painel: invalidar, relatorio: invalidar, configuracao: invalidar, custosEmpresa: invalidar, custosColaborador: invalidar }, colaboradores: { list: invalidar }, adiantamentos: { list: invalidar }, fichas: { painel: invalidar, lancamentos: invalidar, ficha: invalidar, competencias: invalidar, categorias: invalidar, encargos: invalidar } } }),
     rh: {
       colaboradores: { list: { useQuery: () => ({ data: state.colaboradores, isLoading: false }) }, create: mutacao, update: mutacao, alterarSituacao: { useMutation: () => ({ mutate: state.alterarSituacao, isPending: false }) }, remove: { useMutation: () => ({ mutate: state.removerColaborador, isPending: false }) } },
       departamentos: { list: consulta([]) },
       cargos: { list: consulta([]) },
       adiantamentos: { list: { useQuery: () => ({ data: state.adiantamentos, isLoading: false }) }, create: mutacao },
+      fichas: {
+        painel: consulta({ resumo: { creditos: 0, debitos: 0, pagamentos: 0, saldo: 0 }, colaboradoresComSaldo: [] }),
+        categorias: { list: consulta([]), create: mutacao },
+        lancamentos: { list: consulta({ itens: [], resumo: { creditos: 0, debitos: 0, pagamentos: 0, saldo: 0 } }), criar: mutacao, cancelar: mutacao },
+        ficha: { detalhe: consulta({ colaborador: { nome: "Ana da Silva" }, itens: [], resumo: { creditos: 0, debitos: 0, pagamentos: 0, saldo: 0 } }) },
+        competencias: { list: consulta([]), abrir: mutacao, fechar: mutacao, reabrir: mutacao, gerarSalarios: mutacao, salarios: consulta({ linhas: [], totais: {} }) },
+        encargos: { list: consulta([]), create: mutacao },
+        migracao: { importarSaldosAdiantamentos: mutacao },
+      },
       gestao: {
         painel: consulta({
           configuracao: { fgtsPercentual: "8", descontoInssEstimadoAtivo: false, provisaoDecimoTerceiroAtiva: true, provisaoFeriasAtiva: true, provisaoTercoFeriasAtiva: true },
@@ -44,8 +53,12 @@ describe("Gestão de Colaboradores", () => {
     const user = userEvent.setup();
     render(<GestaoColaboradoresPage />);
 
-    expect(screen.getByRole("heading", { name: "Gestão de Colaboradores" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "RH e Fichas Financeiras" })).toBeTruthy();
     expect(screen.getByText(/Valores estimados para gestão/i)).toBeTruthy();
+    expect(screen.getByText("Fichas financeiras de colaboradores")).toBeTruthy();
+    expect(screen.getByText("A pagar aos colaboradores")).toBeTruthy();
+
+    await user.click(screen.getByRole("tab", { name: "Custos estimados" }));
     expect(screen.getByText("Provisões mensais")).toBeTruthy();
     expect(screen.getByText("Custo por departamento")).toBeTruthy();
 
@@ -56,6 +69,27 @@ describe("Gestão de Colaboradores", () => {
     await user.click(screen.getByRole("tab", { name: "Custos & benefícios" }));
     expect(screen.getByText("Custos e benefícios gerais")).toBeTruthy();
     expect(screen.getByText(/Cadastre benefícios, seguros ou outros custos gerais/i)).toBeTruthy();
+  });
+
+  it("oferece ações rápidas de salário, adiantamento, desconto, provento e pagamento na ficha financeira", () => {
+    render(<GestaoColaboradoresPage />);
+
+    expect(screen.getByRole("button", { name: /Lançar salário/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Registrar adiantamento/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Registrar desconto/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Registrar provento/i })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Registrar pagamento/i })).toBeTruthy();
+  });
+
+  it("permite filtrar a ficha financeira por tipo, situação e categoria", async () => {
+    const user = userEvent.setup();
+    state.colaboradores = [{ id: 1, nome: "Ana da Silva", departamentoNome: "Produção", cargoNome: "Serrador", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "ativo", salarioAtual: "3000" }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("button", { name: "Ver ficha" }));
+    expect(screen.getByLabelText("Filtrar tipo na ficha")).toBeTruthy();
+    expect(screen.getByLabelText("Filtrar situação na ficha")).toBeTruthy();
+    expect(screen.getByLabelText("Filtrar categoria na ficha")).toBeTruthy();
   });
 
   it("exibe plano, parcelas pendentes e próxima competência do adiantamento parcelado", async () => {

@@ -13,6 +13,7 @@ import { calcularFolhaColaboradorRh, competenciaRh, motivoBloqueioRemocaoColabor
 import { calcularCustoColaboradorGerencialRh, somarCustosEquipeGerencialRh, type ConfiguracaoCustosGerenciaisRh, type RegraCustoGerencialRh } from "../rh.gestao.logic";
 import { calcularParcelas } from "../financeiro.logic";
 import { folhaParcelada } from "./rh.folha.parcelada";
+import { fichasFinanceirasRh } from "./rh.fichas";
 
 const rhProcedure = protectedProcedure;
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
@@ -110,6 +111,7 @@ function regraCustoGerencial(regra: { id: number; descricao: string; tipo: "fixo
 }
 
 export const rhRouter = router({
+  fichas: fichasFinanceirasRh,
   resumo: rhProcedure.input(z.object({ competencia: z.string().regex(/^\d{4}-\d{2}$/).optional() }).optional()).query(async ({ ctx, input }) => {
     const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id; const competencia = competenciaData(input?.competencia ?? `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, "0")}`);
     const [ativos] = await db.select({ total: colaboradoresRh.id }).from(colaboradoresRh).where(and(eq(colaboradoresRh.empresaId, empresaId), eq(colaboradoresRh.situacao, "ativo")));

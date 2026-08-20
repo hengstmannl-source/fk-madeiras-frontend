@@ -533,3 +533,17 @@
 - [x] Permitir registrar tora sem plaqueta na Produção Diária com identificação rastreável
 - [x] Permitir parcelar adiantamentos e descontar somente a parcela da referência mensal
 - [x] Atualizar a Produção Diária, os adiantamentos, o dashboard líquido e os testes de regressão
+- [x] Analisar as estruturas atuais de RH e definir a migração segura para fichas financeiras individuais
+- [x] Modelar lançamentos financeiros de colaborador com créditos, débitos, pagamentos, competências, status e auditoria
+- [x] Criar categorias configuráveis de créditos e débitos e regras de cancelamento sem perda de histórico
+- [x] Implementar extrato cronológico, saldo acumulado e ficha individual de cada colaborador
+- [x] Integrar adiantamentos e pagamentos ao Financeiro sem duplicar saídas financeiras
+- [x] Criar competências de salários e encargos exclusivamente gerenciais, separadas das fichas financeiras
+- [x] Configurar FGTS, INSS patronal, outros encargos e provisões como estimativas gerenciais editáveis
+- [x] Criar dashboard de RH, Valores a Pagar e relatórios de ficha, custos e encargos
+- [x] Reorganizar a navegação do RH e retirar o fluxo de folha oficial da experiência principal
+- [x] Cobrir a reestruturação de RH com migrações não destrutivas, testes e validação visual
+- [x] Adicionar ações rápidas para salário, adiantamento, desconto, provento e pagamento na ficha financeira
+- [x] Completar filtros de ficha e valores a pagar por situação, categoria e tipo de lançamento
+- [x] Exibir a composição por colaborador e os totais de salários, FGTS, INSS patronal, encargos e provisões na competência
+- [x] Validar a complementação de filtros e encargos com testes de regressão e revisão visual

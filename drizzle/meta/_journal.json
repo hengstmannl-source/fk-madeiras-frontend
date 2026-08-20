@@ -400,6 +400,13 @@
       "when": 1787254884813,
       "tag": "0056_magical_ben_grimm",
       "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "5",
+      "when": 1787256550782,
+      "tag": "0057_plain_giant_man",
+      "breakpoints": true
     }
   ]
 }

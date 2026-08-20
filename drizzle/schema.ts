@@ -984,6 +984,8 @@ export const configuracoesCustosRh = mysqlTable("configuracoesCustosRh", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
   fgtsPercentual: decimal("fgtsPercentual", { precision: 8, scale: 4 }).notNull().default("8"),
+  inssPatronalPercentual: decimal("inssPatronalPercentual", { precision: 8, scale: 4 }).notNull().default("20"),
+  inssPatronalEstimadoAtivo: boolean("inssPatronalEstimadoAtivo").notNull().default(true),
   descontoInssEstimadoAtivo: boolean("descontoInssEstimadoAtivo").notNull().default(false),
   provisaoDecimoTerceiroAtiva: boolean("provisaoDecimoTerceiroAtiva").notNull().default(true),
   provisaoFeriasAtiva: boolean("provisaoFeriasAtiva").notNull().default(true),
@@ -1039,6 +1041,109 @@ export const custosColaboradorRh = mysqlTable("custosColaboradorRh", {
 export type ConfiguracaoCustosRh = typeof configuracoesCustosRh.$inferSelect;
 export type CustoEmpresaRh = typeof custosEmpresaRh.$inferSelect;
 export type CustoColaboradorRh = typeof custosColaboradorRh.$inferSelect;
+
+/** Categorias internas usadas no extrato financeiro dos colaboradores. */
+export const categoriasLancamentosRh = mysqlTable("categoriasLancamentosRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  nome: varchar("nome", { length: 160 }).notNull(),
+  tipo: mysqlEnum("tipo", ["credito", "debito", "ambos"]).notNull().default("ambos"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaNomeUnico: uniqueIndex("categorias_lancamentos_rh_empresa_nome_unico").on(table.empresaId, table.nome),
+}));
+
+/** Competência de controle gerencial. Não representa folha de pagamento oficial. */
+export const competenciasFinanceirasRh = mysqlTable("competenciasFinanceirasRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  estado: mysqlEnum("estado", ["aberta", "fechada"]).notNull().default("aberta"),
+  observacoes: text("observacoes"),
+  fechadaEm: timestamp("fechadaEm"),
+  fechadaPor: int("fechadaPor"),
+  reabertaEm: timestamp("reabertaEm"),
+  reabertaPor: int("reabertaPor"),
+  motivoReabertura: text("motivoReabertura"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaCompetenciaUnica: uniqueIndex("competencias_financeiras_rh_empresa_competencia_unico").on(table.empresaId, table.competencia),
+}));
+
+/** Lançamentos cronológicos que formam a ficha financeira individual do colaborador. */
+export const lancamentosColaboradoresRh = mysqlTable("lancamentosColaboradoresRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  categoriaId: int("categoriaId"),
+  tipo: mysqlEnum("tipo", ["credito", "debito", "pagamento"]).notNull(),
+  origem: mysqlEnum("origem", ["manual", "adiantamento", "migracao"]).notNull().default("manual"),
+  competencia: timestamp("competencia").notNull(),
+  dataLancamento: timestamp("dataLancamento").notNull(),
+  descricao: varchar("descricao", { length: 300 }).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  estado: mysqlEnum("estado", ["pendente", "liquidado", "cancelado"]).notNull().default("pendente"),
+  tituloFinanceiroId: int("tituloFinanceiroId").unique(),
+  observacoes: text("observacoes"),
+  canceladoEm: timestamp("canceladoEm"),
+  canceladoPor: int("canceladoPor"),
+  motivoCancelamento: text("motivoCancelamento"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  colaboradorCompetenciaIndice: index("lancamentos_colaboradores_rh_colaborador_competencia_indice").on(table.empresaId, table.colaboradorId, table.competencia, table.dataLancamento),
+  competenciaEstadoIndice: index("lancamentos_colaboradores_rh_competencia_estado_indice").on(table.empresaId, table.competencia, table.estado),
+}));
+
+/** Encargos editáveis para planejamento, sem pretensão de cálculo legal ou de folha oficial. */
+export const encargosGerenciaisRh = mysqlTable("encargosGerenciaisRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  nome: varchar("nome", { length: 160 }).notNull(),
+  tipo: mysqlEnum("tipo", ["fixo", "percentual"]).notNull().default("percentual"),
+  valor: decimal("valor", { precision: 14, scale: 4 }).notNull(),
+  baseCalculo: mysqlEnum("baseCalculo", ["salario_bruto"]).notNull().default("salario_bruto"),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaNomeUnico: uniqueIndex("encargos_gerenciais_rh_empresa_nome_unico").on(table.empresaId, table.nome),
+}));
+
+/** Linhas congeladas de salário e custo gerencial por competência, independentes da ficha financeira. */
+export const salariosCompetenciasRh = mysqlTable("salariosCompetenciasRh", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  competenciaId: int("competenciaId").notNull(),
+  colaboradorId: int("colaboradorId").notNull(),
+  salarioBruto: decimal("salarioBruto", { precision: 14, scale: 2 }).notNull(),
+  fgtsEstimado: decimal("fgtsEstimado", { precision: 14, scale: 2 }).notNull().default("0"),
+  inssPatronalEstimado: decimal("inssPatronalEstimado", { precision: 14, scale: 2 }).notNull().default("0"),
+  outrosEncargosEstimados: decimal("outrosEncargosEstimados", { precision: 14, scale: 2 }).notNull().default("0"),
+  provisaoDecimoTerceiro: decimal("provisaoDecimoTerceiro", { precision: 14, scale: 2 }).notNull().default("0"),
+  provisaoFerias: decimal("provisaoFerias", { precision: 14, scale: 2 }).notNull().default("0"),
+  provisaoTercoFerias: decimal("provisaoTercoFerias", { precision: 14, scale: 2 }).notNull().default("0"),
+  beneficios: decimal("beneficios", { precision: 14, scale: 2 }).notNull().default("0"),
+  custoMensalEstimado: decimal("custoMensalEstimado", { precision: 14, scale: 2 }).notNull().default("0"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  competenciaColaboradorUnico: uniqueIndex("salarios_competencias_rh_competencia_colaborador_unico").on(table.empresaId, table.competenciaId, table.colaboradorId),
+}));
+
+export type CategoriaLancamentoRh = typeof categoriasLancamentosRh.$inferSelect;
+export type CompetenciaFinanceiraRh = typeof competenciasFinanceirasRh.$inferSelect;
+export type LancamentoColaboradorRh = typeof lancamentosColaboradoresRh.$inferSelect;
+export type EncargoGerencialRh = typeof encargosGerenciaisRh.$inferSelect;
+export type SalarioCompetenciaRh = typeof salariosCompetenciasRh.$inferSelect;
 
 export const dependentesRh = mysqlTable("dependentesRh", {
   id: int("id").autoincrement().primaryKey(),
