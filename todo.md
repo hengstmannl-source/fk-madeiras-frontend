@@ -512,3 +512,8 @@
 - [x] Adicionar ação de remoção com confirmação explícita na Gestão de Colaboradores
 - [x] Exibir os vínculos que impedem a remoção e preservar dados movimentados
 - [x] Cobrir a remoção de colaboradores na nova interface com testes de regressão
+- [x] Mapear o estado atual de colaboradores e os impactos de inativação nos custos e listagens
+- [x] Implementar inativação e reativação de colaboradores com preservação de histórico
+- [x] Ajustar listas e cálculos para considerar somente colaboradores ativos por padrão
+- [x] Criar ações confirmadas de inativar e reativar na Gestão de Colaboradores
+- [x] Cobrir inativação, reativação e preservação de histórico com testes de regressão

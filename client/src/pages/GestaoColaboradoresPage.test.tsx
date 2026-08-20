@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 
-const state = vi.hoisted(() => ({ invalidar: vi.fn(), removerColaborador: vi.fn(), colaboradores: [] as any[] }));
+const state = vi.hoisted(() => ({ invalidar: vi.fn(), removerColaborador: vi.fn(), alterarSituacao: vi.fn(), colaboradores: [] as any[] }));
 
 vi.mock("@/lib/trpc", () => ({
   trpc: (() => {
@@ -14,7 +14,7 @@ vi.mock("@/lib/trpc", () => ({
     return {
     useUtils: () => ({ rh: { gestao: { painel: invalidar, relatorio: invalidar, configuracao: invalidar, custosEmpresa: invalidar, custosColaborador: invalidar }, colaboradores: { list: invalidar }, adiantamentos: { list: invalidar } } }),
     rh: {
-      colaboradores: { list: { useQuery: () => ({ data: state.colaboradores, isLoading: false }) }, create: mutacao, update: mutacao, remove: { useMutation: () => ({ mutate: state.removerColaborador, isPending: false }) } },
+      colaboradores: { list: { useQuery: () => ({ data: state.colaboradores, isLoading: false }) }, create: mutacao, update: mutacao, alterarSituacao: { useMutation: () => ({ mutate: state.alterarSituacao, isPending: false }) }, remove: { useMutation: () => ({ mutate: state.removerColaborador, isPending: false }) } },
       departamentos: { list: consulta([]) },
       cargos: { list: consulta([]) },
       adiantamentos: { list: consulta([]), create: mutacao },
@@ -38,7 +38,7 @@ vi.mock("@/lib/trpc", () => ({
 import GestaoColaboradoresPage from "./GestaoColaboradoresPage";
 
 describe("Gestão de Colaboradores", () => {
-  afterEach(() => { cleanup(); state.colaboradores = []; state.removerColaborador.mockClear(); });
+  afterEach(() => { cleanup(); state.colaboradores = []; state.removerColaborador.mockClear(); state.alterarSituacao.mockClear(); });
 
   it("deixa explícito o caráter estimado do painel e exibe provisões de custo", async () => {
     const user = userEvent.setup();
@@ -105,7 +105,7 @@ describe("Gestão de Colaboradores", () => {
 
   it("mostra o vínculo e bloqueia a remoção quando há movimentação", async () => {
     const user = userEvent.setup();
-    state.colaboradores = [{ id: 1, vinculos: { dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false } }];
+    state.colaboradores = [{ id: 1, situacao: "ativo", vinculos: { dependentes: false, alteracoesSalariais: false, adiantamentos: true, itensFolha: false } }];
     render(<GestaoColaboradoresPage />);
 
     await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
@@ -114,6 +114,46 @@ describe("Gestão de Colaboradores", () => {
 
     expect(screen.getByText(/A exclusão está bloqueada por adiantamentos/i)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Remover colaborador" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("mantém a lista de colaboradores ativos por padrão e permite consultar inativos", async () => {
+    const user = userEvent.setup();
+    state.colaboradores = [{ id: 2, nome: "Bruno Inativo", dataAdmissao: new Date(2024, 0, 1), tipoContrato: "clt", situacao: "desligado", salarioAtual: "2200", vinculos: {} }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    expect(screen.getByText("Ana da Silva")).toBeTruthy();
+    expect(screen.queryByText("Bruno Inativo")).toBeNull();
+
+    await user.selectOptions(screen.getByLabelText("Situação da lista"), "desligado");
+    expect(screen.getByText("Bruno Inativo")).toBeTruthy();
+    expect(screen.getByText("Inativo")).toBeTruthy();
+  });
+
+  it("confirma a inativação preservando o histórico", async () => {
+    const user = userEvent.setup();
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.click(screen.getByTitle("Inativar colaborador"));
+    expect(screen.getByRole("heading", { name: "Inativar colaborador?" })).toBeTruthy();
+    expect(screen.getByText(/todo o histórico será preservado/i)).toBeTruthy();
+    await user.type(screen.getByLabelText("Motivo (opcional)"), "Encerramento do vínculo");
+    await user.click(screen.getByRole("button", { name: "Inativar e preservar histórico" }));
+    expect(state.alterarSituacao).toHaveBeenCalledWith({ id: 1, situacao: "desligado", motivo: "Encerramento do vínculo" });
+  });
+
+  it("permite reativar um colaborador inativo", async () => {
+    const user = userEvent.setup();
+    state.colaboradores = [{ id: 1, nome: "Ana da Silva", dataAdmissao: new Date(2025, 0, 1), tipoContrato: "clt", situacao: "desligado", salarioAtual: "3000", vinculos: {} }];
+    render(<GestaoColaboradoresPage />);
+
+    await user.click(screen.getByRole("tab", { name: "Colaboradores" }));
+    await user.selectOptions(screen.getByLabelText("Situação da lista"), "desligado");
+    await user.click(screen.getByTitle("Reativar colaborador"));
+    expect(screen.getByRole("heading", { name: "Reativar colaborador?" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "Reativar colaborador" }));
+    expect(state.alterarSituacao).toHaveBeenCalledWith({ id: 1, situacao: "ativo", motivo: null });
   });
 
   it("permite consultar o relatório de custo com filtros gerenciais", async () => {
