@@ -49,6 +49,14 @@ function textosDoPdf() {
   return pdfCanvas.drawText.mock.calls.map(([texto]) => texto).join(" ");
 }
 
+function textosDaPagina(indicePagina: number) {
+  const pagina = pdfCanvas.pages[indicePagina];
+  return pdfCanvas.drawText.mock.calls
+    .filter(([, , paginaDesenhada]) => paginaDesenhada === pagina)
+    .map(([texto]) => texto)
+    .join(" ");
+}
+
 function validarAreaSeguraDoRodape() {
   const textosForaDaArea = pdfCanvas.drawText.mock.calls
     .filter(([, options]) => typeof options?.y === "number" && options.y < 50 && options.y !== 35)
@@ -204,6 +212,51 @@ describe("rotas de PDF protegidas", () => {
     expect(textos).toContain("3 × 5 cm");
     expect(textos).toContain("80%");
     expect(textos).toContain("20%");
+    validarAreaSeguraDoRodape();
+  });
+
+  it("mantém o acerto e o resumo na primeira página e inicia o romaneio em grade na segunda", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "listClientes").mockResolvedValue([{ id: 5, nome: "Cliente de Teste" }] as any);
+    vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
+      orcamento: {
+        id: 4,
+        numero: "VEN-000004",
+        clienteId: 5,
+        createdAt: new Date(),
+        estado: "aprovado",
+        subtotal: "1000",
+        desconto: "0",
+        frete: "0",
+        total: "960",
+        totalPecas: 16,
+        totalMetroLinear: "56",
+        totalVolume: "0.06",
+        fretePorTonelada: "40",
+        pesoCargaToneladas: "1",
+        abatimentoFrete: "40",
+        baseAposFrete: "960",
+        comissaoTipo: "percentual",
+        comissaoValor: "0",
+        comissaoCalculada: "0",
+        observacoes: null,
+      },
+      itens: [
+        { madeiraNome: "Cedrinho", espessura: "20", largura: "50", comprimento: "4", quantidade: 12, tipoComercializacao: "metro_cubico", precoM3: "900", valorPeca: "36", valorTotal: "432" },
+        { madeiraNome: "Cedrinho", espessura: "30", largura: "50", comprimento: "2", quantidade: 4, tipoComercializacao: "metro_cubico", precoM3: "900", valorPeca: "27", valorTotal: "108" },
+      ],
+      taxasAdicionais: [],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/orcamento/:id"]!({ params: { id: "4" } }, res);
+
+    expect(pdfCanvas.pages).toHaveLength(2);
+    expect(textosDaPagina(0)).toContain("RESUMO DE PEÇAS POR BITOLA");
+    expect(textosDaPagina(0)).toContain("ACERTO COMERCIAL");
+    expect(textosDaPagina(0)).not.toContain("GRADE DE PEÇAS VENDIDAS");
+    expect(textosDaPagina(1)).toContain("GRADE DE PEÇAS VENDIDAS — Cedrinho");
     validarAreaSeguraDoRodape();
   });
 

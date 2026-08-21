@@ -611,6 +611,10 @@
 - [x] Substituir no PDF da venda a listagem de peças romaneadas por uma grade de medidas e comprimentos
 - [x] Preservar o resumo final de peças e percentual por bitola após a nova grade
 - [x] Cobrir a grade do PDF de vendas com testes de conteúdo, paginação e revisão visual
+- [x] Corrigir a página inicial vazia na exportação de PDF de vendas
+- [x] Organizar acerto comercial e resumo de peças na primeira página do PDF de venda
+- [x] Iniciar obrigatoriamente o romaneio em grade na segunda página do PDF de venda
+- [x] Cobrir e validar a nova paginação do PDF de vendas
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

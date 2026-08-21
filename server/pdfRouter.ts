@@ -323,9 +323,10 @@ export async function registerPdfRoutes(app: any) {
         layout.mover(20);
       };
 
-      if (gruposPorMadeira.length) {
-        // A grade fica numa página própria para não competir visualmente com os dados comerciais do cabeçalho.
-        layout.novaPagina(false);
+      const desenharRomaneioEmGrade = () => {
+        if (!gruposPorMadeira.length) return;
+        // O romaneio inicia depois do acerto comercial e do resumo, em uma página exclusiva.
+        layout.novaPagina(true);
         gruposPorMadeira.forEach((madeira: any, indiceMadeira: number) => {
           const blocosBitola = madeira.bitolas.reduce((blocos: any[][], bitola: any, indice: number) => {
             const bloco = Math.floor(indice / maximoBitolasPorPaginaVenda);
@@ -360,9 +361,10 @@ export async function registerPdfRoutes(app: any) {
             });
           });
         });
-      }
+      };
 
-      if (itensComerciaisAvulsos.length) {
+      const desenharItensComerciaisAvulsos = () => {
+        if (!itensComerciaisAvulsos.length) return;
         const colunas = [135, 125, 48, 72, 72, 59];
         const rotulos = ["Produto", "Tipo / composição", "Qtd.", "Preço base", "Valor unit.", "Total"];
         const desenharItensComerciais = (continuacao = false) => {
@@ -409,7 +411,7 @@ export async function registerPdfRoutes(app: any) {
             layout.mover(4);
           }
         }
-      }
+      };
 
       const resumoPorBitola = Array.from((data.itens ?? []).reduce((grupos: Map<string, { descricao: string; quantidadePecas: number; volume: number }>, item: any) => {
         if ((item.tipoComercializacao ?? "metro_cubico") !== "metro_cubico") return grupos;
@@ -540,6 +542,9 @@ export async function registerPdfRoutes(app: any) {
         layout.mover(14);
         layout.escreverParagrafo(data.orcamento.observacoes, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
       }
+
+      desenharRomaneioEmGrade();
+      desenharItensComerciaisAvulsos();
 
       const pdfBytes = await pdfDoc.save();
       responderPdf(req, res, pdfBytes, `venda-${data.orcamento.numero ?? data.orcamento.id}.pdf`);
