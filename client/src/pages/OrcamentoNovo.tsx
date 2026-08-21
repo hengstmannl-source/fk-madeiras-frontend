@@ -19,6 +19,7 @@ import {
 } from "@/lib/utils";
 import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias, rotulosTipoComercializacaoVenda, type ComponentePacoteVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
 import { disponibilidadeEstoqueVenda, prepararModeloMedida } from "@/lib/vendaMedidas";
+import { calcularAcertoComercial } from "@/lib/acertoComercial";
 import {
   Dialog,
   DialogContent,
@@ -67,6 +68,12 @@ export default function OrcamentoNovo() {
   const createCliente = trpc.cliente.create.useMutation();
   const [desconto, setDesconto] = useState("0");
   const [frete, setFrete] = useState("0");
+  const [pesoCargaToneladas, setPesoCargaToneladas] = useState("");
+  const [comissaoTipo, setComissaoTipo] = useState<"percentual" | "fixo">("percentual");
+  const [comissaoValor, setComissaoValor] = useState("0");
+  const [taxaDescricao, setTaxaDescricao] = useState("");
+  const [taxaTipo, setTaxaTipo] = useState<"percentual" | "fixo">("percentual");
+  const [taxaValor, setTaxaValor] = useState("0");
   const [observacoes, setObservacoes] = useState("");
   const [vendedor, setVendedor] = useState("");
   const [dataVencimento, setDataVencimento] = useState(() => dataLocalParaInput());
@@ -124,10 +131,8 @@ export default function OrcamentoNovo() {
       subtotal += volume * precoM3;
       totalVolume += volume;
     }
-    const descVal = parseFloat(desconto) || 0;
-    const freteVal = parseFloat(frete) || 0;
-    const total = subtotal - descVal + freteVal;
-    return { subtotal, totalPecas, totalMetroLinear, totalVolume, total };
+    const acerto = calcularAcertoComercial({ subtotal, desconto, fretePorTonelada: frete, pesoCargaToneladas, comissaoTipo, comissaoValor, taxaTipo, taxaValor });
+    return { subtotal, totalPecas, totalMetroLinear, totalVolume, ...acerto };
   }, [itens, aproveitamentosVenda, desconto, frete]);
 
   const atualizarLinhaComprimento = (id: number, campo: "comprimento" | "quantidade", valor: string) => {
@@ -270,7 +275,18 @@ export default function OrcamentoNovo() {
       clienteId: Number(clienteId),
       estado,
       desconto,
-      frete,
+      frete: String(totals.abatimentoFrete.toFixed(2)),
+      fretePorTonelada: frete || undefined,
+      pesoCargaToneladas: pesoCargaToneladas || undefined,
+      abatimentoFrete: String(totals.abatimentoFrete.toFixed(2)),
+      baseAposFrete: String(totals.baseAposFrete.toFixed(2)),
+      comissaoTipo,
+      comissaoValor: comissaoValor || undefined,
+      comissaoCalculada: String(totals.comissaoCalculada.toFixed(2)),
+      taxaDescricao: taxaDescricao.trim() || undefined,
+      taxaTipo,
+      taxaValor: taxaValor || undefined,
+      taxaCalculada: String(totals.taxaCalculada.toFixed(2)),
       subtotal: String(totals.subtotal.toFixed(2)),
       total: String(totals.total.toFixed(2)),
       totalPecas: totals.totalPecas,
@@ -491,19 +507,33 @@ export default function OrcamentoNovo() {
               <h3 className="font-semibold text-sm">Resumo da Venda</h3>
               <Separator />
               <div className="space-y-3">
-                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal</span><span className="font-medium">{formatCurrency(String(totals.subtotal))}</span></div>
+                <div className="flex justify-between text-sm"><span className="text-muted-foreground">Subtotal bruto</span><span className="font-medium">{formatCurrency(String(totals.subtotal))}</span></div>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm text-muted-foreground">Desconto</Label>
                     <Input type="number" value={desconto} onChange={(e) => setDesconto(e.target.value)} className="w-24 h-8 text-right bg-white" />
                   </div>
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm text-muted-foreground">Frete</Label>
-                    <Input type="number" value={frete} onChange={(e) => setFrete(e.target.value)} className="w-24 h-8 text-right bg-white" />
+                  <div className="rounded-md border border-amber-200 bg-amber-50/60 p-3 space-y-2">
+                    <p className="text-xs font-semibold text-amber-900">Frete abatido do pedido</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1"><Label className="text-xs text-muted-foreground">R$/tonelada</Label><Input aria-label="Frete por tonelada" type="number" value={frete} onChange={(e) => setFrete(e.target.value)} placeholder="0,00" className="h-8 bg-white text-right" /></div>
+                      <div className="space-y-1"><Label className="text-xs text-muted-foreground">Peso (t)</Label><Input aria-label="Peso da carga em toneladas" type="number" value={pesoCargaToneladas} onChange={(e) => setPesoCargaToneladas(e.target.value)} placeholder="0,000" className="h-8 bg-white text-right" /></div>
+                    </div>
+                    <div className="flex justify-between text-xs"><span>Abatimento de frete</span><span className="font-semibold text-amber-800">− {formatCurrency(String(totals.abatimentoFrete))}</span></div>
+                  </div>
+                  <div className="flex justify-between text-sm rounded bg-muted/50 px-2 py-1.5"><span className="text-muted-foreground">Base após frete</span><span className="font-semibold">{formatCurrency(String(totals.baseAposFrete))}</span></div>
+                  <div className="rounded-md border border-border/70 p-3 space-y-2">
+                    <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Comissão do vendedor</Label><select aria-label="Tipo de comissão" value={comissaoTipo} onChange={(e) => setComissaoTipo(e.target.value as "percentual" | "fixo")} className="h-7 rounded border bg-white px-1 text-xs"><option value="percentual">%</option><option value="fixo">R$ fixo</option></select></div>
+                    <div className="flex gap-2"><Input aria-label="Valor da comissão" type="number" value={comissaoValor} onChange={(e) => setComissaoValor(e.target.value)} placeholder={comissaoTipo === "percentual" ? "0,00 %" : "0,00"} className="h-8 bg-white text-right" /><span className="flex items-center whitespace-nowrap text-xs font-medium">− {formatCurrency(String(totals.comissaoCalculada))}</span></div>
+                  </div>
+                  <div className="rounded-md border border-border/70 p-3 space-y-2">
+                    <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Taxa adicional</Label><select aria-label="Tipo de taxa" value={taxaTipo} onChange={(e) => setTaxaTipo(e.target.value as "percentual" | "fixo")} className="h-7 rounded border bg-white px-1 text-xs"><option value="percentual">%</option><option value="fixo">R$ fixo</option></select></div>
+                    <Input aria-label="Descrição da taxa" value={taxaDescricao} onChange={(e) => setTaxaDescricao(e.target.value)} placeholder="Ex.: ICMS do frete" className="h-8 bg-white text-sm" />
+                    <div className="flex gap-2"><Input aria-label="Valor da taxa" type="number" value={taxaValor} onChange={(e) => setTaxaValor(e.target.value)} placeholder={taxaTipo === "percentual" ? "0,00 %" : "0,00"} className="h-8 bg-white text-right" /><span className="flex items-center whitespace-nowrap text-xs font-medium">− {formatCurrency(String(totals.taxaCalculada))}</span></div>
                   </div>
                 </div>
                 <Separator />
-                <div className="flex justify-between text-lg font-bold"><span>Total</span><span className="text-primary">{formatCurrency(String(totals.total))}</span></div>
+                <div className="flex justify-between text-lg font-bold"><span>Valor final do pedido</span><span className="text-primary">{formatCurrency(String(totals.total))}</span></div>
               </div>
               <Separator />
               <div className="grid grid-cols-3 gap-2 text-center">

@@ -568,3 +568,9 @@
 - [x] Corrigir o dimensionamento e a rolagem horizontal da grade de romaneio de carga
 - [x] Mover o foco automaticamente para a plaqueta da nova linha após Enter no valor por m³
 - [x] Cobrir importação e atalhos de romaneio com testes e validação visual
+- [x] Mapear os cálculos e dados persistidos do novo pedido para incluir ajustes comerciais
+- [x] Persistir frete por tonelada, peso da carga e abatimento de frete no pedido de venda
+- [x] Permitir comissão de vendedor em percentual ou valor fixo sobre o subtotal após o frete
+- [x] Permitir taxas em percentual ou valor fixo sobre o subtotal após o frete
+- [x] Exibir demonstrativo de acerto com bruto, frete, base pós-frete, comissão, taxas e valor final
+- [x] Cobrir cálculos de ajustes comerciais com testes e validação visual
