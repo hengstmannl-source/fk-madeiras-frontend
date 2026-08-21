@@ -598,3 +598,7 @@
 - [x] Mapear a tabela de itens e o cálculo reutilizável do resumo por bitola para o PDF de venda
 - [x] Incluir no PDF da venda o resumo de peças, volume e participação percentual por bitola
 - [x] Cobrir o resumo por bitola no PDF com testes, validação de paginação e revisão visual
+- [x] Mapear a validação das linhas e os atalhos atuais da grade do romaneio de vendas
+- [x] Confirmar e adicionar as medidas do romaneio ao pressionar Enter
+- [x] Aceitar linhas de comprimento sem quantidade de peças e ignorá-las no cálculo de itens
+- [x] Cobrir Enter e comprimentos sem quantidade com testes e validação visual

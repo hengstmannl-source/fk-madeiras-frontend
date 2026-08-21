@@ -162,6 +162,12 @@ export default function OrcamentoNovo() {
     toast.success(`${resultado.itens.length} comprimento(s) adicionado(s) à venda`);
   };
 
+  const confirmarGrupoComEnter = (evento: KeyboardEvent<HTMLInputElement>) => {
+    if (evento.key !== "Enter") return;
+    evento.preventDefault();
+    adicionarGrupoItens();
+  };
+
   const adicionarItemComercial = () => {
     if (tipoComercializacao === "metro_cubico") return;
     const resultado = criarItemVendaComercial({ ...itemComercial, tipoComercializacao, produtoComercialId: produtoComercialId ? Number(produtoComercialId) : null, componentesPacote: tipoComercializacao === "pacote" ? componentesPacote : [] });
@@ -445,10 +451,58 @@ export default function OrcamentoNovo() {
                   </div>
                 </div>
                 <div className="overflow-hidden rounded-lg border border-border/70">
-                  <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2"><div><p className="text-sm font-medium">Comprimentos do romaneio</p><p className="text-xs text-muted-foreground">Grade padrão de 2 m a 9 m. Use Tab para avançar pela mesma coluna.</p></div><span className="text-xs text-muted-foreground">m / peças</span></div>
-                  <div className="venda-comprimentos overflow-x-auto"><table className="min-w-[470px] w-full table-fixed text-sm"><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th className="w-[42%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[58%] px-3 py-2 text-left font-medium">Quantidade / estoque</th></tr></thead><tbody>{linhasComprimento.map((linha, indice) => { const disponibilidade = disponibilidadeLinha(linha.comprimento); const quantidadeInformada = Number(linha.quantidade); const deficit = disponibilidade !== null && Number.isFinite(quantidadeInformada) && quantidadeInformada > disponibilidade; return <tr key={linha.id} className="border-t border-border/50"><td className="p-2"><Input data-romaneio-venda={`comprimento-${indice}`} aria-label={`Comprimento da linha ${indice + 1}`} value={linha.comprimento} onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)} onKeyDown={(evento) => navegarColunaRomaneio(evento, "comprimento", indice)} inputMode="decimal" className="h-9 bg-white" /></td><td className="p-2"><Input data-romaneio-venda={`quantidade-${indice}`} aria-label={`Quantidade da linha ${indice + 1}`} value={linha.quantidade} onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)} onKeyDown={(evento) => navegarColunaRomaneio(evento, "quantidade", indice)} type="number" min="1" placeholder="Ex.: 20" className="h-9 bg-white" /><p className={`mt-1 text-[11px] font-medium ${disponibilidade === null ? "text-muted-foreground" : deficit ? "text-rose-700" : "text-emerald-700"}`}>{disponibilidade === null ? "Informe a medida" : deficit ? `Déficit de ${quantidadeInformada - disponibilidade} peça(s)` : `${disponibilidade} peça(s) em estoque`}</p></td></tr>; })}</tbody></table></div>
+                  <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2">
+                    <div>
+                      <p className="text-sm font-medium">Comprimentos do romaneio</p>
+                      <p className="text-xs text-muted-foreground">Grade de 2 m a 9 m. Use Tab na mesma coluna ou Enter para adicionar as medidas preenchidas.</p>
+                    </div>
+                    <span className="text-xs text-muted-foreground">m / peças</span>
+                  </div>
+                  <div className="venda-comprimentos overflow-x-auto">
+                    <table className="min-w-[470px] w-full table-fixed text-sm">
+                      <thead className="bg-muted/20 text-xs text-muted-foreground">
+                        <tr><th className="w-[42%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[58%] px-3 py-2 text-left font-medium">Quantidade / estoque</th></tr>
+                      </thead>
+                      <tbody>
+                        {linhasComprimento.map((linha, indice) => {
+                          const disponibilidade = disponibilidadeLinha(linha.comprimento);
+                          const quantidadeInformada = Number(linha.quantidade);
+                          const deficit = disponibilidade !== null && Number.isFinite(quantidadeInformada) && quantidadeInformada > disponibilidade;
+                          return <tr key={linha.id} className="border-t border-border/50">
+                            <td className="p-2">
+                              <Input
+                                data-romaneio-venda={`comprimento-${indice}`}
+                                aria-label={`Comprimento da linha ${indice + 1}`}
+                                value={linha.comprimento}
+                                onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)}
+                                onKeyDown={(evento) => { navegarColunaRomaneio(evento, "comprimento", indice); confirmarGrupoComEnter(evento); }}
+                                inputMode="decimal"
+                                className="h-9 bg-white"
+                              />
+                            </td>
+                            <td className="p-2">
+                              <Input
+                                data-romaneio-venda={`quantidade-${indice}`}
+                                aria-label={`Quantidade da linha ${indice + 1}`}
+                                value={linha.quantidade}
+                                onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)}
+                                onKeyDown={(evento) => { navegarColunaRomaneio(evento, "quantidade", indice); confirmarGrupoComEnter(evento); }}
+                                type="number"
+                                min="1"
+                                placeholder="Ex.: 20"
+                                className="h-9 bg-white"
+                              />
+                              <p className={`mt-1 text-[11px] font-medium ${disponibilidade === null ? "text-muted-foreground" : deficit ? "text-rose-700" : "text-emerald-700"}`}>
+                                {disponibilidade === null ? "Informe a medida" : deficit ? `Déficit de ${quantidadeInformada - disponibilidade} peça(s)` : `${disponibilidade} peça(s) em estoque`}
+                              </p>
+                            </td>
+                          </tr>;
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
-                <Button onClick={adicionarGrupoItens} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Button type="button" onClick={adicionarGrupoItens} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="h-4 w-4 mr-2" />Adicionar comprimentos à venda
                 </Button>
               </div> : <div className="space-y-4 rounded-lg border border-primary/15 bg-primary/[0.03] p-4">

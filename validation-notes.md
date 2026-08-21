@@ -27,3 +27,9 @@
 - A rota `/orcamentos/novo` exibiu a grade de comprimentos de 2 m até 9 m, com incrementos de 0,5 m, ao lado da coluna de quantidades e disponibilidade.
 - A instrução de navegação por coluna com a tecla Tab ficou visível no cabeçalho da grade, e o layout preservou a leitura das quinze linhas sem corte horizontal na área principal.
 - O botão de adição de comprimentos permanece ao final da grade, enquanto o resumo por bitola é apresentado após a inclusão dos itens de madeira serrada na venda.
+
+## Romaneio de vendas — confirmação por Enter
+
+- A rota `/orcamentos/novo` mostrou a instrução para usar **Tab** na mesma coluna ou **Enter** para adicionar as medidas preenchidas.
+- As quantidades continuam visualmente opcionais por comprimento e a disponibilidade permanece legível abaixo de cada linha.
+- A grade e o resumo lateral da venda mantiveram alinhamento e contraste adequados na inspeção em tela ampla.

@@ -54,7 +54,7 @@ describe("lançamento agrupado de itens de venda", () => {
     expect(Number(resultado.itens[1].valorTotal)).toBeGreaterThan(0);
   });
 
-  it("rejeita medidas incompletas e linhas parcialmente preenchidas", () => {
+  it("rejeita medidas incompletas", () => {
     expect(criarItensVendaPorMedida({
       madeiraNome: "Cedrinho",
       precoM3: "2000",
@@ -62,14 +62,34 @@ describe("lançamento agrupado de itens de venda", () => {
       larguraCm: "5",
       linhas: [{ id: 1, comprimento: "3", quantidade: "10" }],
     })).toMatchObject({ itens: [], erro: expect.stringMatching(/bitola e largura/i) });
+  });
 
+  it("ignora comprimentos sem quantidade e cria somente os itens confirmados", () => {
+    const resultado = criarItensVendaPorMedida({
+      madeiraNome: "Cedrinho",
+      precoM3: "2000",
+      espessuraCm: "2",
+      larguraCm: "5",
+      linhas: [
+        { id: 1, comprimento: "3", quantidade: "" },
+        { id: 2, comprimento: "4", quantidade: "6" },
+        { id: 3, comprimento: "5", quantidade: "" },
+      ],
+    });
+
+    expect(resultado.erro).toBeUndefined();
+    expect(resultado.itens).toHaveLength(1);
+    expect(resultado.itens[0]).toMatchObject({ comprimento: "4", quantidade: 6 });
+  });
+
+  it("exige quantidade em pelo menos um comprimento", () => {
     expect(criarItensVendaPorMedida({
       madeiraNome: "Cedrinho",
       precoM3: "2000",
       espessuraCm: "2",
       larguraCm: "5",
       linhas: [{ id: 1, comprimento: "3", quantidade: "" }],
-    })).toMatchObject({ itens: [], erro: expect.stringMatching(/comprimentos e as quantidades/i) });
+    })).toMatchObject({ itens: [], erro: expect.stringMatching(/quantidade de peças/i) });
   });
 
   it("calcula o total de um produto vendido por unidade sem exigir medida em m³", () => {

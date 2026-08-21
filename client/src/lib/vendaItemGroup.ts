@@ -135,10 +135,10 @@ export function criarItensVendaPorMedida(input: {
     return { itens: [], erro: "Introduza bitola e largura válidas em centímetros" };
   }
 
-  const linhasPreenchidas = input.linhas.filter((linha) => linha.comprimento.trim() || linha.quantidade.trim());
-  if (!linhasPreenchidas.length) return { itens: [], erro: "Informe ao menos um comprimento e a respetiva quantidade" };
+  const linhasComQuantidade = input.linhas.filter((linha) => linha.quantidade.trim());
+  if (!linhasComQuantidade.length) return { itens: [], erro: "Informe a quantidade de peças em pelo menos um comprimento" };
 
-  const linhasInvalidas = linhasPreenchidas.some((linha) => {
+  const linhasInvalidas = linhasComQuantidade.some((linha) => {
     const comprimento = parseDecimalInput(linha.comprimento);
     const quantidade = Number.parseInt(linha.quantidade, 10);
     return !Number.isFinite(comprimento) || comprimento <= 0 || !Number.isInteger(quantidade) || quantidade <= 0;
@@ -151,7 +151,7 @@ export function criarItensVendaPorMedida(input: {
   const precoLinear = calculatePrecoLinear(espessura, largura, precoM3);
 
   return {
-    itens: linhasPreenchidas.map((linha) => {
+    itens: linhasComQuantidade.map((linha) => {
       const comprimento = parseDecimalInput(linha.comprimento);
       const quantidade = Number.parseInt(linha.quantidade, 10);
       const valorPeca = calculateValorPeca(precoLinear, comprimento);
