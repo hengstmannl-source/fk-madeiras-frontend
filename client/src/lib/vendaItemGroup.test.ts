@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias } from "./vendaItemGroup";
+import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoPadraoVenda, criarLinhasComprimentoVazias, obterIndiceTabPorColunaVenda, resumirItensVendaPorBitola } from "./vendaItemGroup";
 
 describe("lançamento agrupado de itens de venda", () => {
   it("cria linhas vazias suficientes para iniciar um romaneio de comprimentos", () => {
@@ -8,6 +8,21 @@ describe("lançamento agrupado de itens de venda", () => {
       { id: 6, comprimento: "", quantidade: "" },
       { id: 7, comprimento: "", quantidade: "" },
     ]);
+  });
+
+  it("cria a grade padrão de 2 m a 9 m em intervalos de meio metro", () => {
+    const linhas = criarLinhasComprimentoPadraoVenda();
+    expect(linhas).toHaveLength(15);
+    expect(linhas[0]).toMatchObject({ id: 1, comprimento: "2", quantidade: "" });
+    expect(linhas.at(-1)).toMatchObject({ id: 15, comprimento: "9", quantidade: "" });
+    expect(linhas.map((linha) => linha.comprimento)).toContain("5,5");
+  });
+
+  it("define o próximo foco do Tab dentro da mesma coluna da grade", () => {
+    expect(obterIndiceTabPorColunaVenda(3, 15)).toBe(4);
+    expect(obterIndiceTabPorColunaVenda(3, 15, true)).toBe(2);
+    expect(obterIndiceTabPorColunaVenda(14, 15)).toBeNull();
+    expect(obterIndiceTabPorColunaVenda(0, 15, true)).toBeNull();
   });
 
   it("converte vários comprimentos da mesma bitola em itens individuais compatíveis com a venda", () => {
@@ -78,5 +93,20 @@ describe("lançamento agrupado de itens de venda", () => {
       .toMatchObject({ erro: expect.stringMatching(/composição/i) });
     expect(criarItemVendaComercial({ madeiraNome: "Pacote", tipoComercializacao: "pacote", quantidade: "0", precoComercial: "750" }))
       .toMatchObject({ erro: expect.stringMatching(/quantidade/i) });
+  });
+
+  it("resume peças e participação volumétrica por bitola", () => {
+    const resumo = resumirItensVendaPorBitola([
+      { bitolaDescricao: "2×5 cm", espessura: "20", largura: "50", comprimento: "3", quantidade: 10, tipoComercializacao: "metro_cubico" },
+      { bitolaDescricao: "2×5 cm", espessura: "20", largura: "50", comprimento: "4", quantidade: 5, tipoComercializacao: "metro_cubico" },
+      { bitolaDescricao: "3×5 cm", espessura: "30", largura: "50", comprimento: "3", quantidade: 10, tipoComercializacao: "metro_cubico" },
+      { bitolaDescricao: "Venda por unidade", espessura: "0", largura: "0", comprimento: "0", quantidade: 2, tipoComercializacao: "unidade" },
+    ]);
+
+    expect(resumo).toHaveLength(2);
+    expect(resumo[0]).toMatchObject({ bitolaDescricao: "2×5 cm", quantidadePecas: 15 });
+    expect(resumo[0].percentualVolume).toBeCloseTo(52.6316, 4);
+    expect(resumo[1]).toMatchObject({ bitolaDescricao: "3×5 cm", quantidadePecas: 10 });
+    expect(resumo[1].percentualVolume).toBeCloseTo(47.3684, 4);
   });
 });

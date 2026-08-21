@@ -13,6 +13,23 @@ export type LinhaComprimentoVenda = {
   quantidade: string;
 };
 
+export const comprimentosPadraoVenda = [
+  "2", "2,5", "3", "3,5", "4", "4,5", "5", "5,5", "6", "6,5", "7", "7,5", "8", "8,5", "9",
+] as const;
+
+export function criarLinhasComprimentoPadraoVenda(): LinhaComprimentoVenda[] {
+  return comprimentosPadraoVenda.map((comprimento, indice) => ({
+    id: indice + 1,
+    comprimento,
+    quantidade: "",
+  }));
+}
+
+export function obterIndiceTabPorColunaVenda(indiceAtual: number, totalLinhas: number, voltar = false): number | null {
+  const proximoIndice = indiceAtual + (voltar ? -1 : 1);
+  return proximoIndice >= 0 && proximoIndice < totalLinhas ? proximoIndice : null;
+}
+
 export type TipoComercializacaoVenda = "metro_cubico" | "unidade" | "pacote";
 
 export const rotulosTipoComercializacaoVenda: Record<TipoComercializacaoVenda, string> = {
@@ -54,6 +71,47 @@ export function criarLinhasComprimentoVazias(inicio = 1, quantidade = 4): LinhaC
     id: inicio + indice,
     comprimento: "",
     quantidade: "",
+  }));
+}
+
+export type ItemParaResumoPorBitolaVenda = Pick<
+  ItemVendaCalculado,
+  "bitolaDescricao" | "espessura" | "largura" | "comprimento" | "quantidade" | "tipoComercializacao"
+>;
+
+export type ResumoPorBitolaVenda = {
+  bitolaDescricao: string;
+  quantidadePecas: number;
+  volume: number;
+  percentualVolume: number;
+};
+
+export function resumirItensVendaPorBitola(itens: ItemParaResumoPorBitolaVenda[]): ResumoPorBitolaVenda[] {
+  const porBitola = new Map<string, Omit<ResumoPorBitolaVenda, "percentualVolume">>();
+
+  for (const item of itens) {
+    if (item.tipoComercializacao !== "metro_cubico") continue;
+    const espessura = Number(item.espessura);
+    const largura = Number(item.largura);
+    const comprimento = Number(item.comprimento);
+    const quantidade = Number(item.quantidade);
+    if (![espessura, largura, comprimento, quantidade].every(Number.isFinite) || quantidade <= 0) continue;
+
+    const atual = porBitola.get(item.bitolaDescricao) ?? {
+      bitolaDescricao: item.bitolaDescricao,
+      quantidadePecas: 0,
+      volume: 0,
+    };
+    atual.quantidadePecas += quantidade;
+    atual.volume += (espessura / 1000) * (largura / 1000) * comprimento * quantidade;
+    porBitola.set(item.bitolaDescricao, atual);
+  }
+
+  const resumo = Array.from(porBitola.values());
+  const volumeTotal = resumo.reduce((total, item) => total + item.volume, 0);
+  return resumo.map((item) => ({
+    ...item,
+    percentualVolume: volumeTotal > 0 ? (item.volume / volumeTotal) * 100 : 0,
   }));
 }
 

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { type KeyboardEvent, useState, useMemo } from "react";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +17,7 @@ import {
   formatCurrency,
   formatMeasurement,
 } from "@/lib/utils";
-import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias, rotulosTipoComercializacaoVenda, type ComponentePacoteVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
+import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoPadraoVenda, obterIndiceTabPorColunaVenda, resumirItensVendaPorBitola, rotulosTipoComercializacaoVenda, type ComponentePacoteVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
 import { disponibilidadeEstoqueVenda, prepararModeloMedida } from "@/lib/vendaMedidas";
 import { calcularAcertoComercial, type TaxaAdicionalComercial } from "@/lib/acertoComercial";
 import {
@@ -80,7 +80,7 @@ export default function OrcamentoNovo() {
   const [aproveitamentosVenda, setAproveitamentosVenda] = useState<AproveitamentoVenda[]>([]);
   const [aproveitamentoForm, setAproveitamentoForm] = useState<AproveitamentoVenda>({ madeiraNome: "", volume: "", precoM3: "" });
   const [grupoItem, setGrupoItem] = useState({ madeiraId: null as number | null, madeiraNome: "", precoM3: "", espessuraCm: "", larguraCm: "" });
-  const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(() => criarLinhasComprimentoVazias());
+  const [linhasComprimento, setLinhasComprimento] = useState<LinhaComprimentoVenda[]>(criarLinhasComprimentoPadraoVenda);
   const [tipoComercializacao, setTipoComercializacao] = useState<TipoComercializacaoVenda>("metro_cubico");
   const [itemComercial, setItemComercial] = useState({ madeiraNome: "", quantidade: "", precoComercial: "" });
   const [produtoComercialId, setProdutoComercialId] = useState("");
@@ -133,16 +133,20 @@ export default function OrcamentoNovo() {
     return { subtotal, totalPecas, totalMetroLinear, totalVolume, ...acerto };
   }, [itens, aproveitamentosVenda, desconto, frete, pesoCargaToneladas, comissaoTipo, comissaoValor, taxasAdicionais]);
 
+  const resumoPorBitola = useMemo(() => resumirItensVendaPorBitola(itens), [itens]);
+
   const atualizarLinhaComprimento = (id: number, campo: "comprimento" | "quantidade", valor: string) => {
     setLinhasComprimento((linhas) => linhas.map((linha) => linha.id === id ? { ...linha, [campo]: valor } : linha));
   };
 
-  const adicionarLinhaComprimento = () => {
-    setLinhasComprimento((linhas) => [...linhas, { id: Math.max(0, ...linhas.map((linha) => linha.id)) + 1, comprimento: "", quantidade: "" }]);
-  };
-
-  const removerLinhaComprimento = (id: number) => {
-    setLinhasComprimento((linhas) => linhas.length === 1 ? linhas : linhas.filter((linha) => linha.id !== id));
+  const navegarColunaRomaneio = (evento: KeyboardEvent<HTMLInputElement>, coluna: "comprimento" | "quantidade", indice: number) => {
+    if (evento.key !== "Tab") return;
+    const proximoIndice = obterIndiceTabPorColunaVenda(indice, linhasComprimento.length, evento.shiftKey);
+    if (proximoIndice === null) return;
+    const destino = document.querySelector<HTMLInputElement>(`[data-romaneio-venda="${coluna}-${proximoIndice}"]`);
+    if (!destino) return;
+    evento.preventDefault();
+    destino.focus();
   };
 
   const disponibilidadeLinha = (comprimento: string) => {
@@ -154,7 +158,7 @@ export default function OrcamentoNovo() {
     if (resultado.erro) { toast.error(resultado.erro); return; }
     setItens((itensAtuais) => [...itensAtuais, ...resultado.itens]);
     setGrupoItem((grupo) => ({ ...grupo, espessuraCm: "", larguraCm: "" }));
-    setLinhasComprimento(criarLinhasComprimentoVazias());
+    setLinhasComprimento(criarLinhasComprimentoPadraoVenda());
     toast.success(`${resultado.itens.length} comprimento(s) adicionado(s) à venda`);
   };
 
@@ -243,7 +247,11 @@ export default function OrcamentoNovo() {
     const modelo = modelosMedida.data?.find((item) => item.id === Number(id));
     if (!modelo) return;
     setGrupoItem({ madeiraId: modelo.madeiraId, madeiraNome: modelo.madeiraNome, precoM3: String(modelo.precoM3), espessuraCm: String(modelo.espessuraCm), larguraCm: String(modelo.larguraCm) });
-    setLinhasComprimento(modelo.comprimentos.map((linha, indice) => ({ id: Date.now() + indice, comprimento: linha.comprimento, quantidade: linha.quantidade })));
+    const quantidadesPorComprimento = new Map(modelo.comprimentos.map((linha) => [Number(String(linha.comprimento).replace(",", ".")), linha.quantidade]));
+    setLinhasComprimento(criarLinhasComprimentoPadraoVenda().map((linha) => ({
+      ...linha,
+      quantidade: quantidadesPorComprimento.get(Number(linha.comprimento.replace(",", "."))) ?? "",
+    })));
     toast.success(`Modelo “${modelo.nome}” aplicado`);
   };
 
@@ -437,9 +445,8 @@ export default function OrcamentoNovo() {
                   </div>
                 </div>
                 <div className="overflow-hidden rounded-lg border border-border/70">
-                  <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2"><div><p className="text-sm font-medium">Comprimentos do romaneio</p><p className="text-xs text-muted-foreground">Preencha cada comprimento e a quantidade de peças correspondente.</p></div><span className="text-xs text-muted-foreground">m / peças</span></div>
-                  <div className="venda-comprimentos"><table className="w-full table-fixed text-sm"><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th className="w-[45%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[42%] px-3 py-2 text-left font-medium">Quantidade / estoque</th><th className="w-[13%] px-2 py-2 text-right font-medium">Ação</th></tr></thead><tbody>{linhasComprimento.map((linha, indice) => { const disponibilidade = disponibilidadeLinha(linha.comprimento); const quantidadeInformada = Number(linha.quantidade); const deficit = disponibilidade !== null && Number.isFinite(quantidadeInformada) && quantidadeInformada > disponibilidade; return <tr key={linha.id} className="border-t border-border/50"><td className="p-2"><Input aria-label={`Comprimento da linha ${indice + 1}`} value={linha.comprimento} onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)} inputMode="decimal" placeholder="Ex.: 3,00" className="h-9 bg-white" /></td><td className="p-2"><Input aria-label={`Quantidade da linha ${indice + 1}`} value={linha.quantidade} onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)} type="number" min="1" placeholder="Ex.: 20" className="h-9 bg-white" /><p className={`mt-1 text-[11px] font-medium ${disponibilidade === null ? "text-muted-foreground" : deficit ? "text-rose-700" : "text-emerald-700"}`}>{disponibilidade === null ? "Informe a medida" : deficit ? `Déficit de ${quantidadeInformada - disponibilidade} peça(s)` : `${disponibilidade} peça(s) em estoque`}</p></td><td className="p-2 text-right"><Button type="button" variant="ghost" size="icon" aria-label={`Remover comprimento ${indice + 1}`} disabled={linhasComprimento.length === 1} onClick={() => removerLinhaComprimento(linha.id)} className="h-8 w-8 text-muted-foreground hover:text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></td></tr>; })}</tbody></table></div>
-                  <div className="border-t bg-muted/10 px-3 py-2"><Button type="button" size="sm" variant="outline" onClick={adicionarLinhaComprimento}><Plus className="mr-1.5 h-3.5 w-3.5" />Adicionar comprimento</Button></div>
+                  <div className="flex items-center justify-between border-b bg-muted/30 px-3 py-2"><div><p className="text-sm font-medium">Comprimentos do romaneio</p><p className="text-xs text-muted-foreground">Grade padrão de 2 m a 9 m. Use Tab para avançar pela mesma coluna.</p></div><span className="text-xs text-muted-foreground">m / peças</span></div>
+                  <div className="venda-comprimentos overflow-x-auto"><table className="min-w-[470px] w-full table-fixed text-sm"><thead className="bg-muted/20 text-xs text-muted-foreground"><tr><th className="w-[42%] px-3 py-2 text-left font-medium">Comprimento (m)</th><th className="w-[58%] px-3 py-2 text-left font-medium">Quantidade / estoque</th></tr></thead><tbody>{linhasComprimento.map((linha, indice) => { const disponibilidade = disponibilidadeLinha(linha.comprimento); const quantidadeInformada = Number(linha.quantidade); const deficit = disponibilidade !== null && Number.isFinite(quantidadeInformada) && quantidadeInformada > disponibilidade; return <tr key={linha.id} className="border-t border-border/50"><td className="p-2"><Input data-romaneio-venda={`comprimento-${indice}`} aria-label={`Comprimento da linha ${indice + 1}`} value={linha.comprimento} onChange={(e) => atualizarLinhaComprimento(linha.id, "comprimento", e.target.value)} onKeyDown={(evento) => navegarColunaRomaneio(evento, "comprimento", indice)} inputMode="decimal" className="h-9 bg-white" /></td><td className="p-2"><Input data-romaneio-venda={`quantidade-${indice}`} aria-label={`Quantidade da linha ${indice + 1}`} value={linha.quantidade} onChange={(e) => atualizarLinhaComprimento(linha.id, "quantidade", e.target.value)} onKeyDown={(evento) => navegarColunaRomaneio(evento, "quantidade", indice)} type="number" min="1" placeholder="Ex.: 20" className="h-9 bg-white" /><p className={`mt-1 text-[11px] font-medium ${disponibilidade === null ? "text-muted-foreground" : deficit ? "text-rose-700" : "text-emerald-700"}`}>{disponibilidade === null ? "Informe a medida" : deficit ? `Déficit de ${quantidadeInformada - disponibilidade} peça(s)` : `${disponibilidade} peça(s) em estoque`}</p></td></tr>; })}</tbody></table></div>
                 </div>
                 <Button onClick={adicionarGrupoItens} className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   <Plus className="h-4 w-4 mr-2" />Adicionar comprimentos à venda
@@ -496,6 +503,15 @@ export default function OrcamentoNovo() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {resumoPorBitola.length > 0 && (
+            <Card className="border border-emerald-200 bg-emerald-50/30 shadow-sm">
+              <CardContent className="p-5">
+                <div className="mb-4"><h3 className="font-semibold text-sm">Resumo por bitola</h3><p className="mt-1 text-xs text-muted-foreground">Quantidade de peças e participação no volume total de madeira serrada desta venda.</p></div>
+                <div className="overflow-x-auto rounded-lg border border-emerald-100 bg-white"><table className="w-full min-w-[520px] text-sm"><thead className="bg-emerald-50 text-xs text-emerald-900"><tr><th className="px-3 py-2 text-left font-medium">Bitola</th><th className="px-3 py-2 text-right font-medium">Peças</th><th className="px-3 py-2 text-right font-medium">Volume</th><th className="px-3 py-2 text-right font-medium">Participação</th></tr></thead><tbody>{resumoPorBitola.map((linha) => <tr key={linha.bitolaDescricao} className="border-t border-emerald-100"><td className="px-3 py-2 font-medium">{linha.bitolaDescricao}</td><td className="px-3 py-2 text-right tabular-nums">{linha.quantidadePecas}</td><td className="px-3 py-2 text-right tabular-nums">{formatMeasurement(linha.volume)} m³</td><td className="px-3 py-2 text-right font-semibold tabular-nums text-emerald-800">{Math.round(linha.percentualVolume)}%</td></tr>)}</tbody></table></div>
               </CardContent>
             </Card>
           )}

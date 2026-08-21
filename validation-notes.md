@@ -21,3 +21,9 @@
 - A rota `/clientes/1` carregou o cadastro de **Elaine Konzen** com retorno funcional à lista de clientes e botão de nova venda.
 - O cabeçalho exibiu os dados cadastrais disponíveis, os quatro indicadores comerciais/financeiros e as abas de últimos pedidos, títulos em aberto e histórico de pedidos.
 - O estado vazio de pedidos foi apresentado sem sobreposição visual, com hierarquia e contraste legíveis na interface em modo claro.
+
+## Romaneio de vendas em grade
+
+- A rota `/orcamentos/novo` exibiu a grade de comprimentos de 2 m até 9 m, com incrementos de 0,5 m, ao lado da coluna de quantidades e disponibilidade.
+- A instrução de navegação por coluna com a tecla Tab ficou visível no cabeçalho da grade, e o layout preservou a leitura das quinze linhas sem corte horizontal na área principal.
+- O botão de adição de comprimentos permanece ao final da grade, enquanto o resumo por bitola é apresentado após a inclusão dos itens de madeira serrada na venda.

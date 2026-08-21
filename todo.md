@@ -590,3 +590,8 @@
 - [x] Criar tela de cadastro do cliente acessível ao clicar no nome da lista de clientes
 - [x] Exibir últimos pedidos, valor total comprado, títulos em aberto e histórico comercial completo
 - [x] Cobrir o perfil do cliente com testes e validação visual da navegação
+- [x] Mapear a grade de medidas da venda e o padrão de romaneio usado na produção diária
+- [x] Fixar no romaneio de vendas os comprimentos de 2 m a 9 m em intervalos de 0,5 m
+- [x] Implementar navegação Tab por coluna de comprimento e por coluna de quantidade na grade de vendas
+- [x] Exibir no final do romaneio de vendas a quantidade de peças e a porcentagem da produção por bitola
+- [x] Cobrir a grade de vendas, atalhos Tab e resumo por bitola com testes e validação visual
