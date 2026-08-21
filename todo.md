@@ -626,6 +626,10 @@
 - [x] Verificar e corrigir a baixa de peças serradas vinculada à entrega de vendas
 - [x] Exibir quantidades de entrada, saída e saldo no estoque de peças serradas
 - [x] Cobrir a integração venda-estoque e os novos indicadores com testes e validação visual
+- [x] Manter todas as medidas de cada essência em uma única página do romaneio de venda
+- [x] Separar o romaneio de cada essência em sua própria página no PDF de vendas
+- [x] Reduzir margens laterais e ampliar a área útil horizontal das grades do romaneio
+- [x] Cobrir e validar visualmente a nova composição de páginas por essência
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

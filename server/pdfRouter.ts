@@ -303,21 +303,23 @@ export async function registerPdfRoutes(app: any) {
         bitolas: Array.from(madeira.bitolas.values()).sort((a: any, b: any) => a.espessura - b.espessura || a.largura - b.largura),
       })).sort((a: any, b: any) => a.madeiraNome.localeCompare(b.madeiraNome, "pt-BR"));
 
-      const larguraGradeVenda = width - (MARGEM_LATERAL * 2);
-      const larguraComprimentoVenda = 54;
-      const maximoBitolasPorPaginaVenda = 6;
+      // A grade do romaneio usa margens próprias, menores que o corpo do documento,
+      // para aproveitar a largura total da folha sem comprometer cabeçalho e rodapé.
+      const margemGradeVenda = 24;
+      const larguraGradeVenda = width - (margemGradeVenda * 2);
+      const larguraComprimentoVenda = 60;
       const desenharGradeVenda = (madeira: any, bitolas: any[], sufixo = "", continuacao = false) => {
         layout.garantirEspaco(62);
         const titulo = `GRADE DE PEÇAS VENDIDAS — ${madeira.madeiraNome}${sufixo}`;
-        desenharTextoAjustado(layout.page, boldFont, continuacao ? `${titulo} — CONTINUAÇÃO` : titulo, MARGEM_LATERAL, layout.y, larguraGradeVenda, 10, { color: COR_MARROM });
+        desenharTextoAjustado(layout.page, boldFont, continuacao ? `${titulo} — CONTINUAÇÃO` : titulo, margemGradeVenda, layout.y, larguraGradeVenda, 10, { color: COR_MARROM });
         layout.mover(17);
         const larguraBitola = (larguraGradeVenda - larguraComprimentoVenda) / Math.max(bitolas.length, 1);
         const cabecalhos = ["Comp.", ...bitolas.map((bitola: any) => `${formatDimensionCm(bitola.espessura)} × ${formatDimensionCm(bitola.largura)} cm`)];
         const larguras = [larguraComprimentoVenda, ...bitolas.map(() => larguraBitola)];
-        let x = MARGEM_LATERAL;
+        let x = margemGradeVenda;
         cabecalhos.forEach((cabecalho, indice) => {
           layout.page.drawRectangle({ x, y: layout.y - 12, width: larguras[indice], height: 17, color: rgb(0.91, 0.89, 0.84) });
-          desenharTextoAjustado(layout.page, boldFont, cabecalho, x + 3, layout.y - 1, larguras[indice] - 6, 7, { color: COR_MARROM });
+          desenharTextoAjustado(layout.page, boldFont, cabecalho, x + 3, layout.y - 1, larguras[indice] - 6, bitolas.length > 10 ? 6.3 : 7, { color: COR_MARROM });
           x += larguras[indice];
         });
         layout.mover(20);
@@ -328,37 +330,33 @@ export async function registerPdfRoutes(app: any) {
         // O romaneio inicia depois do acerto comercial e do resumo, em uma página exclusiva.
         layout.novaPagina(true);
         gruposPorMadeira.forEach((madeira: any, indiceMadeira: number) => {
-          const blocosBitola = madeira.bitolas.reduce((blocos: any[][], bitola: any, indice: number) => {
-            const bloco = Math.floor(indice / maximoBitolasPorPaginaVenda);
-            if (!blocos[bloco]) blocos[bloco] = [];
-            blocos[bloco].push(bitola);
-            return blocos;
-          }, []);
+          // Cada essência ocupa uma página própria, com todas as bitolas lado a lado.
+          // Assim, o romaneio deixa de fragmentar a leitura por conjuntos de medidas.
+          if (indiceMadeira > 0) layout.novaPagina(true);
           const comprimentos = Array.from(new Set(madeira.bitolas.flatMap((bitola: any) => Array.from(bitola.comprimentos.keys())))).sort((a: any, b: any) => a - b) as number[];
+          const bitolas = madeira.bitolas;
+          desenharGradeVenda(madeira, bitolas);
+          const larguraBitola = (larguraGradeVenda - larguraComprimentoVenda) / Math.max(bitolas.length, 1);
+          const larguras = [larguraComprimentoVenda, ...bitolas.map(() => larguraBitola)];
+          const alturaLinha = Math.max(11, Math.min(18, Math.floor((layout.y - layout.bottom - 2) / Math.max(comprimentos.length, 1))));
+          const tamanhoTexto = bitolas.length > 10 ? 6.7 : 7.5;
 
-          blocosBitola.forEach((bitolas: any[], indiceBloco: number) => {
-            if (indiceMadeira > 0 || indiceBloco > 0) layout.novaPagina(true);
-            const sufixo = blocosBitola.length > 1 ? ` — BITOLAS ${indiceBloco * maximoBitolasPorPaginaVenda + 1}–${indiceBloco * maximoBitolasPorPaginaVenda + bitolas.length}` : "";
-            desenharGradeVenda(madeira, bitolas, sufixo, indiceMadeira > 0 || indiceBloco > 0);
-            const larguraBitola = (larguraGradeVenda - larguraComprimentoVenda) / Math.max(bitolas.length, 1);
-            const larguras = [larguraComprimentoVenda, ...bitolas.map(() => larguraBitola)];
-            comprimentos.forEach((comprimento, indiceComprimento) => {
-              if (!layout.temEspaco(18)) {
-                layout.novaPagina(true);
-                desenharGradeVenda(madeira, bitolas, sufixo, true);
-              }
-              if (indiceComprimento % 2 === 0) layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 12, width: larguraGradeVenda, height: 17, color: rgb(0.975, 0.97, 0.94) });
-              const valores = [`${formatMeasurement(comprimento)} m`, ...bitolas.map((bitola: any) => {
-                const quantidade = bitola.comprimentos.get(comprimento) ?? 0;
-                return quantidade ? formatMeasurement(quantidade) : "—";
-              })];
-              let x = MARGEM_LATERAL;
-              valores.forEach((valor, posicao) => {
-                desenharTextoAjustado(layout.page, posicao === 0 ? boldFont : font, valor, x + 3, layout.y - 1, larguras[posicao] - 6, 7.5, posicao === 0 ? { color: COR_MARROM } : {});
-                x += larguras[posicao];
-              });
-              layout.mover(18);
+          comprimentos.forEach((comprimento, indiceComprimento) => {
+            if (!layout.temEspaco(alturaLinha)) {
+              layout.novaPagina(true);
+              desenharGradeVenda(madeira, bitolas, "", true);
+            }
+            if (indiceComprimento % 2 === 0) layout.page.drawRectangle({ x: margemGradeVenda, y: layout.y - (alturaLinha - 1), width: larguraGradeVenda, height: alturaLinha, color: rgb(0.975, 0.97, 0.94) });
+            const valores = [`${formatMeasurement(comprimento)} m`, ...bitolas.map((bitola: any) => {
+              const quantidade = bitola.comprimentos.get(comprimento) ?? 0;
+              return quantidade ? formatMeasurement(quantidade) : "—";
+            })];
+            let x = margemGradeVenda;
+            valores.forEach((valor, posicao) => {
+              desenharTextoAjustado(layout.page, posicao === 0 ? boldFont : font, valor, x + 3, layout.y - 1, larguras[posicao] - 6, tamanhoTexto, posicao === 0 ? { color: COR_MARROM } : {});
+              x += larguras[posicao];
             });
+            layout.mover(alturaLinha);
           });
         });
       };

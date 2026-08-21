@@ -260,6 +260,38 @@ describe("rotas de PDF protegidas", () => {
     validarAreaSeguraDoRodape();
   });
 
+  it("mantém todas as bitolas de cada essência em uma página própria do romaneio", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "listClientes").mockResolvedValue([{ id: 5, nome: "Cliente de Teste" }] as any);
+    const montarItens = (madeiraNome: string) => Array.from({ length: 8 }, (_, indice) => ({
+      madeiraNome,
+      espessura: String(20 + indice),
+      largura: "50",
+      comprimento: "4",
+      quantidade: 2,
+      tipoComercializacao: "metro_cubico",
+      precoM3: "900",
+      valorPeca: "36",
+      valorTotal: "72",
+    }));
+    vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
+      orcamento: { id: 5, numero: "VEN-000005", clienteId: 5, createdAt: new Date(), estado: "aprovado", subtotal: "1152", desconto: "0", frete: "0", total: "1152", totalPecas: 32, totalMetroLinear: "128", totalVolume: "1.152", observacoes: null },
+      itens: [...montarItens("Cedrinho"), ...montarItens("Garapeira")],
+      taxasAdicionais: [],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/orcamento/:id"]!({ params: { id: "5" } }, res);
+
+    expect(pdfCanvas.pages).toHaveLength(3);
+    expect(textosDaPagina(1)).toContain("GRADE DE PEÇAS VENDIDAS — Cedrinho");
+    expect(textosDaPagina(1)).not.toContain("Garapeira");
+    expect(textosDaPagina(2)).toContain("GRADE DE PEÇAS VENDIDAS — Garapeira");
+    expect(textosDaPagina(2)).not.toContain("Cedrinho");
+    validarAreaSeguraDoRodape();
+  });
+
   it("pagina toras e peças no romaneio de produção sem desenhar linhas no rodapé", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
