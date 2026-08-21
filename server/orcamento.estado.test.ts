@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, configurarCondicaoPagamentoVenda, entregarVendaFisicamente, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
+import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, configurarCondicaoPagamentoVenda, entregarVendaFisicamente, formatarNumeroDocumentoPadronizado, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
 import { formatReceivableSaleReference } from "../client/src/lib/utils";
 
 function criarBancoDeOrcamentoFalso() {
@@ -86,17 +86,32 @@ describe("mudança de estado de orçamento", () => {
     expect(formatReceivableSaleReference(recebiveis[0].origem, recebiveis[0].descricao)).toBe("Venda vinculada · VND-000123");
   });
 
-  it("reserva uma numeração sequencial única ao aprovar a venda", async () => {
+  it("reserva uma numeração padronizada e sequencial ao aprovar a venda", async () => {
     const atualizacoes: any[] = [];
     const reservas: any[] = [];
     const db = {
-      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 150001, empresaId: 77, numero: null }] }) }) })),
-      insert: vi.fn(() => ({ values: async (dados: any) => { reservas.push(dados); return [{ insertId: 42 }]; } })),
+      select: vi.fn()
+        .mockImplementationOnce(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 150001, empresaId: 77, numero: null }] }) }) }))
+        .mockImplementationOnce(() => ({ from: () => ({ where: () => ({ limit: async () => [{ ultimoNumero: 1 }] }) }) })),
+      insert: vi.fn(() => ({ values: (dados: any) => {
+        reservas.push(dados);
+        return { onDuplicateKeyUpdate: async () => undefined };
+      } })),
       update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
     };
-    await expect(atribuirNumeroVendaAprovada(150001, db)).resolves.toBe("VND-000042");
-    expect(reservas).toEqual([{ empresaId: 77, orcamentoId: 150001, numero: "PENDENTE-150001" }]);
-    expect(atualizacoes).toEqual([{ numero: "VND-000042" }, { numero: "VND-000042" }]);
+    await expect(atribuirNumeroVendaAprovada(150001, db)).resolves.toBe("VEN-000001");
+    expect(reservas).toEqual([
+      { empresaId: 77, tipo: "venda", ultimoNumero: 1 },
+      { empresaId: 77, orcamentoId: 150001, numero: "VEN-000001" },
+    ]);
+    expect(atualizacoes).toEqual([{ numero: "VEN-000001" }]);
+  });
+
+  it("formata os números futuros de venda e romaneio de entrada a partir de um", () => {
+    expect(formatarNumeroDocumentoPadronizado("venda", 1)).toBe("VEN-000001");
+    expect(formatarNumeroDocumentoPadronizado("venda", 23)).toBe("VEN-000023");
+    expect(formatarNumeroDocumentoPadronizado("romaneio_entrada", 1)).toBe("ROM-000001");
+    expect(() => formatarNumeroDocumentoPadronizado("venda", 0)).toThrow("inteiro positivo");
   });
 
   it("cancela o recebível sem baixa antes de excluir uma venda aprovada", async () => {
@@ -230,5 +245,30 @@ describe("mudança de estado de orçamento", () => {
     expect(resultado).toMatchObject({ success: true, pecasEntregues: 5, pecasSemEstoque: 0 });
     expect(atualizacoes[0]).toMatchObject({ quantidadeDisponivel: 7, estado: "disponivel" });
     expect(insercoes[0]).toMatchObject({ tipo: "saida_entrega", loteId: 301, itemVendaId: 91, quantidade: 5 });
+  });
+
+  it("cria um lote negativo vinculado à empresa quando a entrega supera o saldo", async () => {
+    const insercoes: any[] = [];
+    const venda = { id: 150001, empresaId: 7, estado: "aprovado", entregue: false, numero: "VEN-000001" };
+    const itemM3 = { id: 91, madeiraNome: "Cedrinho", espessura: "25", largura: "150", comprimento: "3", quantidade: "5", tipoComercializacao: "metro_cubico" };
+    const tx = {
+      select: vi.fn()
+        .mockImplementationOnce(() => ({ from: () => ({ where: () => ({ limit: async () => [venda] }) }) }))
+        .mockImplementationOnce(() => ({ from: () => ({ where: async () => [itemM3] }) }))
+        .mockImplementationOnce(() => ({ from: () => ({ where: async () => [] }) })),
+      update: vi.fn(() => ({ set: () => ({ where: async () => undefined }) })),
+      insert: vi.fn(() => ({ values: async (dados: any) => { insercoes.push(dados); return [{ insertId: 401 }]; } })),
+    };
+    const database = { transaction: async (executar: (transacao: typeof tx) => unknown) => executar(tx) };
+
+    const resultado = await entregarVendaFisicamente(150001, 9, {
+      entregueEm: new Date("2030-01-15T12:00:00"),
+      modalidadeEntrega: "retirada",
+      responsavelEntrega: "Expedição",
+    }, { database });
+
+    expect(resultado).toMatchObject({ success: true, pecasEntregues: 5, pecasSemEstoque: 5 });
+    expect(insercoes[0]).toMatchObject({ empresaId: 7, quantidadeDisponivel: -5, estado: "negativo" });
+    expect(insercoes[1]).toMatchObject({ empresaId: 7, loteId: 401, tipo: "saida_entrega", quantidade: 5 });
   });
 });

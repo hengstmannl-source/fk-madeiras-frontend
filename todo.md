@@ -630,6 +630,15 @@
 - [x] Separar o romaneio de cada essência em sua própria página no PDF de vendas
 - [x] Reduzir margens laterais e ampliar a área útil horizontal das grades do romaneio
 - [x] Cobrir e validar visualmente a nova composição de páginas por essência
+- [x] Auditar vendas entregues sem baixa de estoque, sem alterar dados ou código
+- [x] Comparar itens vendidos, medidas persistidas e movimentações de saída para identificar a causa
+- [x] Apresentar o diagnóstico da baixa ausente e aguardar aprovação antes de corrigir
+- [x] Mapear os lotes e linhas sem vínculo físico relacionados ao reprocessamento das vendas VND-090001 e VND-120001
+- [x] Reprocessar as baixas das vendas VND-090001 e VND-120001 com rastreabilidade por lote
+- [x] Excluir somente artefatos de estoque confirmados sem peça física, entrada ou movimentação válida
+- [x] Padronizar a numeração sequencial futura dos romaneios de entrada, preservando os documentos históricos
+- [x] Padronizar a numeração sequencial futura das vendas, preservando os documentos históricos
+- [x] Cobrir o reprocessamento e as novas numerações com testes e validação visual
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

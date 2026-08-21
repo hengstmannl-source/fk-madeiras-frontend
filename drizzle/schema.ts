@@ -219,6 +219,20 @@ export const sequenciasVendas = mysqlTable("sequenciasVendas", {
 
 export type SequenciaVenda = typeof sequenciasVendas.$inferSelect;
 
+/** Contadores independentes por empresa para os documentos emitidos após a padronização. */
+export const sequenciasDocumentos = mysqlTable("sequenciasDocumentos", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  tipo: mysqlEnum("tipo", ["venda", "romaneio_entrada"]).notNull(),
+  ultimoNumero: int("ultimoNumero").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaTipoUnico: uniqueIndex("sequenciasDocumentos_empresa_tipo_unq").on(table.empresaId, table.tipo),
+}));
+
+export type SequenciaDocumento = typeof sequenciasDocumentos.$inferSelect;
+
 export const itensOrcamento = mysqlTable("itensOrcamento", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),

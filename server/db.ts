@@ -4,7 +4,7 @@ import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
-  fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
+  fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
@@ -961,16 +961,40 @@ export async function atribuirNumeroVendaAprovada(orcamentoId: number, database?
   if (!venda[0]) throw new Error("Venda não encontrada");
   if (venda[0].numero) return venda[0].numero;
 
-  const reserva = await db.insert(sequenciasVendas).values({
+  const sequencia = await reservarProximoNumeroDocumento(db, venda[0].empresaId, "venda");
+  const numero = formatarNumeroDocumentoPadronizado("venda", sequencia);
+  await db.insert(sequenciasVendas).values({
     empresaId: venda[0].empresaId,
     orcamentoId,
-    numero: `PENDENTE-${orcamentoId}`,
+    numero,
   });
-  const sequenciaId = getInsertedId(reserva as MysqlInsertResult);
-  const numero = `VND-${String(sequenciaId).padStart(6, "0")}`;
-  await db.update(sequenciasVendas).set({ numero }).where(eq(sequenciasVendas.id, sequenciaId));
   await db.update(orcamentos).set({ numero }).where(eq(orcamentos.id, orcamentoId));
   return numero;
+}
+
+export type TipoDocumentoPadronizado = "venda" | "romaneio_entrada";
+
+export function formatarNumeroDocumentoPadronizado(tipo: TipoDocumentoPadronizado, sequencia: number) {
+  if (!Number.isInteger(sequencia) || sequencia <= 0) throw new Error("A sequência do documento deve ser um inteiro positivo");
+  const prefixo = tipo === "venda" ? "VEN" : "ROM";
+  return `${prefixo}-${String(sequencia).padStart(6, "0")}`;
+}
+
+/**
+ * Reserva um número monotónico dentro da transação. O upsert mantém a linha do
+ * contador bloqueada pelo banco até o fim da transação, evitando números duplicados.
+ */
+export async function reservarProximoNumeroDocumento(tx: any, empresaId: number, tipo: TipoDocumentoPadronizado) {
+  await tx.insert(sequenciasDocumentos).values({ empresaId, tipo, ultimoNumero: 1 }).onDuplicateKeyUpdate({
+    set: { ultimoNumero: sql`${sequenciasDocumentos.ultimoNumero} + 1` },
+  });
+  const contador = (await tx.select().from(sequenciasDocumentos).where(and(
+    eq(sequenciasDocumentos.empresaId, empresaId),
+    eq(sequenciasDocumentos.tipo, tipo),
+  )).limit(1))[0];
+  const proximo = Number(contador?.ultimoNumero);
+  if (!Number.isInteger(proximo) || proximo <= 0) throw new Error("Não foi possível reservar a sequência do documento");
+  return proximo;
 }
 
 export async function updateOrcamentoEstado(
@@ -3121,7 +3145,8 @@ export async function criarRomaneioCargaToras(data: {
       empresaId: data.empresaId,
     });
     const id = getInsertedId(insercao as MysqlInsertResult);
-    const numero = `CARGA-${String(id).padStart(6, "0")}`;
+    const sequencia = await reservarProximoNumeroDocumento(tx, data.empresaId, "romaneio_entrada");
+    const numero = formatarNumeroDocumentoPadronizado("romaneio_entrada", sequencia);
     await tx.update(romaneiosCargaToras).set({ numero }).where(eq(romaneiosCargaToras.id, id));
     await sincronizarTituloMateriaPrimaCarga(tx, {
       romaneioId: id,
@@ -4086,6 +4111,7 @@ export async function ajustarEstoqueSerrado(data: {
     if (!variacao) throw new Error("A contagem informada já corresponde ao saldo atual desta medida");
     const calculoVariacao = calcularItemRomaneio({ ...dimensoes, quantidade: Math.abs(variacao) });
     const insercao = await tx.insert(lotesPecasSerradas).values({
+      empresaId: data.empresaId,
       romaneioId: null,
       itemRomaneioId: null,
       madeiraNome: calculoVariacao.madeiraNome,
@@ -4100,6 +4126,7 @@ export async function ajustarEstoqueSerrado(data: {
     });
     const loteId = getInsertedId(insercao as MysqlInsertResult);
     await tx.insert(movimentacoesEstoqueSerrado).values({
+      empresaId: data.empresaId,
       loteId,
       tipo: "ajuste",
       quantidade: variacao,
@@ -4168,6 +4195,7 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
         quantidade: deficit.quantidade,
       });
       const insercao = await tx.insert(lotesPecasSerradas).values({
+        empresaId: venda.empresaId,
         romaneioId: null,
         itemRomaneioId: null,
         madeiraNome: dimensoes.madeiraNome,
