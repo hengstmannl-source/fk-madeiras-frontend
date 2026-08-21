@@ -1,12 +1,13 @@
 import React from "react";
 import "@testing-library/jest-dom/vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   search: "",
   titulos: [] as Array<Record<string, unknown>>,
+  categorias: [] as Array<Record<string, unknown>>,
   baixas: [] as Array<Record<string, unknown>>,
   anexos: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
@@ -31,7 +32,7 @@ const state = vi.hoisted(() => ({
 }));
 
 vi.mock("wouter", () => ({ useSearch: () => state.search }));
-vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn(), message: vi.fn() } }));
 vi.mock("@/lib/financeiroPdf", () => ({ exportarListaFinanceiraPdf: state.exportarPdf }));
 
 vi.mock("@/lib/trpc", () => {
@@ -58,7 +59,16 @@ vi.mock("@/lib/trpc", () => {
       cliente: { list: queryVazia, create: mutationInerte },
       financeiro: {
         titulos: {
-          list: { useQuery: () => ({ data: state.titulos, isLoading: false }) },
+          list: { useQuery: (filtros?: { descricao?: string; clienteId?: number; categoriaId?: number }) => ({
+            data: !filtros ? state.titulos : state.titulos.filter((titulo) => {
+              if (filtros.descricao && !`${titulo.descricao ?? ""}`.toLocaleLowerCase("pt-BR").includes(filtros.descricao.toLocaleLowerCase("pt-BR"))) return false;
+              if (filtros.categoriaId && titulo.categoriaId !== filtros.categoriaId) return false;
+              if (filtros.clienteId && titulo.clienteId !== filtros.clienteId) return false;
+              return true;
+            }),
+            isLoading: false,
+            isFetching: false,
+          }) },
           baixas: { useQuery: () => ({ data: state.baixas, isLoading: false, refetch: vi.fn() }) },
           createManual: mutationInerte,
           createParcelado: mutationInerte,
@@ -114,7 +124,7 @@ vi.mock("@/lib/trpc", () => {
             }),
           },
         },
-        categorias: { list: queryVazia, create: mutationInerte },
+        categorias: { list: { useQuery: () => ({ data: state.categorias, isLoading: false }) }, create: mutationInerte },
         fornecedores: { list: queryVazia, create: mutationInerte, update: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
         anexos: {
           upload: mutationInerte,
@@ -143,6 +153,8 @@ vi.mock("@/lib/trpc", () => {
 import FinanceiroPage, { abaFinanceiraDaUrl } from "./FinanceiroPage";
 
 describe("FinanceiroPage — cancelamento manual", () => {
+  afterEach(() => cleanup());
+
   beforeEach(() => {
     state.search = "";
     state.cancelar.mockReset();
@@ -161,6 +173,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
       tamanhoBytes: 1024,
       url: "https://documentos.exemplo/boleto-agosto.pdf",
     }];
+    state.categorias = [{ id: 1, nome: "Receitas de vendas", tipo: "receita" }];
     state.baixas = [{
       id: 40,
       tituloId: 12,
@@ -181,6 +194,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
         valorBaixado: "0.00",
         desconto: "0.00",
         juros: "0.00",
+        categoriaId: 1,
         dataVencimento: "2026-08-11T00:00:00.000Z",
       },
       {
@@ -228,6 +242,8 @@ describe("FinanceiroPage — cancelamento manual", () => {
     render(<FinanceiroPage />);
 
     await user.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Recebimento para cancelar");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
 
     const linha = screen.getByText("Recebimento para cancelar").closest("tr");
     expect(linha).not.toBeNull();
@@ -243,7 +259,6 @@ describe("FinanceiroPage — cancelamento manual", () => {
       expect(state.invalidar).toHaveBeenCalled();
       expect(screen.queryByText("Recebimento para cancelar")).not.toBeInTheDocument();
     });
-    expect(screen.getAllByText("Recebimento preservado").length).toBeGreaterThan(0);
   });
 
   it("apresenta o fluxo de caixa com filtros de período e indicadores de saldo", async () => {
@@ -311,7 +326,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(tela.queryByText("Títulos vencidos")).not.toBeInTheDocument();
   });
 
-  it("separa as quatro listas financeiras, filtra títulos e destaca os compromissos do dia", async () => {
+  it("mantém a lista vazia até pesquisar, filtra títulos e destaca os compromissos do dia", async () => {
     const user = userEvent.setup();
     const hoje = new Date().toISOString();
     state.titulos.push(
@@ -321,20 +336,25 @@ describe("FinanceiroPage — cancelamento manual", () => {
     );
     render(<FinanceiroPage />);
 
-    expect(screen.getByText("Fornecedor vence hoje")).toBeInTheDocument();
-    expect(screen.getByText(/1 vencem hoje/i)).toBeInTheDocument();
+    expect(screen.queryByText("Fornecedor vence hoje")).not.toBeInTheDocument();
+    expect(screen.getByText(/use os filtros acima para consultar lançamentos/i)).toBeInTheDocument();
     expect(screen.getByLabelText("Descrição ou contraparte")).toBeInTheDocument();
     expect(screen.getByLabelText("Valor mínimo")).toHaveAttribute("inputmode", "decimal");
     expect(screen.getAllByLabelText("Data inicial")[0]).toHaveAttribute("type", "date");
     expect(screen.getAllByLabelText("Data final")[0]).toHaveAttribute("type", "date");
 
     await user.type(screen.getByLabelText("Descrição ou contraparte"), "fornecedor vence");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
     expect(screen.getAllByText("Fornecedor vence hoje").length).toBeGreaterThan(0);
+    expect(screen.getByText(/1 vencem hoje/i)).toBeInTheDocument();
     const tabelaPagar = screen.getAllByRole("table").find((tabela) => within(tabela).queryByText("Fornecedor vence hoje"));
     expect(tabelaPagar).toBeDefined();
     expect(within(tabelaPagar!).queryByText("Carga de toras RC-001")).not.toBeInTheDocument();
-    await user.click(screen.getAllByRole("button", { name: "Limpar filtros" })[0]);
+    await user.click(screen.getByRole("button", { name: "Limpar" }));
+    expect(screen.getByText(/use os filtros acima para consultar lançamentos/i)).toBeInTheDocument();
 
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "arquivada");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
     await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas pagas" }).at(-1)!);
     expect(screen.getByText("Conta paga arquivada")).toBeInTheDocument();
 
@@ -345,10 +365,12 @@ describe("FinanceiroPage — cancelamento manual", () => {
   it("permite reagendar o vencimento de uma conta vinculada ao romaneio de carga", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Carga de toras");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
 
     const linha = screen.getAllByText("Carga de toras RC-001").map((elemento) => elemento.closest("tr")).find(Boolean);
     expect(linha).not.toBeNull();
-    await user.click(within(linha!).getByRole("button", { name: "Editar" }));
+    await user.click(within(linha!).getByRole("button", { name: "Editar Carga de toras RC-001" }));
 
     expect(screen.getByRole("heading", { name: "Editar lançamento" })).toBeInTheDocument();
     expect(screen.getByText(/alterações de vencimento também atualizam o romaneio de carga vinculado/i)).toBeInTheDocument();
@@ -369,6 +391,8 @@ describe("FinanceiroPage — cancelamento manual", () => {
     render(<FinanceiroPage />);
 
     await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas a receber" }).at(-1)!);
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Recebimento com baixa");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
 
     const linha = screen.getAllByText("Recebimento com baixa").map((elemento) => elemento.closest("tr")).find(Boolean);
     expect(linha).not.toBeNull();
@@ -385,6 +409,20 @@ describe("FinanceiroPage — cancelamento manual", () => {
       expect(screen.getByText(/Pagamento duplicado/)).toBeInTheDocument();
     });
   }, 10_000);
+
+  it("abre a edição pela descrição e mantém a categoria de receita da venda", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Recebimento para cancelar");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
+    await user.click(screen.getByRole("button", { name: "Editar Recebimento para cancelar" }));
+
+    const dialogo = screen.getByRole("dialog");
+    expect(within(dialogo).getByRole("heading", { name: "Editar lançamento" })).toBeInTheDocument();
+    expect(within(dialogo).getByText("Receitas de vendas")).toBeInTheDocument();
+  });
 
   it("oferece modelo, exportação e importação CSV com orientação de validação", async () => {
     render(<FinanceiroPage />);
@@ -423,10 +461,12 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const user = userEvent.setup();
     Object.defineProperty(navigator, "clipboard", { configurable: true, value: { writeText: copiar } });
     render(<FinanceiroPage />);
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Carga de toras");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
 
     const tabelaPagar = screen.getAllByRole("table").find((tabela) => within(tabela).queryByText("Carga de toras RC-001"));
     expect(tabelaPagar).toBeDefined();
-    fireEvent.click(within(tabelaPagar!).getByRole("button", { name: "Editar" }));
+    fireEvent.click(within(tabelaPagar!).getByRole("button", { name: "Editar Carga de toras RC-001" }));
 
     const dialogo = await screen.findByRole("dialog");
     await user.click(within(dialogo).getByRole("button", { name: "Copiar" }));
@@ -440,7 +480,9 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
 
-    fireEvent.change(screen.getAllByLabelText("Descrição ou contraparte").at(-1)!, { target: { value: "carga de toras" } });
+    await user.click(screen.getByRole("button", { name: "Visão financeira: Contas a pagar" }));
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "carga de toras");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Exportar PDF" }).at(-1)!);
 
     await waitFor(() => {
@@ -456,11 +498,13 @@ describe("FinanceiroPage — cancelamento manual", () => {
   it("seleciona títulos e envia uma alteração parcial em lote", async () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
-    fireEvent.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: "Visão financeira: Contas a receber" }));
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Recebimento");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar Recebimento para cancelar" }));
     fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar Recebimento preservado" }));
     fireEvent.click(screen.getByRole("button", { name: /editar 2 em lote/i }));
-    await user.type(screen.getByLabelText("Descrição"), "Recebimento revisado");
+    fireEvent.change(screen.getByLabelText("Descrição"), { target: { value: "Recebimento revisado" } });
     fireEvent.click(screen.getByRole("button", { name: /salvar alterações em lote/i }));
     expect(state.atualizarLote).toHaveBeenCalledWith(expect.objectContaining({ ids: [10, 11], descricao: "Recebimento revisado" }));
   });

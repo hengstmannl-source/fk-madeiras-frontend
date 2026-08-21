@@ -1602,7 +1602,18 @@ export async function atualizarEstadoTituloFinanceiro(titulo: any) {
 }
 
 export async function listTitulosFinanceiros(
-  filters?: { tipo?: TipoTituloFinanceiro; estado?: string; clienteId?: number; fornecedorId?: number },
+  filters?: {
+    tipo?: TipoTituloFinanceiro;
+    estado?: string;
+    clienteId?: number;
+    fornecedorId?: number;
+    categoriaId?: number;
+    descricao?: string;
+    valorMinimo?: number;
+    valorMaximo?: number;
+    dataInicio?: Date;
+    dataFim?: Date;
+  },
   dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[]; empresaId?: number },
 ) {
   const db = dependencias?.database ?? await getDb();
@@ -1614,6 +1625,7 @@ export async function listTitulosFinanceiros(
   else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
   if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
   if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
+  if (filters?.categoriaId) conditions.push(eq(titulosFinanceiros.categoriaId, filters.categoriaId));
   const titulos = dependencias?.titulos ?? await db.select().from(titulosFinanceiros)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(titulosFinanceiros.dataVencimento));
@@ -1623,6 +1635,15 @@ export async function listTitulosFinanceiros(
     if (filters?.tipo && titulo.tipo !== filters.tipo) return false;
     if (filters?.clienteId && titulo.clienteId !== filters.clienteId) return false;
     if (filters?.fornecedorId && titulo.fornecedorId !== filters.fornecedorId) return false;
+    if (filters?.categoriaId && titulo.categoriaId !== filters.categoriaId) return false;
+    const descricao = filters?.descricao?.trim().toLocaleLowerCase("pt-BR");
+    if (descricao && !`${titulo.descricao} ${titulo.contraparteNome ?? ""}`.toLocaleLowerCase("pt-BR").includes(descricao)) return false;
+    const valor = decimalParaNumero(titulo.valorOriginal) - decimalParaNumero(titulo.desconto ?? "0") + decimalParaNumero(titulo.juros ?? "0");
+    if (filters?.valorMinimo !== undefined && valor < filters.valorMinimo) return false;
+    if (filters?.valorMaximo !== undefined && valor > filters.valorMaximo) return false;
+    const vencimento = new Date(titulo.dataVencimento).getTime();
+    if (filters?.dataInicio && vencimento < filters.dataInicio.getTime()) return false;
+    if (filters?.dataFim && vencimento > filters.dataFim.getTime()) return false;
     return true;
   });
   return Promise.all(titulosVisiveis.map((titulo: any) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));

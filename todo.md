@@ -615,6 +615,10 @@
 - [x] Organizar acerto comercial e resumo de peças na primeira página do PDF de venda
 - [x] Iniciar obrigatoriamente o romaneio em grade na segunda página do PDF de venda
 - [x] Cobrir e validar a nova paginação do PDF de vendas
+- [x] Pré-preencher e preservar a categoria financeira nos recebíveis criados a partir de vendas
+- [x] Exigir filtros para exibir lançamentos no Financeiro, com período, valor, cliente e categoria
+- [x] Abrir a edição do lançamento pelo clique na descrição e remover o botão de editar da lista
+- [x] Cobrir as melhorias de pesquisa e edição financeira com testes e validação visual
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

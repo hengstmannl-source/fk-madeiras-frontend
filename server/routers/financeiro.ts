@@ -252,6 +252,12 @@ export const financeiroRouter = router({
       estado: z.enum(["aberto", "parcial", "quitado", "vencido", "cancelado"]).optional(),
       clienteId: z.number().int().positive().optional(),
       fornecedorId: z.number().int().positive().optional(),
+      categoriaId: z.number().int().positive().optional(),
+      descricao: z.string().trim().min(1).max(300).optional(),
+      valorMinimo: z.number().nonnegative().optional(),
+      valorMaximo: z.number().nonnegative().optional(),
+      dataInicio: z.date().optional(),
+      dataFim: z.date().optional(),
     }).optional()).query(({ ctx, input }) => db.listTitulosFinanceiros(input, { empresaId: ctx.empresaAtiva!.empresa.id })),
 
     createManual: protectedProcedure.input(LancamentoManualSchema).mutation(({ ctx, input }) => (
