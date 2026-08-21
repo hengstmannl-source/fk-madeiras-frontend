@@ -562,3 +562,9 @@
 - [x] Calcular automaticamente volumes, valores e totais enquanto as linhas são preenchidas
 - [x] Reaproveitar os dados da linha anterior e permitir adição rápida de muitas toras por teclado
 - [x] Cobrir a grade de romaneio com testes e validação visual desktop e móvel
+- [x] Mapear os contratos e os campos de clientes para uma importação segura por planilha
+- [x] Implementar prévia de importação de clientes com validação de dados e prevenção de duplicados
+- [x] Adicionar modelo de planilha e relatório de linhas importadas, ignoradas e recusadas
+- [x] Corrigir o dimensionamento e a rolagem horizontal da grade de romaneio de carga
+- [x] Mover o foco automaticamente para a plaqueta da nova linha após Enter no valor por m³
+- [x] Cobrir importação e atalhos de romaneio com testes e validação visual

@@ -247,6 +247,8 @@ export default function EstoquePage() {
     numero: string;
   } | null>(null);
   const [carga, setCarga] = useState<CargaFormulario>(novaCarga);
+  const referenciasPlaquetasCarga = useRef<Record<number, HTMLInputElement | null>>({});
+  const [indicePlaquetaParaFoco, setIndicePlaquetaParaFoco] = useState<number | null>(null);
   const [cabecalhoImportacao, setCabecalhoImportacao] =
     useState<CabecalhoCarga>(novoCabecalhoCarga);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
@@ -553,7 +555,8 @@ export default function EstoquePage() {
         posicao === indice ? { ...item, [campo]: valor } : item
       ),
     }));
-  const adicionarPlaqueta = () =>
+  const adicionarPlaqueta = (focarPlaqueta = false) => {
+    const proximoIndice = carga.plaquetas.length;
     setCarga(anterior => {
       const ultimaPlaqueta = anterior.plaquetas.at(-1);
       const proximaPlaqueta = {
@@ -566,6 +569,16 @@ export default function EstoquePage() {
         plaquetas: [...anterior.plaquetas, proximaPlaqueta],
       };
     });
+    if (focarPlaqueta) setIndicePlaquetaParaFoco(proximoIndice);
+  };
+  useEffect(() => {
+    if (indicePlaquetaParaFoco === null) return;
+    const quadro = requestAnimationFrame(() => {
+      referenciasPlaquetasCarga.current[indicePlaquetaParaFoco]?.focus();
+      setIndicePlaquetaParaFoco(null);
+    });
+    return () => cancelAnimationFrame(quadro);
+  }, [carga.plaquetas.length, indicePlaquetaParaFoco]);
   const removerPlaqueta = (indice: number) =>
     setCarga(anterior => ({
       ...anterior,
@@ -1253,7 +1266,7 @@ export default function EstoquePage() {
           else setDialogCarga(true);
         }}
       >
-        <DialogContent className="max-h-[92vh] w-[calc(100vw-1rem)] overflow-x-hidden overflow-y-auto p-4 sm:max-w-5xl sm:p-6">
+        <DialogContent className="max-h-[94vh] w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] overflow-x-hidden overflow-y-auto p-4 sm:w-[calc(100vw-3rem)] sm:max-w-[calc(100vw-3rem)] sm:p-6 xl:max-w-[1440px]">
           <DialogHeader>
             <DialogTitle>
               {cargaEmEdicao
@@ -1364,7 +1377,7 @@ export default function EstoquePage() {
                     />
                   </Campo>
                 </div>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+                <div className="grid grid-cols-2 gap-3 xl:grid-cols-5">
                   <IndicadorCarga rotulo="Plaquetas" valor={totais.plaquetas} />
                   <IndicadorCarga
                     rotulo="Volume total"
@@ -1393,7 +1406,7 @@ export default function EstoquePage() {
                     <Badge variant="outline" className="w-fit">{carga.plaquetas.length} linha(s)</Badge>
                   </div>
                   <div className="overflow-x-auto rounded-lg border bg-background">
-                    <Table className="min-w-[1040px]">
+                    <Table className="min-w-[1120px]">
                       <TableHeader>
                         <TableRow className="bg-muted/50 hover:bg-muted/50">
                           <TableHead className="w-12 text-center">#</TableHead>
@@ -1417,13 +1430,13 @@ export default function EstoquePage() {
                           return <TableRow key={indice} className={codigoRepetido ? "bg-amber-50/70 hover:bg-amber-50" : "hover:bg-muted/30"}>
                             <TableCell className="text-center text-sm font-medium text-muted-foreground">{indice + 1}</TableCell>
                             <TableCell className="py-2 align-top">
-                              <Input aria-label={`Plaqueta ${indice + 1}`} value={item.codigo} onChange={atualizar("codigo")} placeholder="PLQ-001" className={codigoRepetido ? "border-amber-400" : ""} />
+                              <Input ref={elemento => { referenciasPlaquetasCarga.current[indice] = elemento; }} aria-label={`Plaqueta ${indice + 1}`} value={item.codigo} onChange={atualizar("codigo")} placeholder="PLQ-001" className={codigoRepetido ? "border-amber-400" : ""} />
                               {codigoRepetido && <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-700"><AlertTriangle className="h-3 w-3" />Duplicada</p>}
                             </TableCell>
                             <TableCell><Input aria-label={`Essência ${indice + 1}`} value={item.madeiraNome} onChange={atualizar("madeiraNome")} placeholder="Cedrinho" /></TableCell>
                             <TableCell><Input aria-label={`Diâmetro ${indice + 1}`} inputMode="decimal" value={item.diametro} onChange={atualizar("diametro")} placeholder="0,00" /></TableCell>
                             <TableCell><Input aria-label={`Comprimento ${indice + 1}`} inputMode="decimal" value={item.comprimento} onChange={atualizar("comprimento")} placeholder="0,00" /></TableCell>
-                            <TableCell><Input aria-label={`Preço por metro cúbico ${indice + 1}`} inputMode="decimal" value={item.valorMetroCubico} onChange={atualizar("valorMetroCubico")} onKeyDown={evento => { if (evento.key === "Enter" && indice === carga.plaquetas.length - 1) { evento.preventDefault(); adicionarPlaqueta(); } }} placeholder="900,00" /></TableCell>
+                            <TableCell><Input aria-label={`Preço por metro cúbico ${indice + 1}`} inputMode="decimal" value={item.valorMetroCubico} onChange={atualizar("valorMetroCubico")} onKeyDown={evento => { if (evento.key === "Enter" && indice === carga.plaquetas.length - 1) { evento.preventDefault(); adicionarPlaqueta(true); } }} placeholder="900,00" /></TableCell>
                             <TableCell className="text-right text-sm font-medium tabular-nums">{formatarNumero(volume)} m³</TableCell>
                             <TableCell className="text-right text-sm font-semibold tabular-nums text-emerald-700">{formatarMoeda(valor)}</TableCell>
                             <TableCell><Input aria-label={`Observação da tora ${indice + 1}`} value={item.observacoes} onChange={atualizar("observacoes")} placeholder="Opcional" /></TableCell>
@@ -1437,7 +1450,7 @@ export default function EstoquePage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={adicionarPlaqueta}
+                  onClick={() => adicionarPlaqueta()}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Adicionar plaqueta
