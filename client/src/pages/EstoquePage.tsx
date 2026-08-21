@@ -1384,155 +1384,56 @@ export default function EstoquePage() {
                     destaque
                   />
                 </div>
-                <div className="space-y-3">
-                  {carga.plaquetas.map((item, indice) => {
-                    const volume = volumeTora(item.diametro, item.comprimento);
-                    const valor = valorTora(
-                      item.diametro,
-                      item.comprimento,
-                      item.valorMetroCubico
-                    );
-                    const codigoRepetido =
-                      item.codigo.trim() &&
-                      carga.plaquetas.filter(
-                        outra =>
-                          outra.codigo.trim().toLocaleUpperCase("pt-BR") ===
-                          item.codigo.trim().toLocaleUpperCase("pt-BR")
-                      ).length > 1;
-                    return (
-                      <article
-                        key={indice}
-                        className={`min-w-0 overflow-hidden rounded-xl border p-4 ${codigoRepetido ? "border-amber-300 bg-amber-50/50" : "bg-muted/15"}`}
-                      >
-                        <div className="mb-4 flex flex-col gap-2 min-[420px]:flex-row min-[420px]:items-start min-[420px]:justify-between">
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold">
-                              Plaqueta {indice + 1}
-                            </p>
-                            <p className="text-xs leading-4 text-muted-foreground">
-                              Informe a identificação, as medidas e o custo
-                              desta tora.
-                            </p>
-                          </div>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            className="shrink-0 self-start text-muted-foreground"
-                            disabled={carga.plaquetas.length === 1}
-                            onClick={() => removerPlaqueta(indice)}
-                            aria-label={`Remover plaqueta ${indice + 1}`}
-                          >
-                            Remover
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-1 gap-3 min-[520px]:grid-cols-2 lg:grid-cols-3">
-                          <Campo
-                            label="Plaqueta física"
-                            ajuda="Opcional: sem ela, será criada uma identificação interna."
-                          >
-                            <Input
-                              value={item.codigo}
-                              onChange={evento =>
-                                atualizarPlaqueta(
-                                  indice,
-                                  "codigo",
-                                  evento.target.value
-                                )
-                              }
-                              placeholder="PLQ-001"
-                            />
-                          </Campo>
-                          <Campo label="Essência *">
-                            <Input
-                              value={item.madeiraNome}
-                              onChange={evento =>
-                                atualizarPlaqueta(
-                                  indice,
-                                  "madeiraNome",
-                                  evento.target.value
-                                )
-                              }
-                              placeholder="Ex.: Cedrinho"
-                            />
-                          </Campo>
-                          <Campo label="Diâmetro (cm) *">
-                            <Input
-                              aria-label="Diâmetro (cm)"
-                              inputMode="decimal"
-                              value={item.diametro}
-                              onChange={evento =>
-                                atualizarPlaqueta(
-                                  indice,
-                                  "diametro",
-                                  evento.target.value
-                                )
-                              }
-                              placeholder="0,00"
-                            />
-                          </Campo>
-                          <Campo label="Comprimento (m) *">
-                            <Input
-                              aria-label="Comprimento (m)"
-                              inputMode="decimal"
-                              value={item.comprimento}
-                              onChange={evento =>
-                                atualizarPlaqueta(
-                                  indice,
-                                  "comprimento",
-                                  evento.target.value
-                                )
-                              }
-                              placeholder="0,00"
-                            />
-                          </Campo>
-                          <Campo label="Preço por m³ (R$) *">
-                            <Input
-                              aria-label="Preço por m³ (R$)"
-                              inputMode="decimal"
-                              value={item.valorMetroCubico}
-                              onChange={evento =>
-                                atualizarPlaqueta(
-                                  indice,
-                                  "valorMetroCubico",
-                                  evento.target.value
-                                )
-                              }
-                              placeholder="900,00"
-                            />
-                          </Campo>
-                          <div className="grid min-w-0 grid-cols-2 gap-2 rounded-lg border bg-background p-3 min-[520px]:col-span-2 lg:col-span-1">
-                            <div className="min-w-0">
-                              <p className="text-[11px] leading-4 text-muted-foreground">
-                                Volume
-                              </p>
-                              <p className="mt-1 break-words text-sm font-semibold tabular-nums">
-                                {formatarNumero(volume)} m³
-                              </p>
-                            </div>
-                            <div className="min-w-0 border-l pl-2">
-                              <p className="text-[11px] leading-4 text-muted-foreground">
-                                Valor da tora
-                              </p>
-                              <p className="mt-1 break-words text-sm font-semibold tabular-nums text-emerald-700">
-                                {formatarMoeda(valor)}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                        {codigoRepetido && (
-                          <div className="mt-3 flex gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs leading-5 text-amber-950">
-                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                            Plaqueta física repetida neste romaneio. As toras
-                            serão registradas, destacadas no estoque e exigirão
-                            conferência manual das medidas antes do consumo na
-                            Produção Diária.
-                          </div>
-                        )}
-                      </article>
-                    );
-                  })}
-                </div>
+                <section className="space-y-3 rounded-xl border bg-muted/10 p-3 sm:p-4">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                      <h3 className="text-sm font-semibold">Toras da carga</h3>
+                      <p className="text-xs text-muted-foreground">Preencha como uma planilha. A nova linha aproveita essência e preço da anterior; pressione Enter no último preço para incluir outra tora.</p>
+                    </div>
+                    <Badge variant="outline" className="w-fit">{carga.plaquetas.length} linha(s)</Badge>
+                  </div>
+                  <div className="overflow-x-auto rounded-lg border bg-background">
+                    <Table className="min-w-[1040px]">
+                      <TableHeader>
+                        <TableRow className="bg-muted/50 hover:bg-muted/50">
+                          <TableHead className="w-12 text-center">#</TableHead>
+                          <TableHead className="min-w-36">Plaqueta</TableHead>
+                          <TableHead className="min-w-40">Essência *</TableHead>
+                          <TableHead className="w-28">Diâm. cm *</TableHead>
+                          <TableHead className="w-28">Comp. m *</TableHead>
+                          <TableHead className="w-32">R$/m³ *</TableHead>
+                          <TableHead className="w-28 text-right">Volume</TableHead>
+                          <TableHead className="w-32 text-right">Valor</TableHead>
+                          <TableHead className="min-w-36">Observação</TableHead>
+                          <TableHead className="w-14" />
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {carga.plaquetas.map((item, indice) => {
+                          const volume = volumeTora(item.diametro, item.comprimento);
+                          const valor = valorTora(item.diametro, item.comprimento, item.valorMetroCubico);
+                          const codigoRepetido = Boolean(item.codigo.trim()) && carga.plaquetas.filter(outra => outra.codigo.trim().toLocaleUpperCase("pt-BR") === item.codigo.trim().toLocaleUpperCase("pt-BR")).length > 1;
+                          const atualizar = (campo: keyof PlaquetaCarga) => (evento: React.ChangeEvent<HTMLInputElement>) => atualizarPlaqueta(indice, campo, evento.target.value);
+                          return <TableRow key={indice} className={codigoRepetido ? "bg-amber-50/70 hover:bg-amber-50" : "hover:bg-muted/30"}>
+                            <TableCell className="text-center text-sm font-medium text-muted-foreground">{indice + 1}</TableCell>
+                            <TableCell className="py-2 align-top">
+                              <Input aria-label={`Plaqueta ${indice + 1}`} value={item.codigo} onChange={atualizar("codigo")} placeholder="PLQ-001" className={codigoRepetido ? "border-amber-400" : ""} />
+                              {codigoRepetido && <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-700"><AlertTriangle className="h-3 w-3" />Duplicada</p>}
+                            </TableCell>
+                            <TableCell><Input aria-label={`Essência ${indice + 1}`} value={item.madeiraNome} onChange={atualizar("madeiraNome")} placeholder="Cedrinho" /></TableCell>
+                            <TableCell><Input aria-label={`Diâmetro ${indice + 1}`} inputMode="decimal" value={item.diametro} onChange={atualizar("diametro")} placeholder="0,00" /></TableCell>
+                            <TableCell><Input aria-label={`Comprimento ${indice + 1}`} inputMode="decimal" value={item.comprimento} onChange={atualizar("comprimento")} placeholder="0,00" /></TableCell>
+                            <TableCell><Input aria-label={`Preço por metro cúbico ${indice + 1}`} inputMode="decimal" value={item.valorMetroCubico} onChange={atualizar("valorMetroCubico")} onKeyDown={evento => { if (evento.key === "Enter" && indice === carga.plaquetas.length - 1) { evento.preventDefault(); adicionarPlaqueta(); } }} placeholder="900,00" /></TableCell>
+                            <TableCell className="text-right text-sm font-medium tabular-nums">{formatarNumero(volume)} m³</TableCell>
+                            <TableCell className="text-right text-sm font-semibold tabular-nums text-emerald-700">{formatarMoeda(valor)}</TableCell>
+                            <TableCell><Input aria-label={`Observação da tora ${indice + 1}`} value={item.observacoes} onChange={atualizar("observacoes")} placeholder="Opcional" /></TableCell>
+                            <TableCell><Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" disabled={carga.plaquetas.length === 1} onClick={() => removerPlaqueta(indice)} aria-label={`Remover plaqueta ${indice + 1}`}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                          </TableRow>;
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </section>
                 <Button
                   type="button"
                   variant="outline"

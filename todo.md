@@ -557,3 +557,8 @@
 - [x] Implementar atualização em lote de contas a pagar e receber com validação por título e auditoria
 - [x] Adicionar seleção múltipla e diálogo de edição em lote nas listas financeiras
 - [x] Cobrir edição em lote com testes de regras e validação visual
+- [x] Mapear os campos e atalhos do romaneio de carga para a nova grade de entrada sequencial
+- [x] Transformar a inclusão de toras do romaneio em grade estilo planilha dentro do sistema
+- [x] Calcular automaticamente volumes, valores e totais enquanto as linhas são preenchidas
+- [x] Reaproveitar os dados da linha anterior e permitir adição rápida de muitas toras por teclado
+- [x] Cobrir a grade de romaneio com testes e validação visual desktop e móvel

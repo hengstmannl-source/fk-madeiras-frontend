@@ -139,9 +139,9 @@ describe("EstoquePage", () => {
     expect(screen.getAllByRole("button", { name: "Novo romaneio de carga" })).toHaveLength(1);
     await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
     await user.type(screen.getByPlaceholderText("PLQ-001"), "TOR-0100");
-    await user.type(screen.getByPlaceholderText("Ex.: Cedrinho"), "Piqui");
-    await user.type(screen.getByRole("textbox", { name: "Diâmetro (cm)" }), "20");
-    await user.type(screen.getByRole("textbox", { name: "Comprimento (m)" }), "10");
+    await user.type(screen.getByLabelText("Essência 1"), "Piqui");
+    await user.type(screen.getByRole("textbox", { name: "Diâmetro 1" }), "20");
+    await user.type(screen.getByRole("textbox", { name: "Comprimento 1" }), "10");
     await user.type(screen.getByPlaceholderText("900,00"), "900");
     const frete = screen.getByRole("textbox", { name: "Frete por m³ (R$)" });
     await user.clear(frete);
@@ -158,8 +158,25 @@ describe("EstoquePage", () => {
     expect(screen.getByRole("combobox", { name: "Fornecedor da carga" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Adicionar plaqueta" }));
     expect(screen.getAllByPlaceholderText("PLQ-001")).toHaveLength(2);
-    expect(screen.getAllByPlaceholderText("Ex.: Cedrinho")[1]).toHaveValue("Piqui");
+    expect(screen.getByLabelText("Essência 2")).toHaveValue("Piqui");
     expect(screen.getAllByPlaceholderText("900,00")[1]).toHaveValue("900");
+  });
+
+  it("oferece uma grade de romaneio e cria a próxima linha pelo teclado mantendo essência e preço", async () => {
+    const user = userEvent.setup();
+    render(<EstoquePage />);
+    await user.click(screen.getByRole("button", { name: "Novo romaneio de carga" }));
+
+    expect(screen.getByRole("columnheader", { name: "Plaqueta" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Volume" })).toBeInTheDocument();
+    await user.type(screen.getByLabelText("Essência 1"), "Garapeira");
+    const preco = screen.getByLabelText("Preço por metro cúbico 1");
+    await user.type(preco, "850");
+    await user.type(preco, "{Enter}");
+
+    expect(screen.getByLabelText("Plaqueta 2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Essência 2")).toHaveValue("Garapeira");
+    expect(screen.getByLabelText("Preço por metro cúbico 2")).toHaveValue("850");
   });
 
   it("envia fornecedor e vencimento para a conta a pagar automática da carga", async () => {
@@ -172,9 +189,9 @@ describe("EstoquePage", () => {
     await user.click(screen.getByRole("combobox", { name: "Fornecedor da carga" }));
     await user.click(screen.getByText("Madeiras Norte"));
     await user.type(screen.getByPlaceholderText("PLQ-001"), "TOR-0200");
-    await user.type(screen.getByPlaceholderText("Ex.: Cedrinho"), "Cumaru");
-    await user.type(screen.getByRole("textbox", { name: "Diâmetro (cm)" }), "25");
-    await user.type(screen.getByRole("textbox", { name: "Comprimento (m)" }), "6");
+    await user.type(screen.getByLabelText("Essência 1"), "Cumaru");
+    await user.type(screen.getByRole("textbox", { name: "Diâmetro 1" }), "25");
+    await user.type(screen.getByRole("textbox", { name: "Comprimento 1" }), "6");
     await user.type(screen.getByPlaceholderText("900,00"), "900");
     await user.click(screen.getByRole("button", { name: "Confirmar entrada" }));
     expect(criarCargaMutate).toHaveBeenCalledWith(expect.objectContaining({ dataVencimento: "2026-09-10", fornecedorId: 7 }), expect.any(Object));
