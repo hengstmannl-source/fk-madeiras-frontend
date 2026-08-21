@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
 import { alocarPecasParaEntrega, alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularValorTora, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarSerragemTerceiros } from "./producao.logic";
+import { assinaturaComposicaoRomaneioProducao } from "@shared/romaneioCabecalho";
 
 describe("regras de produção", () => {
+  it("identifica uma edição exclusiva de cabeçalho sem alterar a composição do romaneio", () => {
+    const original = assinaturaComposicaoRomaneioProducao({
+      itens: [{ madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidade: "10" }],
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.100000" }],
+      incluirAproveitamentoNoRendimento: false,
+    });
+    expect(assinaturaComposicaoRomaneioProducao({
+      itens: [{ madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidade: "10" }],
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.100000" }],
+      incluirAproveitamentoNoRendimento: false,
+    })).toBe(original);
+    expect(assinaturaComposicaoRomaneioProducao({
+      itens: [{ madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidade: "11" }],
+      aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0.100000" }],
+      incluirAproveitamentoNoRendimento: false,
+    })).not.toBe(original);
+  });
   it("converte bitolas legadas de venda de milímetros para centímetros antes da baixa", () => {
     const itemConvertido = converterDimensoesVendaParaEstoque({ id: 1, madeiraNome: "Cedrinho", espessura: "23", largura: "50", comprimento: "3", quantidade: 32 });
     expect(itemConvertido).toMatchObject({

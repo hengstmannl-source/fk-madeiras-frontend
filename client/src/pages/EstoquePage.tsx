@@ -526,7 +526,8 @@ export default function EstoquePage() {
   const plaquetasVisiveis = plaquetas.data?.itens ?? [];
   const torasDisponiveis = plaquetas.data?.totalDisponiveis ?? 0;
   const podeExcluirRomaneio = user?.role === "admin";
-  const salvando = criarCarga.isPending || atualizarCarga.isPending;
+  const edicaoSomenteCabecalhoCarga = Boolean(cargaEmEdicao && detalheCarga.data?.plaquetas.some((plaqueta: any) => plaqueta.estado !== "disponivel"));
+  const salvando = criarCarga.isPending || atualizarCarga.isPending || atualizarCabecalhoCargasLote.isPending;
   const excluindo = excluirCarga.isPending;
   const redefinirCarga = () => {
     carregouEdicao.current = null;
@@ -706,6 +707,31 @@ export default function EstoquePage() {
         utils.producao.cargas.get.invalidate({ id: cargaEmEdicao });
     };
     const erro = (motivo: { message: string }) => toast.error(motivo.message);
+    if (cargaEmEdicao && edicaoSomenteCabecalhoCarga) {
+      atualizarCabecalhoCargasLote.mutate(
+        {
+          ids: [cargaEmEdicao],
+          dataCarga: entrada.dataCarga,
+          dataVencimento: entrada.dataVencimento,
+          origem: entrada.origem,
+          fornecedorId: entrada.fornecedorId,
+          responsavel: entrada.responsavel,
+          observacoes: entrada.observacoes,
+          fretePorMetroCubico: entrada.fretePorMetroCubico,
+        },
+        {
+          onSuccess: () => {
+            toast.success("Cabeçalho atualizado sem alterar as toras já utilizadas.");
+            fecharDialogo();
+            utils.producao.cargas.list.invalidate();
+            utils.producao.plaquetas.list.invalidate();
+            utils.producao.cargas.get.invalidate({ id: cargaEmEdicao });
+          },
+          onError: erro,
+        }
+      );
+      return;
+    }
     if (cargaEmEdicao)
       atualizarCarga.mutate(
         { id: cargaEmEdicao, ...entrada },
@@ -1420,6 +1446,7 @@ export default function EstoquePage() {
                     <div>
                       <h3 className="text-sm font-semibold">Toras da carga</h3>
                       <p className="text-xs text-muted-foreground">Preencha como uma planilha. A nova linha aproveita essência e preço da anterior; pressione Enter no último preço para incluir outra tora.</p>
+                      {edicaoSomenteCabecalhoCarga && <p className="mt-1 text-xs font-medium text-amber-700">As toras já foram utilizadas. Nesta edição, apenas os dados do cabeçalho podem ser alterados.</p>}
                     </div>
                     <Badge variant="outline" className="w-fit">{carga.plaquetas.length} linha(s)</Badge>
                   </div>
@@ -1448,17 +1475,17 @@ export default function EstoquePage() {
                           return <TableRow key={indice} className={codigoRepetido ? "bg-amber-50/70 hover:bg-amber-50" : "hover:bg-muted/30"}>
                             <TableCell className="text-center text-sm font-medium text-muted-foreground">{indice + 1}</TableCell>
                             <TableCell className="py-2 align-top">
-                              <Input ref={elemento => { referenciasPlaquetasCarga.current[indice] = elemento; }} aria-label={`Plaqueta ${indice + 1}`} value={item.codigo} onChange={atualizar("codigo")} placeholder="PLQ-001" className={codigoRepetido ? "border-amber-400" : ""} />
+                              <Input ref={elemento => { referenciasPlaquetasCarga.current[indice] = elemento; }} aria-label={`Plaqueta ${indice + 1}`} value={item.codigo} onChange={atualizar("codigo")} placeholder="PLQ-001" disabled={edicaoSomenteCabecalhoCarga} className={codigoRepetido ? "border-amber-400" : ""} />
                               {codigoRepetido && <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-700"><AlertTriangle className="h-3 w-3" />Duplicada</p>}
                             </TableCell>
-                            <TableCell><Input aria-label={`Essência ${indice + 1}`} value={item.madeiraNome} onChange={atualizar("madeiraNome")} placeholder="Cedrinho" /></TableCell>
-                            <TableCell><Input aria-label={`Diâmetro ${indice + 1}`} inputMode="decimal" value={item.diametro} onChange={atualizar("diametro")} placeholder="0,00" /></TableCell>
-                            <TableCell><Input aria-label={`Comprimento ${indice + 1}`} inputMode="decimal" value={item.comprimento} onChange={atualizar("comprimento")} placeholder="0,00" /></TableCell>
-                            <TableCell><Input aria-label={`Preço por metro cúbico ${indice + 1}`} inputMode="decimal" value={item.valorMetroCubico} onChange={atualizar("valorMetroCubico")} onKeyDown={evento => { if (evento.key === "Enter" && indice === carga.plaquetas.length - 1) { evento.preventDefault(); adicionarPlaqueta(true); } }} placeholder="900,00" /></TableCell>
+                            <TableCell><Input aria-label={`Essência ${indice + 1}`} value={item.madeiraNome} onChange={atualizar("madeiraNome")} placeholder="Cedrinho" disabled={edicaoSomenteCabecalhoCarga} /></TableCell>
+                            <TableCell><Input aria-label={`Diâmetro ${indice + 1}`} inputMode="decimal" value={item.diametro} onChange={atualizar("diametro")} placeholder="0,00" disabled={edicaoSomenteCabecalhoCarga} /></TableCell>
+                            <TableCell><Input aria-label={`Comprimento ${indice + 1}`} inputMode="decimal" value={item.comprimento} onChange={atualizar("comprimento")} placeholder="0,00" disabled={edicaoSomenteCabecalhoCarga} /></TableCell>
+                            <TableCell><Input aria-label={`Preço por metro cúbico ${indice + 1}`} inputMode="decimal" value={item.valorMetroCubico} onChange={atualizar("valorMetroCubico")} onKeyDown={evento => { if (evento.key === "Enter" && indice === carga.plaquetas.length - 1) { evento.preventDefault(); adicionarPlaqueta(true); } }} placeholder="900,00" disabled={edicaoSomenteCabecalhoCarga} /></TableCell>
                             <TableCell className="text-right text-sm font-medium tabular-nums">{formatarNumero(volume)} m³</TableCell>
                             <TableCell className="text-right text-sm font-semibold tabular-nums text-emerald-700">{formatarMoeda(valor)}</TableCell>
-                            <TableCell><Input aria-label={`Observação da tora ${indice + 1}`} value={item.observacoes} onChange={atualizar("observacoes")} placeholder="Opcional" /></TableCell>
-                            <TableCell><Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" disabled={carga.plaquetas.length === 1} onClick={() => removerPlaqueta(indice)} aria-label={`Remover plaqueta ${indice + 1}`}><Trash2 className="h-4 w-4" /></Button></TableCell>
+                            <TableCell><Input aria-label={`Observação da tora ${indice + 1}`} value={item.observacoes} onChange={atualizar("observacoes")} placeholder="Opcional" disabled={edicaoSomenteCabecalhoCarga} /></TableCell>
+                            <TableCell><Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground" disabled={edicaoSomenteCabecalhoCarga || carga.plaquetas.length === 1} onClick={() => removerPlaqueta(indice)} aria-label={`Remover plaqueta ${indice + 1}`}><Trash2 className="h-4 w-4" /></Button></TableCell>
                           </TableRow>;
                         })}
                       </TableBody>
@@ -1469,6 +1496,7 @@ export default function EstoquePage() {
                   type="button"
                   variant="outline"
                   onClick={() => adicionarPlaqueta()}
+                  disabled={edicaoSomenteCabecalhoCarga}
                 >
                   <Plus className="mr-2 h-4 w-4" />
                   Adicionar plaqueta

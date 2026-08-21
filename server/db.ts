@@ -559,7 +559,7 @@ function normalizarTextoCabecalho(valor: string | null | undefined) {
 
 export async function atualizarCabecalhoCargasEmLote(data: {
   ids: number[]; dataCarga?: Date; dataVencimento?: Date; origem?: string | null; fornecedorId?: number | null;
-  responsavel?: string | null; observacoes?: string | null; empresaId: number;
+  responsavel?: string | null; observacoes?: string | null; fretePorMetroCubico?: string | number; empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -576,7 +576,10 @@ export async function atualizarCabecalhoCargasEmLote(data: {
       const dataVencimento = data.dataVencimento ?? carga.dataVencimento;
       if (dataVencimento < dataCarga) throw new Error(`O vencimento não pode ser anterior à data da carga ${carga.numero}`);
       const titulo = carga.tituloFinanceiroId ? (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, carga.tituloFinanceiroId), eq(titulosFinanceiros.empresaId, data.empresaId))).limit(1))[0] : null;
-      const alteraFinanceiro = data.dataCarga !== undefined || data.dataVencimento !== undefined || data.fornecedorId !== undefined;
+      const fretePorMetroCubico = data.fretePorMetroCubico === undefined ? decimalParaNumero(carga.fretePorMetroCubico) : normalizarFreteCarga(String(data.fretePorMetroCubico));
+      const frete = Number((decimalParaNumero(carga.volumeTotal) * fretePorMetroCubico).toFixed(2));
+      const valorTotal = Number((decimalParaNumero(carga.valorProdutos) + frete).toFixed(2));
+      const alteraFinanceiro = data.dataCarga !== undefined || data.dataVencimento !== undefined || data.fornecedorId !== undefined || data.fretePorMetroCubico !== undefined;
       if (titulo && alteraFinanceiro && (decimalParaNumero(titulo.valorBaixado) > 0 || titulo.estado === "quitado" || titulo.estado === "cancelado")) throw new Error(`A carga ${carga.numero} possui conta financeira movimentada e não pode ser alterada em lote`);
       const cabecalho: any = {};
       if (data.dataCarga) cabecalho.dataCarga = dataCarga;
@@ -585,12 +588,18 @@ export async function atualizarCabecalhoCargasEmLote(data: {
       if (data.fornecedorId !== undefined) cabecalho.fornecedorId = data.fornecedorId;
       if (data.responsavel !== undefined) cabecalho.responsavel = normalizarTextoCabecalho(data.responsavel);
       if (data.observacoes !== undefined) cabecalho.observacoes = normalizarTextoCabecalho(data.observacoes);
+      if (data.fretePorMetroCubico !== undefined) {
+        cabecalho.fretePorMetroCubico = fretePorMetroCubico.toFixed(2);
+        cabecalho.frete = frete.toFixed(2);
+        cabecalho.valorTotal = valorTotal.toFixed(2);
+      }
       await tx.update(romaneiosCargaToras).set(cabecalho).where(eq(romaneiosCargaToras.id, carga.id));
       if (titulo && alteraFinanceiro) await tx.update(titulosFinanceiros).set({
         fornecedorId: data.fornecedorId === undefined ? titulo.fornecedorId : data.fornecedorId,
         contraparteNome: data.fornecedorId === undefined ? titulo.contraparteNome : fornecedorNovo?.nome ?? carga.origem,
         dataEmissao: dataCarga, competencia: dataCarga, dataVencimento,
-        estado: calcularEstadoTitulo({ valorOriginal: titulo.valorOriginal, dataVencimento }),
+        valorOriginal: data.fretePorMetroCubico === undefined ? titulo.valorOriginal : valorTotal.toFixed(2),
+        estado: calcularEstadoTitulo({ valorOriginal: data.fretePorMetroCubico === undefined ? titulo.valorOriginal : valorTotal.toFixed(2), dataVencimento }),
       }).where(eq(titulosFinanceiros.id, titulo.id));
     }
     return { atualizados: cargas.length };

@@ -639,6 +639,11 @@
 - [x] Padronizar a numeração sequencial futura dos romaneios de entrada, preservando os documentos históricos
 - [x] Padronizar a numeração sequencial futura das vendas, preservando os documentos históricos
 - [x] Cobrir o reprocessamento e as novas numerações com testes e validação visual
+- [x] Mapear bloqueios de edição e campos de cabeçalho dos romaneios de entrada e produção
+- [x] Permitir editar fornecedor, datas e frete de romaneios de entrada após uso das toras
+- [x] Permitir editar fornecedor e datas de romaneios de produção após consumo das toras
+- [x] Preservar plaquetas, peças, saldos e movimentações ao editar somente o cabeçalho
+- [x] Cobrir permissões de edição de cabeçalhos com testes e validação visual
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

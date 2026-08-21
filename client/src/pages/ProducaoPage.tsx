@@ -2,6 +2,7 @@ import {
   cloneElement,
   isValidElement,
   useMemo,
+  useRef,
   useState,
   type ReactElement,
   type ReactNode,
@@ -58,6 +59,7 @@ import {
   calcularAproveitamentoPorEssencia,
   type VolumePorEssencia,
 } from "@shared/aproveitamentoPorEssencia";
+import { assinaturaComposicaoRomaneioProducao } from "@shared/romaneioCabecalho";
 
 type ItemForm = {
   madeiraNome: string;
@@ -412,6 +414,7 @@ export default function ProducaoPage() {
   const [romaneioEmEdicaoId, setRomaneioEmEdicaoId] = useState<number | null>(
     null
   );
+  const assinaturaComposicaoOriginal = useRef<string | null>(null);
   const [romaneioParaExcluir, setRomaneioParaExcluir] = useState<{
     id: number;
     numero: string;
@@ -723,6 +726,18 @@ export default function ProducaoPage() {
         comprimento: String(item.comprimento ?? ""),
         quantidade: String(item.quantidade ?? ""),
       }));
+      const aproveitamentos = (detalhe.aproveitamentos ?? []).map((item: any) => ({
+        madeiraNome: String(item.madeiraNome ?? ""),
+        volume: String(item.volume ?? ""),
+      }));
+      const incluirAproveitamentoNoRendimento = Boolean(
+        detalhe.romaneio.incluirAproveitamentoNoRendimento
+      );
+      assinaturaComposicaoOriginal.current = assinaturaComposicaoRomaneioProducao({
+        itens,
+        aproveitamentos,
+        incluirAproveitamentoNoRendimento,
+      });
       setRomaneio({
         toras,
         dataProducao,
@@ -730,13 +745,8 @@ export default function ProducaoPage() {
         responsavel: detalhe.romaneio.responsavel ?? "",
         observacoes: detalhe.romaneio.observacoes ?? "",
         itens,
-        aproveitamentos: (detalhe.aproveitamentos ?? []).map((item: any) => ({
-          madeiraNome: String(item.madeiraNome ?? ""),
-          volume: String(item.volume ?? ""),
-        })),
-        incluirAproveitamentoNoRendimento: Boolean(
-          detalhe.romaneio.incluirAproveitamentoNoRendimento
-        ),
+        aproveitamentos,
+        incluirAproveitamentoNoRendimento,
       });
       const ultimoItem = itens.at(-1);
       setGrupoPecas(
@@ -1173,6 +1183,36 @@ export default function ProducaoPage() {
       invalidar();
     };
     if (romaneioEmEdicaoId) {
+      const assinaturaAtual = assinaturaComposicaoRomaneioProducao({
+        itens: romaneio.itens,
+        aproveitamentos: romaneio.aproveitamentos,
+        incluirAproveitamentoNoRendimento:
+          romaneio.incluirAproveitamentoNoRendimento,
+      });
+      if (assinaturaComposicaoOriginal.current === assinaturaAtual) {
+        atualizarCabecalhoRomaneiosLote.mutate(
+          {
+            ids: [romaneioEmEdicaoId],
+            dataProducao: romaneio.dataProducao,
+            fita: romaneio.fita || null,
+            responsavel: romaneio.responsavel || null,
+            observacoes: romaneio.observacoes || null,
+          },
+          {
+            onSuccess: () => {
+              toast.success(
+                "Cabeçalho atualizado sem alterar as toras, peças ou movimentações existentes."
+              );
+              setDialogRomaneio(false);
+              setRomaneioEmEdicaoId(null);
+              assinaturaComposicaoOriginal.current = null;
+              invalidar();
+            },
+            onError: erro => toast.error(erro.message),
+          }
+        );
+        return;
+      }
       atualizarRomaneio.mutate(
         { id: romaneioEmEdicaoId, ...dadosProducao },
         {
