@@ -65,6 +65,18 @@ const AtualizarAgendamentoSchema = z.object({
   dataVencimento: DataFinanceiraSchema,
 });
 
+const AtualizarTitulosEmLoteSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1, "Selecione ao menos um lançamento").max(200, "Edite no máximo 200 lançamentos por vez"),
+  descricao: z.string().trim().min(2).max(300).optional(),
+  categoriaId: z.number().int().positive().optional(),
+  dataEmissao: DataFinanceiraSchema.optional(),
+  dataVencimento: DataFinanceiraSchema.optional(),
+  contraparteNome: z.string().trim().max(300).nullable().optional(),
+  observacoes: z.string().max(4000).nullable().optional(),
+}).refine((input) => Object.keys(input).some((chave) => chave !== "ids"), {
+  message: "Informe ao menos um campo para atualizar",
+});
+
 const FornecedorSchema = z.object({
   nome: z.string().trim().min(2).max(300),
   contacto: z.string().trim().max(100).nullable().optional(),
@@ -298,6 +310,15 @@ export const financeiroRouter = router({
         juros: dados.juros?.replace(",", "."),
         dataEmissao: dataLocal(dados.dataEmissao),
         dataVencimento: dataLocal(dados.dataVencimento),
+      }, ctx.empresaAtiva!.empresa.id);
+    }),
+
+    updateEmLote: protectedProcedure.input(AtualizarTitulosEmLoteSchema).mutation(({ ctx, input }) => {
+      const { ids, dataEmissao, dataVencimento, ...dados } = input;
+      return db.atualizarTitulosFinanceirosEmLote(ids, {
+        ...dados,
+        ...(dataEmissao ? { dataEmissao: dataLocal(dataEmissao) } : {}),
+        ...(dataVencimento ? { dataVencimento: dataLocal(dataVencimento) } : {}),
       }, ctx.empresaAtiva!.empresa.id);
     }),
 

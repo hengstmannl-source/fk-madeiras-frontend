@@ -11,6 +11,7 @@ const state = vi.hoisted(() => ({
   anexos: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
   atualizar: vi.fn(),
+  atualizarLote: vi.fn(),
   atualizarAgendamento: vi.fn(),
   estornar: vi.fn(),
   importar: vi.fn(),
@@ -67,6 +68,15 @@ vi.mock("@/lib/trpc", () => {
               mutate: (input: Record<string, unknown>, callbacks: { onSuccess?: () => void }) => {
                 state.atualizar(input);
                 callbacks.onSuccess?.();
+              },
+            }),
+          },
+          updateEmLote: {
+            useMutation: () => ({
+              isPending: false,
+              mutate: (input: Record<string, unknown>, callbacks: { onSuccess?: (resultado: { atualizados: number }) => void }) => {
+                state.atualizarLote(input);
+                callbacks.onSuccess?.({ atualizados: (input.ids as number[]).length });
               },
             }),
           },
@@ -136,6 +146,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
   beforeEach(() => {
     state.search = "";
     state.cancelar.mockReset();
+    state.atualizarLote.mockReset();
     state.atualizarAgendamento.mockReset();
     state.estornar.mockReset();
     state.importar.mockReset();
@@ -440,5 +451,17 @@ describe("FinanceiroPage — cancelamento manual", () => {
     });
     expect(await screen.findByLabelText("Pré-visualização: Relatório financeiro")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Confirmar download" })).toBeInTheDocument();
+  });
+
+  it("seleciona títulos e envia uma alteração parcial em lote", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+    fireEvent.click(screen.getAllByRole("button", { name: /contas a receber/i }).at(-1)!);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar Recebimento para cancelar" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar Recebimento preservado" }));
+    fireEvent.click(screen.getByRole("button", { name: /editar 2 em lote/i }));
+    await user.type(screen.getByLabelText("Descrição"), "Recebimento revisado");
+    fireEvent.click(screen.getByRole("button", { name: /salvar alterações em lote/i }));
+    expect(state.atualizarLote).toHaveBeenCalledWith(expect.objectContaining({ ids: [10, 11], descricao: "Recebimento revisado" }));
   });
 });

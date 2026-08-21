@@ -553,3 +553,7 @@
 - [x] Recriar custos, encargos e competências apenas como planejamento interno, sem obrigações oficiais
 - [x] Preservar dados existentes em estruturas históricas, sem os reutilizar na nova experiência visual
 - [x] Validar a substituição completa do RH com testes, migração não destrutiva e revisão visual
+- [x] Mapear os campos editáveis em lote e os bloqueios de títulos financeiros baixados ou conciliados
+- [x] Implementar atualização em lote de contas a pagar e receber com validação por título e auditoria
+- [x] Adicionar seleção múltipla e diálogo de edição em lote nas listas financeiras
+- [x] Cobrir edição em lote com testes de regras e validação visual

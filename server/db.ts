@@ -2128,6 +2128,42 @@ export async function atualizarTituloFinanceiro(
   return { success: true, estado };
 }
 
+export async function atualizarTitulosFinanceirosEmLote(
+  ids: number[],
+  dados: {
+    descricao?: string;
+    categoriaId?: number;
+    dataEmissao?: Date;
+    dataVencimento?: Date;
+    contraparteNome?: string | null;
+    observacoes?: string | null;
+  },
+  empresaId = 1,
+) {
+  const unicos = Array.from(new Set(ids));
+  if (!unicos.length) throw new Error("Selecione pelo menos um lançamento");
+  const titulos = await Promise.all(unicos.map((id) => getTituloFinanceiroById(id, empresaId)));
+  if (titulos.some((titulo) => !titulo)) throw new Error("Um dos lançamentos selecionados não foi encontrado");
+
+  // A atualização individual é reutilizada intencionalmente: ela impede edição de
+  // título conciliado, mantém valores/baixas e recalcula o estado de cada título.
+  await Promise.all(titulos.map((titulo: any) => atualizarTituloFinanceiro(titulo.id, {
+    tipo: titulo.tipo,
+    descricao: dados.descricao ?? titulo.descricao,
+    categoriaId: dados.categoriaId ?? titulo.categoriaId,
+    valorOriginal: titulo.valorOriginal,
+    dataEmissao: dados.dataEmissao ?? titulo.dataEmissao,
+    dataVencimento: dados.dataVencimento ?? titulo.dataVencimento,
+    clienteId: titulo.clienteId,
+    fornecedorId: titulo.fornecedorId,
+    contraparteNome: dados.contraparteNome === undefined ? titulo.contraparteNome : dados.contraparteNome,
+    desconto: titulo.desconto ?? "0",
+    juros: titulo.juros ?? "0",
+    observacoes: dados.observacoes === undefined ? titulo.observacoes : dados.observacoes,
+  }, empresaId)));
+  return { success: true, atualizados: unicos.length };
+}
+
 export async function excluirTituloFinanceiro(id: number, userId: number, empresaId = 1) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
