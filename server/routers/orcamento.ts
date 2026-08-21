@@ -62,6 +62,14 @@ export const AproveitamentoVendaSchema = BaixaAproveitamentoSchema.extend({
     .refine((valor) => Number(valor) >= 0, "Informe um preço por m³ válido"),
 });
 
+export const TaxaAdicionalVendaSchema = z.object({
+  descricao: z.string().trim().min(2, "Informe a descrição da taxa").max(120),
+  tipo: z.enum(["percentual", "fixo"]),
+  valor: z.string().trim().min(1, "Informe o valor da taxa")
+    .transform((valor) => valor.replace(",", "."))
+    .refine((valor) => Number.isFinite(Number(valor)) && Number(valor) >= 0, "Informe um valor de taxa válido"),
+});
+
 export const RegistroEntregaFisicaSchema = z.object({
   id: z.number().int().positive(),
   entregueEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida"),
@@ -144,6 +152,9 @@ export const orcamentoRouter = router({
   resumoFilas: protectedProcedure
     .query(({ ctx }) => db.getResumoFilasVendas(ctx.empresaAtiva!.empresa.id)),
 
+  relatorioMargem: protectedProcedure
+    .query(({ ctx }) => db.getRelatorioMargemVendas(ctx.empresaAtiva!.empresa.id)),
+
   get: protectedProcedure
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
@@ -167,6 +178,7 @@ export const orcamentoRouter = router({
       taxaTipo: z.enum(["percentual", "fixo"]).default("percentual"),
       taxaValor: z.string().default("0"),
       taxaCalculada: z.string().default("0"),
+      taxasAdicionais: z.array(TaxaAdicionalVendaSchema).max(20).default([]),
       subtotal: z.string(),
       total: z.string(),
       totalPecas: z.number(),
@@ -188,6 +200,12 @@ export const orcamentoRouter = router({
           ? item.componentesPacote.reduce((total, componente) => total + componente.quantidade, 0)
           : item.tipoComercializacao === "unidade" ? 1 : 0,
       }));
+      const baseAposFrete = Number(input.baseAposFrete.replace(",", ".")) || 0;
+      const taxasAdicionais = input.taxasAdicionais.map((taxa, ordem) => {
+        const valor = Number(taxa.valor);
+        const calculado = taxa.tipo === "percentual" ? baseAposFrete * valor / 100 : valor;
+        return { ...taxa, calculado: calculado.toFixed(2), ordem };
+      });
       const orcamento = await db.createOrcamento(
         {
           numero: null,
@@ -220,6 +238,7 @@ export const orcamentoRouter = router({
         },
         itensComComposicaoNormalizada,
         input.aproveitamentos,
+        taxasAdicionais,
       );
       if (input.estado === "aprovado") {
         await db.updateOrcamentoEstado(orcamento.id, "aprovado", ctx.user.id);

@@ -327,21 +327,61 @@ export async function registerPdfRoutes(app: any) {
         }
       }
 
-      layout.garantirEspaco(126);
+      const taxasAdicionais = (data.taxasAdicionais?.length ?? 0) > 0
+        ? data.taxasAdicionais
+        : (normalizarTexto(data.orcamento.taxaDescricao) ? [{
+          descricao: data.orcamento.taxaDescricao,
+          tipo: data.orcamento.taxaTipo,
+          valor: data.orcamento.taxaValor,
+          calculado: data.orcamento.taxaCalculada,
+        }] : []);
+      const possuiAcertoComercial = Number(data.orcamento.abatimentoFrete ?? 0) > 0
+        || Number(data.orcamento.comissaoCalculada ?? 0) > 0
+        || taxasAdicionais.length > 0;
+      const alturaResumo = possuiAcertoComercial ? 175 + (taxasAdicionais.length * 14) : 126;
+      layout.garantirEspaco(alturaResumo);
       layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.8, color: COR_LINHA });
       layout.mover(19);
       layout.page.drawText("RESUMO", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
       layout.mover(18);
       const resumo = [
-        [`Subtotal: R$ ${formatBRL(data.orcamento.subtotal)}`, font, undefined],
+        [`Subtotal bruto: R$ ${formatBRL(data.orcamento.subtotal)}`, font, undefined],
         [`Desconto: -R$ ${formatBRL(data.orcamento.desconto)}`, font, rgb(0.7, 0.2, 0.2)],
         [`Frete: +R$ ${formatBRL(data.orcamento.frete)}`, font, undefined],
-        [`Total: R$ ${formatBRL(data.orcamento.total)}`, boldFont, COR_MARROM],
-      ] as const;
+      ];
       resumo.forEach(([texto, fonte, cor], indice) => {
-        layout.page.drawText(texto, { x: MARGEM_LATERAL, y: layout.y, size: indice === 3 ? 13 : 9.5, font: fonte, ...(cor ? { color: cor } : {}) });
-        layout.mover(indice === 3 ? 18 : 14);
+        layout.page.drawText(texto, { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: fonte, ...(cor ? { color: cor } : {}) });
+        layout.mover(14);
       });
+      if (possuiAcertoComercial) {
+        layout.mover(3);
+        layout.page.drawText("ACERTO COMERCIAL", { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: boldFont, color: COR_MARROM });
+        layout.mover(15);
+        const fretePorTonelada = Number(data.orcamento.fretePorTonelada ?? 0);
+        const pesoCarga = Number(data.orcamento.pesoCargaToneladas ?? 0);
+        const detalhesAcerto = [
+          [`Frete: R$ ${formatBRL(fretePorTonelada)}/t × ${formatMeasurement(pesoCarga)} t`, `-R$ ${formatBRL(data.orcamento.abatimentoFrete)}`],
+          ["Base após frete", `R$ ${formatBRL(data.orcamento.baseAposFrete)}`],
+          [`Comissão (${data.orcamento.comissaoTipo === "fixo" ? "valor fixo" : `${formatMeasurement(data.orcamento.comissaoValor)}%`})`, `-R$ ${formatBRL(data.orcamento.comissaoCalculada)}`],
+        ];
+        for (const [rotulo, valor] of detalhesAcerto) {
+          layout.page.drawText(rotulo, { x: MARGEM_LATERAL, y: layout.y, size: 8.7, font, color: COR_TEXTO_SECUNDARIO });
+          layout.page.drawText(valor, { x: width - MARGEM_LATERAL - larguraTexto(boldFont, valor, 8.7), y: layout.y, size: 8.7, font: boldFont });
+          layout.mover(13);
+        }
+        for (const taxa of taxasAdicionais) {
+          const tipo = taxa.tipo === "fixo" ? "valor fixo" : `${formatMeasurement(taxa.valor)}%`;
+          const rotulo = `Taxa · ${normalizarTexto(taxa.descricao)} (${tipo})`;
+          const valor = `-R$ ${formatBRL(taxa.calculado)}`;
+          desenharTextoAjustado(layout.page, font, rotulo, MARGEM_LATERAL, layout.y, width - (MARGEM_LATERAL * 2) - 105, 8.7, { color: COR_TEXTO_SECUNDARIO });
+          layout.page.drawText(valor, { x: width - MARGEM_LATERAL - larguraTexto(boldFont, valor, 8.7), y: layout.y, size: 8.7, font: boldFont });
+          layout.mover(13);
+        }
+      }
+      layout.mover(4);
+      const totalTexto = `Valor final: R$ ${formatBRL(data.orcamento.total)}`;
+      layout.page.drawText(totalTexto, { x: MARGEM_LATERAL, y: layout.y, size: 13, font: boldFont, color: COR_MARROM });
+      layout.mover(19);
       layout.page.drawText(`Total de itens: ${data.orcamento.totalPecas}`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });
       layout.mover(12);
       layout.page.drawText(`Total em metros lineares: ${formatMeasurement(data.orcamento.totalMetroLinear)} m`, { x: MARGEM_LATERAL, y: layout.y, size: 8.5, font, color: COR_CINZA_CLARO });

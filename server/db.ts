@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
-  orcamentos, itensOrcamento, componentesPacoteOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
+  orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
@@ -19,6 +19,7 @@ import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fo
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarRetiradaSerragemTerceiros, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
+import { calcularIndicadoresMargemVenda } from "./margemVendas.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, criarModeloCsvTorasSerragemTerceiros, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasSerragemTerceiros } from "./producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
@@ -665,6 +666,52 @@ export async function getResumoFilasVendas(empresaId = 1): Promise<Record<Catego
   return resumo;
 }
 
+/** Retorna vendas aprovadas com todos os abatimentos comerciais já consolidados. */
+export async function getRelatorioMargemVendas(empresaId = 1) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const vendas = await db.select().from(orcamentos)
+    .where(and(eq(orcamentos.empresaId, empresaId), eq(orcamentos.estado, "aprovado")))
+    .orderBy(desc(orcamentos.createdAt));
+  if (!vendas.length) return [];
+
+  const [clientesEmpresa, taxasPersistidas] = await Promise.all([
+    db.select({ id: clientes.id, nome: clientes.nome }).from(clientes).where(eq(clientes.empresaId, empresaId)),
+    db.select().from(taxasAdicionaisOrcamento)
+      .where(and(eq(taxasAdicionaisOrcamento.empresaId, empresaId), inArray(taxasAdicionaisOrcamento.orcamentoId, vendas.map((venda) => venda.id))))
+      .orderBy(asc(taxasAdicionaisOrcamento.ordem), asc(taxasAdicionaisOrcamento.id)),
+  ]);
+  const clientesPorId = new Map(clientesEmpresa.map((cliente) => [cliente.id, cliente.nome]));
+  const taxasPorVenda = new Map<number, typeof taxasPersistidas>();
+  for (const taxa of taxasPersistidas) taxasPorVenda.set(taxa.orcamentoId, [...(taxasPorVenda.get(taxa.orcamentoId) ?? []), taxa]);
+
+  return vendas.map((venda) => {
+    const taxasNovas = taxasPorVenda.get(venda.id) ?? [];
+    const taxas = taxasNovas.length > 0 ? taxasNovas : (venda.taxaDescricao ? [{
+      descricao: venda.taxaDescricao,
+      tipo: venda.taxaTipo,
+      valor: venda.taxaValor,
+      calculado: venda.taxaCalculada,
+    }] : []);
+    return {
+      id: venda.id,
+      numero: venda.numero,
+      clienteNome: clientesPorId.get(venda.clienteId) ?? null,
+      createdAt: venda.createdAt,
+      taxas: taxas.map((taxa) => ({ descricao: taxa.descricao, tipo: taxa.tipo, valor: taxa.valor, calculado: taxa.calculado })),
+      ...calcularIndicadoresMargemVenda({
+        subtotal: venda.subtotal,
+        desconto: venda.desconto,
+        abatimentoFrete: venda.abatimentoFrete,
+        comissaoCalculada: venda.comissaoCalculada,
+        taxas,
+        total: venda.total,
+      }),
+    };
+  });
+}
+
 export async function getOrcamentoWithItems(id: number, empresaId = 1) {
   const db = await getDb();
   if (!db) return undefined;
@@ -675,10 +722,14 @@ export async function getOrcamentoWithItems(id: number, empresaId = 1) {
     ? await db.select().from(componentesPacoteOrcamento).where(and(eq(componentesPacoteOrcamento.empresaId, empresaId), inArray(componentesPacoteOrcamento.itemOrcamentoId, itens.map((item) => item.id))))
     : [];
   const aproveitamentos = await db.select().from(aproveitamentosOrcamento).where(and(eq(aproveitamentosOrcamento.orcamentoId, id), eq(aproveitamentosOrcamento.empresaId, empresaId)));
+  const taxasAdicionais = await db.select().from(taxasAdicionaisOrcamento)
+    .where(and(eq(taxasAdicionaisOrcamento.orcamentoId, id), eq(taxasAdicionaisOrcamento.empresaId, empresaId)))
+    .orderBy(taxasAdicionaisOrcamento.ordem, taxasAdicionaisOrcamento.id);
   return {
     orcamento: orc[0],
     itens: itens.map((item) => ({ ...item, componentesPacote: componentes.filter((componente) => componente.itemOrcamentoId === item.id) })),
     aproveitamentos,
+    taxasAdicionais,
   };
 }
 
@@ -709,6 +760,7 @@ export async function createOrcamento(
   data: InsertOrcamento,
   itens: Array<Partial<InsertItemOrcamento> & { componentesPacote?: ComponenteComercialInput[] }>,
   aproveitamentos: Array<{ madeiraNome: string; volume: string; precoM3: string }> = [],
+  taxasAdicionais: Array<{ descricao: string; tipo: "percentual" | "fixo"; valor: string; calculado: string; ordem?: number }> = [],
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -765,6 +817,17 @@ export async function createOrcamento(
       };
     }));
   }
+  if (taxasAdicionais.length > 0) {
+    await db.insert(taxasAdicionaisOrcamento).values(taxasAdicionais.map((taxa, indice) => ({
+      empresaId: data.empresaId,
+      orcamentoId: orcId,
+      descricao: taxa.descricao.trim(),
+      tipo: taxa.tipo,
+      valor: Number(taxa.valor.replace(",", ".")).toFixed(4),
+      calculado: Number(taxa.calculado.replace(",", ".")).toFixed(2),
+      ordem: taxa.ordem ?? indice,
+    })));
+  }
   if (data.criadoPor) {
     await db.insert(historicoAlteracoes).values({
       empresaId: data.empresaId,
@@ -805,6 +868,7 @@ export async function deleteOrcamento(id: number, confirmacaoDupla = false, user
   if (!db) throw new Error("Database not available");
   await validarAlteracaoOrcamento(id, confirmacaoDupla);
   if (userId) await cancelarRecebivelDeVendaExcluida(id, userId, db);
+  await db.delete(taxasAdicionaisOrcamento).where(eq(taxasAdicionaisOrcamento.orcamentoId, id));
   await db.delete(itensOrcamento).where(eq(itensOrcamento.orcamentoId, id));
   await db.delete(orcamentos).where(eq(orcamentos.id, id));
   return { success: true };
@@ -902,6 +966,17 @@ export async function duplicateOrcamento(id: number) {
     estado: "rascunho",
     desconto: orcamento.desconto,
     frete: orcamento.frete,
+    fretePorTonelada: orcamento.fretePorTonelada,
+    pesoCargaToneladas: orcamento.pesoCargaToneladas,
+    abatimentoFrete: orcamento.abatimentoFrete,
+    baseAposFrete: orcamento.baseAposFrete,
+    comissaoTipo: orcamento.comissaoTipo,
+    comissaoValor: orcamento.comissaoValor,
+    comissaoCalculada: orcamento.comissaoCalculada,
+    taxaDescricao: orcamento.taxaDescricao,
+    taxaTipo: orcamento.taxaTipo,
+    taxaValor: orcamento.taxaValor,
+    taxaCalculada: orcamento.taxaCalculada,
     subtotal: orcamento.subtotal,
     total: orcamento.total,
     totalPecas: orcamento.totalPecas,
@@ -935,7 +1010,13 @@ export async function duplicateOrcamento(id: number) {
     valorPeca: i.valorPeca,
     valorTotal: i.valorTotal,
   }));
-  return createOrcamento(novoOrc, novosItens);
+  return createOrcamento(novoOrc, novosItens, data.aproveitamentos ?? [], (data.taxasAdicionais ?? []).map((taxa) => ({
+    descricao: taxa.descricao,
+    tipo: taxa.tipo,
+    valor: String(taxa.valor),
+    calculado: String(taxa.calculado),
+    ordem: taxa.ordem,
+  })));
 }
 
 // ─── Financeiro ───

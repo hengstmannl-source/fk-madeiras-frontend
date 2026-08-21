@@ -192,6 +192,22 @@ export const orcamentos = mysqlTable("orcamentos", {
 export type Orcamento = typeof orcamentos.$inferSelect;
 export type InsertOrcamento = typeof orcamentos.$inferInsert;
 
+/** Ajustes comerciais independentes aplicados à base da venda já descontada do frete. */
+export const taxasAdicionaisOrcamento = mysqlTable("taxasAdicionaisOrcamento", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  orcamentoId: int("orcamentoId").notNull(),
+  descricao: varchar("descricao", { length: 120 }).notNull(),
+  tipo: mysqlEnum("tipo", ["percentual", "fixo"]).notNull().default("percentual"),
+  valor: decimal("valor", { precision: 12, scale: 4 }).notNull(),
+  calculado: decimal("calculado", { precision: 12, scale: 2 }).notNull().default("0"),
+  ordem: int("ordem").notNull().default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+
+export type TaxaAdicionalOrcamento = typeof taxasAdicionaisOrcamento.$inferSelect;
+export type InsertTaxaAdicionalOrcamento = typeof taxasAdicionaisOrcamento.$inferInsert;
+
 /** Sequência imutável usada exclusivamente para numerar vendas aprovadas. */
 export const sequenciasVendas = mysqlTable("sequenciasVendas", {
   id: int("id").autoincrement().primaryKey(),

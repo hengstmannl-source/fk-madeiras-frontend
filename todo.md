@@ -574,3 +574,9 @@
 - [x] Permitir taxas em percentual ou valor fixo sobre o subtotal após o frete
 - [x] Exibir demonstrativo de acerto com bruto, frete, base pós-frete, comissão, taxas e valor final
 - [x] Cobrir cálculos de ajustes comerciais com testes e validação visual
+- [x] Mapear a persistência atual de ajustes comerciais, relatórios de vendas e geração de PDF
+- [x] Permitir cadastrar múltiplas taxas adicionais por pedido em percentual ou valor fixo
+- [x] Manter compatibilidade dos pedidos existentes com a nova estrutura de taxas
+- [x] Criar relatório de margem por venda com subtotal, frete, comissão, taxas, valor líquido e margem percentual
+- [x] Detalhar frete, comissão e todas as taxas no PDF da venda
+- [x] Cobrir múltiplas taxas, margem e PDF com testes e validação visual

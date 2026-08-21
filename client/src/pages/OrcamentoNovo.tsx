@@ -19,7 +19,7 @@ import {
 } from "@/lib/utils";
 import { criarItemVendaComercial, criarItensVendaPorMedida, criarLinhasComprimentoVazias, rotulosTipoComercializacaoVenda, type ComponentePacoteVenda, type LinhaComprimentoVenda, type TipoComercializacaoVenda } from "@/lib/vendaItemGroup";
 import { disponibilidadeEstoqueVenda, prepararModeloMedida } from "@/lib/vendaMedidas";
-import { calcularAcertoComercial } from "@/lib/acertoComercial";
+import { calcularAcertoComercial, type TaxaAdicionalComercial } from "@/lib/acertoComercial";
 import {
   Dialog,
   DialogContent,
@@ -71,9 +71,7 @@ export default function OrcamentoNovo() {
   const [pesoCargaToneladas, setPesoCargaToneladas] = useState("");
   const [comissaoTipo, setComissaoTipo] = useState<"percentual" | "fixo">("percentual");
   const [comissaoValor, setComissaoValor] = useState("0");
-  const [taxaDescricao, setTaxaDescricao] = useState("");
-  const [taxaTipo, setTaxaTipo] = useState<"percentual" | "fixo">("percentual");
-  const [taxaValor, setTaxaValor] = useState("0");
+  const [taxasAdicionais, setTaxasAdicionais] = useState<TaxaAdicionalComercial[]>([]);
   const [observacoes, setObservacoes] = useState("");
   const [vendedor, setVendedor] = useState("");
   const [dataVencimento, setDataVencimento] = useState(() => dataLocalParaInput());
@@ -131,9 +129,9 @@ export default function OrcamentoNovo() {
       subtotal += volume * precoM3;
       totalVolume += volume;
     }
-    const acerto = calcularAcertoComercial({ subtotal, desconto, fretePorTonelada: frete, pesoCargaToneladas, comissaoTipo, comissaoValor, taxaTipo, taxaValor });
+    const acerto = calcularAcertoComercial({ subtotal, desconto, fretePorTonelada: frete, pesoCargaToneladas, comissaoTipo, comissaoValor, taxas: taxasAdicionais });
     return { subtotal, totalPecas, totalMetroLinear, totalVolume, ...acerto };
-  }, [itens, aproveitamentosVenda, desconto, frete]);
+  }, [itens, aproveitamentosVenda, desconto, frete, pesoCargaToneladas, comissaoTipo, comissaoValor, taxasAdicionais]);
 
   const atualizarLinhaComprimento = (id: number, campo: "comprimento" | "quantidade", valor: string) => {
     setLinhasComprimento((linhas) => linhas.map((linha) => linha.id === id ? { ...linha, [campo]: valor } : linha));
@@ -199,6 +197,10 @@ export default function OrcamentoNovo() {
   };
 
   const removeItem = (index: number) => setItens(itens.filter((_, i) => i !== index));
+
+  const adicionarTaxaAdicional = () => setTaxasAdicionais((taxas) => [...taxas, { descricao: "", tipo: "percentual", valor: "0" }]);
+  const atualizarTaxaAdicional = (indice: number, campo: keyof TaxaAdicionalComercial, valor: string) => setTaxasAdicionais((taxas) => taxas.map((taxa, index) => index === indice ? { ...taxa, [campo]: valor } : taxa));
+  const removerTaxaAdicional = (indice: number) => setTaxasAdicionais((taxas) => taxas.filter((_, index) => index !== indice));
 
   const aproveitamentosDisponiveis = useMemo(() => (estoqueSerrado.data ?? [])
     .filter((item) => String(item.madeiraNome ?? "").toLocaleLowerCase("pt-BR").startsWith("aproveitamento de ")),
@@ -283,10 +285,9 @@ export default function OrcamentoNovo() {
       comissaoTipo,
       comissaoValor: comissaoValor || undefined,
       comissaoCalculada: String(totals.comissaoCalculada.toFixed(2)),
-      taxaDescricao: taxaDescricao.trim() || undefined,
-      taxaTipo,
-      taxaValor: taxaValor || undefined,
-      taxaCalculada: String(totals.taxaCalculada.toFixed(2)),
+      taxasAdicionais: totals.taxasCalculadas
+        .filter((taxa) => taxa.descricao.trim() || Number(taxa.valor.replace(",", ".")) > 0)
+        .map((taxa) => ({ descricao: taxa.descricao.trim(), tipo: taxa.tipo, valor: taxa.valor })),
       subtotal: String(totals.subtotal.toFixed(2)),
       total: String(totals.total.toFixed(2)),
       totalPecas: totals.totalPecas,
@@ -526,10 +527,15 @@ export default function OrcamentoNovo() {
                     <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Comissão do vendedor</Label><select aria-label="Tipo de comissão" value={comissaoTipo} onChange={(e) => setComissaoTipo(e.target.value as "percentual" | "fixo")} className="h-7 rounded border bg-white px-1 text-xs"><option value="percentual">%</option><option value="fixo">R$ fixo</option></select></div>
                     <div className="flex gap-2"><Input aria-label="Valor da comissão" type="number" value={comissaoValor} onChange={(e) => setComissaoValor(e.target.value)} placeholder={comissaoTipo === "percentual" ? "0,00 %" : "0,00"} className="h-8 bg-white text-right" /><span className="flex items-center whitespace-nowrap text-xs font-medium">− {formatCurrency(String(totals.comissaoCalculada))}</span></div>
                   </div>
-                  <div className="rounded-md border border-border/70 p-3 space-y-2">
-                    <div className="flex items-center justify-between"><Label className="text-xs font-semibold">Taxa adicional</Label><select aria-label="Tipo de taxa" value={taxaTipo} onChange={(e) => setTaxaTipo(e.target.value as "percentual" | "fixo")} className="h-7 rounded border bg-white px-1 text-xs"><option value="percentual">%</option><option value="fixo">R$ fixo</option></select></div>
-                    <Input aria-label="Descrição da taxa" value={taxaDescricao} onChange={(e) => setTaxaDescricao(e.target.value)} placeholder="Ex.: ICMS do frete" className="h-8 bg-white text-sm" />
-                    <div className="flex gap-2"><Input aria-label="Valor da taxa" type="number" value={taxaValor} onChange={(e) => setTaxaValor(e.target.value)} placeholder={taxaTipo === "percentual" ? "0,00 %" : "0,00"} className="h-8 bg-white text-right" /><span className="flex items-center whitespace-nowrap text-xs font-medium">− {formatCurrency(String(totals.taxaCalculada))}</span></div>
+                  <div className="rounded-md border border-border/70 p-3 space-y-3">
+                    <div className="flex items-center justify-between gap-3"><Label className="text-xs font-semibold">Taxas adicionais</Label><Button type="button" variant="outline" size="sm" onClick={adicionarTaxaAdicional} className="h-7 px-2 text-xs"><Plus className="mr-1 h-3.5 w-3.5" />Adicionar taxa</Button></div>
+                    {taxasAdicionais.length === 0 ? <p className="text-xs text-muted-foreground">Nenhuma taxa adicional aplicada.</p> : taxasAdicionais.map((taxa, indice) => (
+                      <div key={indice} className="rounded border border-dashed border-border/80 p-2 space-y-2">
+                        <div className="flex items-center gap-2"><Input aria-label={`Descrição da taxa ${indice + 1}`} value={taxa.descricao} onChange={(e) => atualizarTaxaAdicional(indice, "descricao", e.target.value)} placeholder="Ex.: ICMS do frete" className="h-8 bg-white text-sm" /><Button type="button" variant="ghost" size="icon" onClick={() => removerTaxaAdicional(indice)} aria-label={`Remover taxa ${indice + 1}`} className="h-8 w-8 text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button></div>
+                        <div className="flex gap-2"><select aria-label={`Tipo de taxa ${indice + 1}`} value={taxa.tipo} onChange={(e) => atualizarTaxaAdicional(indice, "tipo", e.target.value)} className="h-8 rounded border bg-white px-2 text-xs"><option value="percentual">%</option><option value="fixo">R$ fixo</option></select><Input aria-label={`Valor da taxa ${indice + 1}`} type="number" value={taxa.valor} onChange={(e) => atualizarTaxaAdicional(indice, "valor", e.target.value)} placeholder={taxa.tipo === "percentual" ? "0,00 %" : "0,00"} className="h-8 bg-white text-right" /><span className="flex items-center whitespace-nowrap text-xs font-medium">− {formatCurrency(String(totals.taxasCalculadas[indice]?.calculado ?? 0))}</span></div>
+                      </div>
+                    ))}
+                    {taxasAdicionais.length > 0 && <div className="flex justify-between text-xs"><span>Total das taxas</span><span className="font-semibold">− {formatCurrency(String(totals.taxaCalculada))}</span></div>}
                   </div>
                 </div>
                 <Separator />

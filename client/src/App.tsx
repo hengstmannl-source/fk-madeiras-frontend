@@ -13,6 +13,7 @@ import OrcamentoNovo from "./pages/OrcamentoNovo";
 import OrcamentoEdit from "./pages/OrcamentoEdit";
 import EmpresaPage from "./pages/EmpresaPage";
 import OrcamentosAprovadosPage from "./pages/OrcamentosAprovadosPage";
+import RelatorioMargemVendasPage from "./pages/RelatorioMargemVendasPage";
 import FinanceiroPage from "./pages/FinanceiroPage";
 import CaixaChequePage from "./pages/CaixaChequePage";
 import ConciliacaoBancariaPage from "./pages/ConciliacaoBancariaPage";
@@ -50,6 +51,8 @@ function Router() {
         <Route path="/orcamentos/pagas" component={OrcamentosAprovadosPage} />
         <Route path="/orcamentos/entregues" component={OrcamentosAprovadosPage} />
         <Route path="/orcamentos/concluidas" component={OrcamentosAprovadosPage} />
+        <Route path="/vendas/margem" component={RelatorioMargemVendasPage} />
+        <Route path="/orcamentos/margem" component={RelatorioMargemVendasPage} />
         <Route path="/orcamentos" component={OrcamentosPage} />
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />
         <Route path="/orcamentos/:id" component={OrcamentoEdit} />

@@ -26,4 +26,27 @@ describe("calcularAcertoComercial", () => {
     expect(acerto.baseAposFrete).toBe(8_800);
     expect(acerto.total).toBe(8_150);
   });
+
+  it("soma múltiplas taxas percentuais e fixas sobre a base após o frete", () => {
+    const acerto = calcularAcertoComercial({
+      subtotal: 54_000,
+      desconto: "0",
+      fretePorTonelada: "440",
+      pesoCargaToneladas: "22",
+      comissaoTipo: "percentual",
+      comissaoValor: "2",
+      taxas: [
+        { descricao: "ICMS do frete", tipo: "percentual", valor: "1" },
+        { descricao: "Taxa de despacho", tipo: "fixo", valor: "150" },
+      ],
+    });
+
+    expect(acerto.baseAposFrete).toBe(44_320);
+    expect(acerto.taxasCalculadas).toEqual([
+      expect.objectContaining({ descricao: "ICMS do frete", calculado: 443.2 }),
+      expect.objectContaining({ descricao: "Taxa de despacho", calculado: 150 }),
+    ]);
+    expect(acerto.taxaCalculada).toBeCloseTo(593.2);
+    expect(acerto.total).toBeCloseTo(42_840.4);
+  });
 });
