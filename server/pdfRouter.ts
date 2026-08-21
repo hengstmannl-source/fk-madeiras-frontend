@@ -327,6 +327,67 @@ export async function registerPdfRoutes(app: any) {
         }
       }
 
+      const resumoPorBitola = Array.from((data.itens ?? []).reduce((grupos: Map<string, { descricao: string; quantidadePecas: number; volume: number }>, item: any) => {
+        if ((item.tipoComercializacao ?? "metro_cubico") !== "metro_cubico") return grupos;
+        const espessura = Number(item.espessura);
+        const largura = Number(item.largura);
+        const comprimento = Number(item.comprimento);
+        const quantidade = Number(item.quantidade);
+        if (![espessura, largura, comprimento, quantidade].every(Number.isFinite) || espessura <= 0 || largura <= 0 || comprimento <= 0 || quantidade <= 0) return grupos;
+
+        const chave = `${espessura}|${largura}`;
+        const grupo = grupos.get(chave) ?? {
+          descricao: `${formatDimensionCm(espessura)} × ${formatDimensionCm(largura)} cm`,
+          quantidadePecas: 0,
+          volume: 0,
+        };
+        grupo.quantidadePecas += quantidade;
+        grupo.volume += (espessura / 1000) * (largura / 1000) * comprimento * quantidade;
+        grupos.set(chave, grupo);
+        return grupos;
+      }, new Map<string, { descricao: string; quantidadePecas: number; volume: number }>()).values()).sort((a, b) => b.volume - a.volume || a.descricao.localeCompare(b.descricao, "pt-BR"));
+      const volumeTotalPorBitola = resumoPorBitola.reduce((total, bitola) => total + bitola.volume, 0);
+
+      if (resumoPorBitola.length > 0) {
+        const desenharCabecalhoResumoBitola = (continuacao = false) => {
+          layout.garantirEspaco(43);
+          layout.page.drawLine({ start: { x: MARGEM_LATERAL, y: layout.y }, end: { x: width - MARGEM_LATERAL, y: layout.y }, thickness: 0.7, color: COR_LINHA });
+          layout.mover(18);
+          layout.page.drawText(continuacao ? "RESUMO DE PEÇAS POR BITOLA — CONTINUAÇÃO" : "RESUMO DE PEÇAS POR BITOLA", { x: MARGEM_LATERAL, y: layout.y, size: 9.5, font: boldFont, color: COR_MARROM });
+          layout.mover(15);
+          const colunasBitola = [205, 95, 112, 87];
+          const rotulosBitola = ["Bitola", "Peças", "Volume", "% do volume"];
+          let x = MARGEM_LATERAL;
+          rotulosBitola.forEach((rotulo, indice) => {
+            desenharTextoAjustado(layout.page, boldFont, rotulo, x, layout.y, colunasBitola[indice] - 4, 7.4, { color: COR_CINZA_CLARO });
+            x += colunasBitola[indice];
+          });
+          layout.mover(14);
+        };
+
+        desenharCabecalhoResumoBitola();
+        for (const bitola of resumoPorBitola) {
+          if (!layout.temEspaco(15)) {
+            layout.novaPagina(true);
+            desenharCabecalhoResumoBitola(true);
+          }
+          const percentual = volumeTotalPorBitola > 0 ? (bitola.volume / volumeTotalPorBitola) * 100 : 0;
+          const valoresBitola = [
+            bitola.descricao,
+            String(bitola.quantidadePecas),
+            `${formatMeasurement(bitola.volume)} m³`,
+            `${formatPercentage(percentual)}%`,
+          ];
+          const colunasBitola = [205, 95, 112, 87];
+          let x = MARGEM_LATERAL;
+          valoresBitola.forEach((valor, indice) => {
+            desenharTextoAjustado(layout.page, indice === 0 ? font : boldFont, valor, x, layout.y, colunasBitola[indice] - 4, 8);
+            x += colunasBitola[indice];
+          });
+          layout.mover(15);
+        }
+      }
+
       const taxasAdicionais = (data.taxasAdicionais?.length ?? 0) > 0
         ? data.taxasAdicionais
         : (normalizarTexto(data.orcamento.taxaDescricao) ? [{

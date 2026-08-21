@@ -180,6 +180,31 @@ describe("rotas de PDF protegidas", () => {
     validarAreaSeguraDoRodape();
   });
 
+  it("inclui no PDF da venda o resumo de peças e participação por bitola", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "listClientes").mockResolvedValue([{ id: 5, nome: "Cliente de Teste" }] as any);
+    vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
+      orcamento: { id: 3, numero: "VEN-000003", clienteId: 5, createdAt: new Date(), estado: "aprovado", subtotal: "1000", desconto: "0", frete: "0", total: "1000", totalPecas: 16, totalMetroLinear: "56", totalVolume: "0.06", observacoes: null },
+      itens: [
+        { madeiraNome: "Cedrinho", espessura: "20", largura: "50", comprimento: "4", quantidade: 12, tipoComercializacao: "metro_cubico", precoM3: "900", valorPeca: "36", valorTotal: "432" },
+        { madeiraNome: "Cedrinho", espessura: "30", largura: "50", comprimento: "2", quantidade: 4, tipoComercializacao: "metro_cubico", precoM3: "900", valorPeca: "27", valorTotal: "108" },
+      ],
+      taxasAdicionais: [],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/orcamento/:id"]!({ params: { id: "3" } }, res);
+
+    const textos = textosDoPdf();
+    expect(textos).toContain("RESUMO DE PEÇAS POR BITOLA");
+    expect(textos).toContain("2 × 5 cm");
+    expect(textos).toContain("3 × 5 cm");
+    expect(textos).toContain("80%");
+    expect(textos).toContain("20%");
+    validarAreaSeguraDoRodape();
+  });
+
   it("pagina toras e peças no romaneio de produção sem desenhar linhas no rodapé", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);

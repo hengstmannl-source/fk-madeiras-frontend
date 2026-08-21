@@ -595,3 +595,6 @@
 - [x] Implementar navegação Tab por coluna de comprimento e por coluna de quantidade na grade de vendas
 - [x] Exibir no final do romaneio de vendas a quantidade de peças e a porcentagem da produção por bitola
 - [x] Cobrir a grade de vendas, atalhos Tab e resumo por bitola com testes e validação visual
+- [x] Mapear a tabela de itens e o cálculo reutilizável do resumo por bitola para o PDF de venda
+- [x] Incluir no PDF da venda o resumo de peças, volume e participação percentual por bitola
+- [x] Cobrir o resumo por bitola no PDF com testes, validação de paginação e revisão visual
