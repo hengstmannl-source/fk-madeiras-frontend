@@ -59,11 +59,13 @@ vi.mock("@/lib/trpc", () => {
       cliente: { list: queryVazia, create: mutationInerte },
       financeiro: {
         titulos: {
-          list: { useQuery: (filtros?: { descricao?: string; clienteId?: number; categoriaId?: number }) => ({
+          list: { useQuery: (filtros?: { descricao?: string; clienteId?: number; categoriaId?: number; dataInicio?: Date; dataFim?: Date }) => ({
             data: !filtros ? state.titulos : state.titulos.filter((titulo) => {
               if (filtros.descricao && !`${titulo.descricao ?? ""}`.toLocaleLowerCase("pt-BR").includes(filtros.descricao.toLocaleLowerCase("pt-BR"))) return false;
               if (filtros.categoriaId && titulo.categoriaId !== filtros.categoriaId) return false;
               if (filtros.clienteId && titulo.clienteId !== filtros.clienteId) return false;
+              if (filtros.dataInicio && new Date(titulo.dataVencimento as string).getTime() < filtros.dataInicio.getTime()) return false;
+              if (filtros.dataFim && new Date(titulo.dataVencimento as string).getTime() > filtros.dataFim.getTime()) return false;
               return true;
             }),
             isLoading: false,
@@ -360,6 +362,34 @@ describe("FinanceiroPage — cancelamento manual", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas recebidas" }).at(-1)!);
     expect(screen.getByText("Receita recebida arquivada")).toBeInTheDocument();
+  });
+
+  it("aplica períodos rápidos e apresenta totais a pagar e receber do resultado pesquisado", async () => {
+    const user = userEvent.setup();
+    const agora = new Date();
+    const vencimentoHoje = agora.toISOString();
+    const vencimentoAntigo = new Date(agora.getTime() - 12 * 24 * 60 * 60 * 1000).toISOString();
+    state.titulos.push(
+      { id: 81, descricao: "Fornecedor do período", tipo: "pagar", estado: "aberto", valorOriginal: "500.00", valorBaixado: "0.00", desconto: "0.00", juros: "0.00", dataVencimento: vencimentoHoje },
+      { id: 82, descricao: "Cliente do período", tipo: "receber", estado: "aberto", valorOriginal: "1200.00", valorBaixado: "0.00", desconto: "0.00", juros: "0.00", dataVencimento: vencimentoHoje },
+      { id: 83, descricao: "Fornecedor fora do período", tipo: "pagar", estado: "aberto", valorOriginal: "900.00", valorBaixado: "0.00", desconto: "0.00", juros: "0.00", dataVencimento: vencimentoAntigo },
+    );
+    render(<FinanceiroPage />);
+
+    expect(screen.getByText("Períodos rápidos:")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Hoje" }));
+
+    expect(screen.getByText("Fornecedor do período")).toBeInTheDocument();
+    expect(screen.queryByText("Fornecedor fora do período")).not.toBeInTheDocument();
+    expect(screen.getAllByText("No resultado pesquisado")).toHaveLength(2);
+    expect(screen.getAllByText(/R\$\s*500,00/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/R\$\s*1\.200,00/).length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Últimos 7 dias" }));
+    expect(screen.getByText("Fornecedor do período")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Este mês" }));
+    await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas a receber" }).at(-1)!);
+    expect(screen.getByText("Cliente do período")).toBeInTheDocument();
   });
 
   it("permite reagendar o vencimento de uma conta vinculada ao romaneio de carga", async () => {

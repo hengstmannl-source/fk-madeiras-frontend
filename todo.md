@@ -619,6 +619,9 @@
 - [x] Exigir filtros para exibir lançamentos no Financeiro, com período, valor, cliente e categoria
 - [x] Abrir a edição do lançamento pelo clique na descrição e remover o botão de editar da lista
 - [x] Cobrir as melhorias de pesquisa e edição financeira com testes e validação visual
+- [x] Adicionar filtros rápidos de período para hoje, últimos 7 dias e este mês no Financeiro
+- [x] Exibir totais de contas a pagar e a receber calculados sobre os resultados da pesquisa financeira
+- [x] Cobrir os filtros rápidos e os totais filtrados com testes e validação visual
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela
