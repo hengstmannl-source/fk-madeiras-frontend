@@ -698,6 +698,7 @@ export async function getRelatorioMargemVendas(empresaId = 1) {
       id: venda.id,
       numero: venda.numero,
       clienteNome: clientesPorId.get(venda.clienteId) ?? null,
+      vendedor: venda.vendedor,
       createdAt: venda.createdAt,
       taxas: taxas.map((taxa) => ({ descricao: taxa.descricao, tipo: taxa.tipo, valor: taxa.valor, calculado: taxa.calculado })),
       ...calcularIndicadoresMargemVenda({

@@ -9,13 +9,14 @@ describe("calcularIndicadoresMargemVenda", () => {
       abatimentoFrete: "9680",
       comissaoCalculada: "886.4",
       taxas: [{ calculado: "1200" }, { calculado: "532.8" }],
-      total: "41700.8",
+      total: "45166.4",
     });
 
     expect(resultado.totalTaxas).toBeCloseTo(1732.8, 2);
-    expect(resultado.deducoesComerciais).toBeCloseTo(12299.2, 2);
-    expect(resultado.valorLiquido).toBeCloseTo(41700.8, 2);
-    expect(resultado.margemPercentual).toBeCloseTo(77.2237, 3);
+    expect(resultado.deducoesComerciais).toBeCloseTo(10566.4, 2);
+    expect(resultado.acrescimosComerciais).toBeCloseTo(1732.8, 2);
+    expect(resultado.valorLiquido).toBeCloseTo(45166.4, 2);
+    expect(resultado.margemPercentual).toBeCloseTo(83.6415, 3);
   });
 
   it("evita divisão inválida quando a venda não possui subtotal", () => {

@@ -8,8 +8,8 @@ function numeroSeguro(valor: string | number | null | undefined) {
 /**
  * Calcula a margem comercial líquida perante o valor bruto da venda. Como o
  * sistema não associa ainda o custo de aquisição a cada venda, este indicador
- * mede o valor que permanece depois dos descontos comerciais, e não a margem
- * contábil de lucro baseada em custo de mercadoria vendida.
+ * mede o valor final da venda após descontos e acréscimos comerciais, e não a
+ * margem contábil de lucro baseada em custo de mercadoria vendida.
  */
 export function calcularIndicadoresMargemVenda(input: {
   subtotal: string | number | null | undefined;
@@ -25,8 +25,8 @@ export function calcularIndicadoresMargemVenda(input: {
   const comissao = numeroSeguro(input.comissaoCalculada);
   const totalTaxas = input.taxas.reduce((acumulado, taxa) => acumulado + numeroSeguro(taxa.calculado), 0);
   const valorLiquido = numeroSeguro(input.total);
-  const deducoesComerciais = desconto + abatimentoFrete + comissao + totalTaxas;
+  const deducoesComerciais = desconto + abatimentoFrete + comissao;
   const margemPercentual = subtotal > 0 ? (valorLiquido / subtotal) * 100 : 0;
 
-  return { subtotal, desconto, abatimentoFrete, comissao, totalTaxas, valorLiquido, deducoesComerciais, margemPercentual };
+  return { subtotal, desconto, abatimentoFrete, comissao, totalTaxas, acrescimosComerciais: totalTaxas, valorLiquido, deducoesComerciais, margemPercentual };
 }

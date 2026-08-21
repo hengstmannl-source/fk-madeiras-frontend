@@ -580,3 +580,8 @@
 - [x] Criar relatório de margem por venda com subtotal, frete, comissão, taxas, valor líquido e margem percentual
 - [x] Detalhar frete, comissão e todas as taxas no PDF da venda
 - [x] Cobrir múltiplas taxas, margem e PDF com testes e validação visual
+- [x] Mapear os dados de vendedor e tipos de taxa disponíveis para os novos filtros de margem
+- [x] Somar as taxas adicionais ao valor final da venda e atualizar os demonstrativos correspondentes
+- [x] Adicionar filtros de vendedor e tipo de taxa ao relatório de margem por venda
+- [x] Permitir exportar o relatório de margem filtrado em PDF e Excel
+- [x] Cobrir cálculo, filtros e exportações de margem com testes e validação visual

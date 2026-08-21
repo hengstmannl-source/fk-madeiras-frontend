@@ -372,7 +372,7 @@ export async function registerPdfRoutes(app: any) {
         for (const taxa of taxasAdicionais) {
           const tipo = taxa.tipo === "fixo" ? "valor fixo" : `${formatMeasurement(taxa.valor)}%`;
           const rotulo = `Taxa · ${normalizarTexto(taxa.descricao)} (${tipo})`;
-          const valor = `-R$ ${formatBRL(taxa.calculado)}`;
+          const valor = `+R$ ${formatBRL(taxa.calculado)}`;
           desenharTextoAjustado(layout.page, font, rotulo, MARGEM_LATERAL, layout.y, width - (MARGEM_LATERAL * 2) - 105, 8.7, { color: COR_TEXTO_SECUNDARIO });
           layout.page.drawText(valor, { x: width - MARGEM_LATERAL - larguraTexto(boldFont, valor, 8.7), y: layout.y, size: 8.7, font: boldFont });
           layout.mover(13);

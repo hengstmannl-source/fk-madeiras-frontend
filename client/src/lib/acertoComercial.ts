@@ -44,6 +44,8 @@ export function calcularAcertoComercial(input: {
     comissaoCalculada,
     taxaCalculada,
     taxasCalculadas,
-    total: Math.max(0, baseAposFrete - comissaoCalculada - taxaCalculada),
+    // Taxas comerciais são cobradas do cliente como acréscimos. Comissão,
+    // desconto e frete permanecem como deduções da base da venda.
+    total: Math.max(0, baseAposFrete - comissaoCalculada + taxaCalculada),
   };
 }
