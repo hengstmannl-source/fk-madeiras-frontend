@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Plus, Pencil, Trash2, Users, Loader2, Mail, Phone, MapPin, FileSpreadsheet, Upload, Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { Link } from "wouter";
 
 type LinhaImportacao = { linha: number; nome: string; contacto: string; email: string; morada: string; nif: string; observacoes: string };
 const valorPlanilha = (linha: Record<string, unknown>, ...nomes: string[]) => {
@@ -156,7 +157,7 @@ export default function ClientesPage() {
             <TableBody>
               {clientes.data.map((c) => (
                 <TableRow key={c.id} className="hover:bg-muted/30">
-                  <TableCell className="font-medium">{c.nome}</TableCell>
+                  <TableCell><Link href={`/clientes/${c.id}`} className="font-medium text-primary transition-colors hover:text-primary/80 hover:underline">{c.nome}</Link></TableCell>
                   <TableCell><span className="flex items-center gap-1 text-sm text-muted-foreground"><Phone className="h-3 w-3" />{c.contacto || "—"}</span></TableCell>
                   <TableCell><span className="flex items-center gap-1 text-sm text-muted-foreground"><Mail className="h-3 w-3" />{c.email || "—"}</span></TableCell>
                   <TableCell>{c.nif || "—"}</TableCell>

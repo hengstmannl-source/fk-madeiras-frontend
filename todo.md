@@ -585,3 +585,8 @@
 - [x] Adicionar filtros de vendedor e tipo de taxa ao relatório de margem por venda
 - [x] Permitir exportar o relatório de margem filtrado em PDF e Excel
 - [x] Cobrir cálculo, filtros e exportações de margem com testes e validação visual
+- [x] Mapear pedidos, títulos financeiros e campos disponíveis para o cadastro individual do cliente
+- [x] Criar consulta protegida do perfil do cliente com totais, títulos em aberto e histórico de pedidos
+- [x] Criar tela de cadastro do cliente acessível ao clicar no nome da lista de clientes
+- [x] Exibir últimos pedidos, valor total comprado, títulos em aberto e histórico comercial completo
+- [x] Cobrir o perfil do cliente com testes e validação visual da navegação

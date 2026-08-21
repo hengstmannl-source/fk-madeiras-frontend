@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
+import { TRPCError } from "@trpc/server";
 
 const chaveTexto = (valor?: string | null) => String(valor ?? "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
 const chaveDocumento = (valor?: string | null) => String(valor ?? "").replace(/\D/g, "");
@@ -52,6 +53,13 @@ export const clienteRouter = router({
   listAll: protectedProcedure.query(async ({ ctx }) => {
     return db.listAllClientes(ctx.empresaAtiva!.empresa.id);
   }),
+  perfil: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const perfil = await db.getPerfilCliente(input.id, ctx.empresaAtiva!.empresa.id);
+      if (!perfil) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
+      return perfil;
+    }),
 
   create: protectedProcedure
     .input(z.object({

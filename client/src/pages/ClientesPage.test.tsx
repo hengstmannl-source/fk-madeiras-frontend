@@ -11,7 +11,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ cliente: { list: { invalidate: vi.fn() } } }),
       cliente: {
-        list: { useQuery: () => ({ data: [], isLoading: false }) },
+        list: { useQuery: () => ({ data: [{ id: 24, nome: "Cliente Perfil", contacto: null, email: null, nif: null, morada: null }], isLoading: false }) },
         create: mutation,
         update: mutation,
         delete: mutation,
@@ -29,5 +29,10 @@ describe("ClientesPage", () => {
     expect(screen.getByText(/importar clientes por planilha/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /baixar modelo csv/i })).toBeInTheDocument();
     expect(screen.getByText(/bloqueia duplicidades por nome, telefone, e-mail e cpf\/cnpj/i)).toBeInTheDocument();
+  });
+
+  it("abre o cadastro individual ao clicar no nome do cliente", () => {
+    render(<ClientesPage />);
+    expect(screen.getByRole("link", { name: "Cliente Perfil" })).toHaveAttribute("href", "/clientes/24");
   });
 });

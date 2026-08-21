@@ -20,6 +20,7 @@ import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "
 import { alocarPecasPermitindoNegativo, agruparEstoquePecas, calcularItemRomaneio, calcularVolumeToraCilindrica, converterDimensoesVendaParaEstoque, normalizarCodigoPlaqueta, validarConfirmacaoRomaneio, validarExclusaoRomaneioProducao, validarRetiradaSerragemTerceiros, validarSerragemTerceiros, type ItemProducaoEntrada } from "./producao.logic";
 import { calcularRelatorioInventarioSerrado } from "./inventario.logic";
 import { calcularIndicadoresMargemVenda } from "./margemVendas.logic";
+import { montarPerfilCliente } from "./clientePerfil.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, criarModeloCsvTorasSerragemTerceiros, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasSerragemTerceiros } from "./producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "./diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
@@ -365,6 +366,29 @@ export async function getClienteById(id: number, empresaId = 1) {
   if (!db) return undefined;
   const result = await db.select().from(clientes).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getPerfilCliente(id: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const cliente = await getClienteById(id, empresaId);
+  if (!cliente) return undefined;
+
+  const [pedidos, titulos] = await Promise.all([
+    db.select({
+      id: orcamentos.id, numero: orcamentos.numero, estado: orcamentos.estado, total: orcamentos.total,
+      pago: orcamentos.pago, entregue: orcamentos.entregue, dataVencimento: orcamentos.dataVencimento, createdAt: orcamentos.createdAt,
+    }).from(orcamentos).where(and(eq(orcamentos.empresaId, empresaId), eq(orcamentos.clienteId, id))).orderBy(desc(orcamentos.createdAt)),
+    db.select({
+      id: titulosFinanceiros.id, descricao: titulosFinanceiros.descricao, origem: titulosFinanceiros.origem,
+      orcamentoId: titulosFinanceiros.orcamentoId, valorOriginal: titulosFinanceiros.valorOriginal,
+      desconto: titulosFinanceiros.desconto, juros: titulosFinanceiros.juros, valorBaixado: titulosFinanceiros.valorBaixado,
+      dataVencimento: titulosFinanceiros.dataVencimento, estado: titulosFinanceiros.estado,
+    }).from(titulosFinanceiros).where(and(
+      eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.clienteId, id), eq(titulosFinanceiros.tipo, "receber"),
+    )).orderBy(desc(titulosFinanceiros.dataVencimento)),
+  ]);
+  return montarPerfilCliente(cliente, pedidos, titulos);
 }
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];

@@ -15,3 +15,9 @@
 - A validação do painel de aproveitamento será feita pelo diálogo de edição, sem confirmar ou alterar nenhum registro real durante a inspeção.
 - A edição do romaneio existente abriu corretamente na etapa de Peças produzidas, preservando a grade de medidas sem disparar qualquer salvamento.
 - O painel complementar permanece abaixo das linhas de comprimentos; a inspeção visual continuará somente por navegação não destrutiva.
+
+## Cadastro individual de cliente
+
+- A rota `/clientes/1` carregou o cadastro de **Elaine Konzen** com retorno funcional à lista de clientes e botão de nova venda.
+- O cabeçalho exibiu os dados cadastrais disponíveis, os quatro indicadores comerciais/financeiros e as abas de últimos pedidos, títulos em aberto e histórico de pedidos.
+- O estado vazio de pedidos foi apresentado sem sobreposição visual, com hierarquia e contraste legíveis na interface em modo claro.

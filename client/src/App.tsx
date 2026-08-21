@@ -8,6 +8,7 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import Dashboard from "./pages/Dashboard";
 import MadeirasPage from "./pages/MadeirasPage";
 import ClientesPage from "./pages/ClientesPage";
+import ClientePerfilPage from "./pages/ClientePerfilPage";
 import OrcamentosPage from "./pages/OrcamentosPage";
 import OrcamentoNovo from "./pages/OrcamentoNovo";
 import OrcamentoEdit from "./pages/OrcamentoEdit";
@@ -42,6 +43,7 @@ function Router() {
           <Switch>
         <Route path="/" component={Dashboard} />
         <Route path="/madeiras" component={MadeirasPage} />
+        <Route path="/clientes/:id" component={ClientePerfilPage} />
         <Route path="/clientes" component={ClientesPage} />
         <Route path="/vendas/aprovadas" component={OrcamentosAprovadosPage} />
         <Route path="/vendas/pagas" component={OrcamentosAprovadosPage} />
