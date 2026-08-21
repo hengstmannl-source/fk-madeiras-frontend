@@ -602,3 +602,7 @@
 - [x] Confirmar e adicionar as medidas do romaneio ao pressionar Enter
 - [x] Aceitar linhas de comprimento sem quantidade de peças e ignorá-las no cálculo de itens
 - [x] Cobrir Enter e comprimentos sem quantidade com testes e validação visual
+- [x] Mapear a tabela de itens do PDF de vendas e a grade de peças do PDF de produção diária
+- [x] Substituir no PDF da venda a listagem de peças romaneadas por uma grade de medidas e comprimentos
+- [x] Preservar o resumo final de peças e percentual por bitola após a nova grade
+- [x] Cobrir a grade do PDF de vendas com testes de conteúdo, paginação e revisão visual

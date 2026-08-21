@@ -278,52 +278,136 @@ export async function registerPdfRoutes(app: any) {
         layout.mover(10);
       }
 
-      const colunas = [111, 100, 34, 52, 69, 73, 72];
-      const labels = ["Madeira", "Medidas / tipo", "Qtd.", "Unidade", "Preço base", "Valor unit.", "Total"];
-      const desenharTabela = (continuacao = false) => {
-        layout.garantirEspaco(42);
-        layout.page.drawText(continuacao ? "ITENS DA VENDA — CONTINUAÇÃO" : "ITENS DA VENDA", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
-        layout.mover(17);
-        let x = MARGEM_LATERAL;
-        labels.forEach((label, indice) => {
-          desenharTextoAjustado(layout.page, boldFont, label, x, layout.y, colunas[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
-          x += colunas[indice];
-        });
-        layout.mover(15);
-      };
-      desenharTabela();
+      const itensRomaneados = (data.itens ?? []).filter((item: any) => {
+        if ((item.tipoComercializacao ?? "metro_cubico") !== "metro_cubico") return false;
+        const medidas = [item.espessura, item.largura, item.comprimento].map(Number);
+        return medidas.every((medida) => Number.isFinite(medida) && medida > 0);
+      });
+      const itensComerciaisAvulsos = (data.itens ?? []).filter((item: any) => !itensRomaneados.includes(item));
+      const gruposPorMadeira = Array.from(itensRomaneados.reduce((madeiras: Map<string, any>, item: any) => {
+        const madeiraNome = normalizarTexto(item.madeiraNome) || "Madeira não informada";
+        const chaveMadeira = madeiraNome.toLocaleLowerCase("pt-BR");
+        const madeira = madeiras.get(chaveMadeira) ?? { madeiraNome, bitolas: new Map<string, any>() };
+        const espessura = Number(item.espessura);
+        const largura = Number(item.largura);
+        const comprimento = Number(item.comprimento);
+        const quantidade = Number(item.quantidade);
+        const chaveBitola = `${espessura}|${largura}`;
+        const bitola = madeira.bitolas.get(chaveBitola) ?? { espessura, largura, comprimentos: new Map<number, number>() };
+        bitola.comprimentos.set(comprimento, (bitola.comprimentos.get(comprimento) ?? 0) + (Number.isFinite(quantidade) ? quantidade : 0));
+        madeira.bitolas.set(chaveBitola, bitola);
+        madeiras.set(chaveMadeira, madeira);
+        return madeiras;
+      }, new Map<string, any>()).values()).map((madeira: any) => ({
+        ...madeira,
+        bitolas: Array.from(madeira.bitolas.values()).sort((a: any, b: any) => a.espessura - b.espessura || a.largura - b.largura),
+      })).sort((a: any, b: any) => a.madeiraNome.localeCompare(b.madeiraNome, "pt-BR"));
 
-      for (const item of data.itens ?? []) {
-        const tipoComercializacao = item.tipoComercializacao ?? "metro_cubico";
-        const componentesPacote = item.componentesPacote ?? [];
-        const composicaoPacote = componentesPacote.map((componente: any) => {
-          const medidas = componente.espessura && componente.largura && componente.comprimento
-            ? ` (${formatDimensionCm(componente.espessura)} × ${formatDimensionCm(componente.largura)} cm × ${formatMeasurement(componente.comprimento)} m)`
-            : "";
-          return `${componente.quantidadePorPacote} × ${normalizarTexto(componente.descricao) || normalizarTexto(componente.madeiraNome) || "item"}${medidas}`;
-        }).join(" · ");
-        if (!layout.temEspaco(16)) {
-          layout.novaPagina(true);
-          desenharTabela(true);
-        }
-        const valores = [
-          item.madeiraNome,
-          tipoComercializacao === "metro_cubico" ? `${formatDimensionCm(item.espessura)} × ${formatDimensionCm(item.largura)} cm × ${formatMeasurement(item.comprimento)} m` : tipoComercializacao === "unidade" ? "Venda por unidade" : "Venda por pacote",
-          String(item.quantidade),
-          tipoComercializacao === "metro_cubico" ? "Peça" : tipoComercializacao === "unidade" ? "Unidade" : "Pacote",
-          `R$ ${formatBRL(item.precoM3)}`,
-          `R$ ${formatBRL(item.valorPeca)}`,
-          `R$ ${formatBRL(item.valorTotal)}`,
-        ];
+      const larguraGradeVenda = width - (MARGEM_LATERAL * 2);
+      const larguraComprimentoVenda = 54;
+      const maximoBitolasPorPaginaVenda = 6;
+      const desenharGradeVenda = (madeira: any, bitolas: any[], sufixo = "", continuacao = false) => {
+        layout.garantirEspaco(62);
+        const titulo = `GRADE DE PEÇAS VENDIDAS — ${madeira.madeiraNome}${sufixo}`;
+        desenharTextoAjustado(layout.page, boldFont, continuacao ? `${titulo} — CONTINUAÇÃO` : titulo, MARGEM_LATERAL, layout.y, larguraGradeVenda, 10, { color: COR_MARROM });
+        layout.mover(17);
+        const larguraBitola = (larguraGradeVenda - larguraComprimentoVenda) / Math.max(bitolas.length, 1);
+        const cabecalhos = ["Comp.", ...bitolas.map((bitola: any) => `${formatDimensionCm(bitola.espessura)} × ${formatDimensionCm(bitola.largura)} cm`)];
+        const larguras = [larguraComprimentoVenda, ...bitolas.map(() => larguraBitola)];
         let x = MARGEM_LATERAL;
-        valores.forEach((valor, indice) => {
-          desenharTextoAjustado(layout.page, indice === valores.length - 1 ? boldFont : font, valor, x, layout.y, colunas[indice] - 4, 7.5);
-          x += colunas[indice];
+        cabecalhos.forEach((cabecalho, indice) => {
+          layout.page.drawRectangle({ x, y: layout.y - 12, width: larguras[indice], height: 17, color: rgb(0.91, 0.89, 0.84) });
+          desenharTextoAjustado(layout.page, boldFont, cabecalho, x + 3, layout.y - 1, larguras[indice] - 6, 7, { color: COR_MARROM });
+          x += larguras[indice];
         });
-        layout.mover(16);
-        if (tipoComercializacao === "pacote" && composicaoPacote) {
-          layout.escreverParagrafo(`Composição por pacote: ${composicaoPacote}`, MARGEM_LATERAL + 8, width - (MARGEM_LATERAL * 2) - 8, 7.4, { color: COR_TEXTO_SECUNDARIO }, 10);
-          layout.mover(4);
+        layout.mover(20);
+      };
+
+      if (gruposPorMadeira.length) {
+        // A grade fica numa página própria para não competir visualmente com os dados comerciais do cabeçalho.
+        layout.novaPagina(false);
+        gruposPorMadeira.forEach((madeira: any, indiceMadeira: number) => {
+          const blocosBitola = madeira.bitolas.reduce((blocos: any[][], bitola: any, indice: number) => {
+            const bloco = Math.floor(indice / maximoBitolasPorPaginaVenda);
+            if (!blocos[bloco]) blocos[bloco] = [];
+            blocos[bloco].push(bitola);
+            return blocos;
+          }, []);
+          const comprimentos = Array.from(new Set(madeira.bitolas.flatMap((bitola: any) => Array.from(bitola.comprimentos.keys())))).sort((a: any, b: any) => a - b) as number[];
+
+          blocosBitola.forEach((bitolas: any[], indiceBloco: number) => {
+            if (indiceMadeira > 0 || indiceBloco > 0) layout.novaPagina(true);
+            const sufixo = blocosBitola.length > 1 ? ` — BITOLAS ${indiceBloco * maximoBitolasPorPaginaVenda + 1}–${indiceBloco * maximoBitolasPorPaginaVenda + bitolas.length}` : "";
+            desenharGradeVenda(madeira, bitolas, sufixo, indiceMadeira > 0 || indiceBloco > 0);
+            const larguraBitola = (larguraGradeVenda - larguraComprimentoVenda) / Math.max(bitolas.length, 1);
+            const larguras = [larguraComprimentoVenda, ...bitolas.map(() => larguraBitola)];
+            comprimentos.forEach((comprimento, indiceComprimento) => {
+              if (!layout.temEspaco(18)) {
+                layout.novaPagina(true);
+                desenharGradeVenda(madeira, bitolas, sufixo, true);
+              }
+              if (indiceComprimento % 2 === 0) layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 12, width: larguraGradeVenda, height: 17, color: rgb(0.975, 0.97, 0.94) });
+              const valores = [`${formatMeasurement(comprimento)} m`, ...bitolas.map((bitola: any) => {
+                const quantidade = bitola.comprimentos.get(comprimento) ?? 0;
+                return quantidade ? formatMeasurement(quantidade) : "—";
+              })];
+              let x = MARGEM_LATERAL;
+              valores.forEach((valor, posicao) => {
+                desenharTextoAjustado(layout.page, posicao === 0 ? boldFont : font, valor, x + 3, layout.y - 1, larguras[posicao] - 6, 7.5, posicao === 0 ? { color: COR_MARROM } : {});
+                x += larguras[posicao];
+              });
+              layout.mover(18);
+            });
+          });
+        });
+      }
+
+      if (itensComerciaisAvulsos.length) {
+        const colunas = [135, 125, 48, 72, 72, 59];
+        const rotulos = ["Produto", "Tipo / composição", "Qtd.", "Preço base", "Valor unit.", "Total"];
+        const desenharItensComerciais = (continuacao = false) => {
+          layout.garantirEspaco(42);
+          layout.page.drawText(continuacao ? "OUTROS ITENS COMERCIAIS — CONTINUAÇÃO" : "OUTROS ITENS COMERCIAIS", { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+          layout.mover(17);
+          let x = MARGEM_LATERAL;
+          rotulos.forEach((rotulo, indice) => {
+            desenharTextoAjustado(layout.page, boldFont, rotulo, x, layout.y, colunas[indice] - 4, 7.5, { color: rgb(0.42, 0.42, 0.42) });
+            x += colunas[indice];
+          });
+          layout.mover(15);
+        };
+        desenharItensComerciais();
+        for (const item of itensComerciaisAvulsos) {
+          const tipoComercializacao = item.tipoComercializacao ?? "metro_cubico";
+          const componentesPacote = item.componentesPacote ?? [];
+          const composicaoPacote = componentesPacote.map((componente: any) => {
+            const medidas = componente.espessura && componente.largura && componente.comprimento
+              ? ` (${formatDimensionCm(componente.espessura)} × ${formatDimensionCm(componente.largura)} cm × ${formatMeasurement(componente.comprimento)} m)`
+              : "";
+            return `${componente.quantidadePorPacote} × ${normalizarTexto(componente.descricao) || normalizarTexto(componente.madeiraNome) || "item"}${medidas}`;
+          }).join(" · ");
+          if (!layout.temEspaco(16)) {
+            layout.novaPagina(true);
+            desenharItensComerciais(true);
+          }
+          const valores = [
+            item.madeiraNome,
+            tipoComercializacao === "unidade" ? "Venda por unidade" : tipoComercializacao === "pacote" ? "Venda por pacote" : "Medidas não informadas",
+            String(item.quantidade),
+            `R$ ${formatBRL(item.precoM3)}`,
+            `R$ ${formatBRL(item.valorPeca)}`,
+            `R$ ${formatBRL(item.valorTotal)}`,
+          ];
+          let x = MARGEM_LATERAL;
+          valores.forEach((valor, indice) => {
+            desenharTextoAjustado(layout.page, indice === valores.length - 1 ? boldFont : font, valor, x, layout.y, colunas[indice] - 4, 7.5);
+            x += colunas[indice];
+          });
+          layout.mover(16);
+          if (tipoComercializacao === "pacote" && composicaoPacote) {
+            layout.escreverParagrafo(`Composição por pacote: ${composicaoPacote}`, MARGEM_LATERAL + 8, width - (MARGEM_LATERAL * 2) - 8, 7.4, { color: COR_TEXTO_SECUNDARIO }, 10);
+            layout.mover(4);
+          }
         }
       }
 

@@ -140,13 +140,13 @@ describe("rotas de PDF protegidas", () => {
     validarAreaSeguraDoRodape();
   });
 
-  it("repete cabeçalhos e cria páginas seguras para uma venda com muitos itens", async () => {
+  it("repete cabeçalhos da grade e cria páginas seguras para uma venda com muitos comprimentos", async () => {
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
     vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
     vi.spyOn(db, "listClientes").mockResolvedValue([{ id: 5, nome: "Cliente de Teste", contacto: null, email: null, morada: null, nif: null }] as any);
     vi.spyOn(db, "getOrcamentoWithItems").mockResolvedValue({
       orcamento: { id: 1, numero: "VEN-000001", clienteId: 5, createdAt: new Date(), estado: "aprovado", subtotal: "1000", desconto: "0", frete: "0", total: "1000", totalPecas: 100, totalMetroLinear: "500", totalVolume: "10", observacoes: "Observação extensa mas dentro da área de impressão." },
-      itens: Array.from({ length: 90 }, (_, indice) => ({ madeiraNome: `Cedrinho selecionado ${indice + 1}`, espessura: "23", largura: "50", comprimento: "3", quantidade: 1, precoM3: "900", precoLinear: "90", valorPeca: "12", valorTotal: "12" })),
+      itens: Array.from({ length: 90 }, (_, indice) => ({ madeiraNome: "Cedrinho selecionado", espessura: "23", largura: "50", comprimento: String(2 + (indice / 2)), quantidade: 1, precoM3: "900", precoLinear: "90", valorPeca: "12", valorTotal: "12" })),
     } as any);
     const res = createResponse();
 
@@ -154,7 +154,7 @@ describe("rotas de PDF protegidas", () => {
 
     expect(res.send).toHaveBeenCalledWith(expect.any(Buffer));
     expect(pdfCanvas.pages.length).toBeGreaterThan(1);
-    expect(textosDoPdf()).toContain("ITENS DA VENDA — CONTINUAÇÃO");
+    expect(textosDoPdf()).toContain("GRADE DE PEÇAS VENDIDAS — Cedrinho selecionado — CONTINUAÇÃO");
     validarAreaSeguraDoRodape();
   });
 
@@ -197,6 +197,8 @@ describe("rotas de PDF protegidas", () => {
     await routes["/api/pdf/orcamento/:id"]!({ params: { id: "3" } }, res);
 
     const textos = textosDoPdf();
+    expect(textos).toContain("GRADE DE PEÇAS VENDIDAS — Cedrinho");
+    expect(textos).toContain("Comp.");
     expect(textos).toContain("RESUMO DE PEÇAS POR BITOLA");
     expect(textos).toContain("2 × 5 cm");
     expect(textos).toContain("3 × 5 cm");
