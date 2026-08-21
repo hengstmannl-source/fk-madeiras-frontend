@@ -20,8 +20,8 @@ const { criarCargaMutate, criarFornecedorMutate, importarMutate, excluirMutate, 
   cargasListQuery: vi.fn(() => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", dataVencimento: "2026-08-20T12:00:00.000Z", origem: "Fazenda Norte", fornecedorId: 7, responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false })),
   plaquetasListQuery: vi.fn(() => ({ data: { itens: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], total: 20, totalDisponiveis: 20, proximoDeslocamento: 10 }, isLoading: false })),
   estoqueResumoQuery: vi.fn(() => ({ data: [
-    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
-    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeEntrada: 26, quantidadeSaida: 6, quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeEntrada: 8, quantidadeSaida: 4, quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
   ], isLoading: false })),
 }));
 
@@ -64,8 +64,8 @@ afterEach(() => {
   plaquetasListQuery.mockClear();
   estoqueResumoQuery.mockReset();
   estoqueResumoQuery.mockImplementation(() => ({ data: [
-    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
-    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeEntrada: 26, quantidadeSaida: 6, quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
+    { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeEntrada: 8, quantidadeSaida: 4, quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
   ], isLoading: false }));
   perfilAtual.role = "admin";
 });
@@ -86,7 +86,7 @@ describe("EstoquePage", () => {
     await user.click(screen.getByRole("tab", { name: "Serrado" }));
     expect(screen.getByRole("heading", { name: "Estoque serrado" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Exibir comprimentos de Cedrinho 2,5 × 15 cm" })).toHaveAttribute("aria-expanded", "false");
-    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("24 peças · 0,285 m³");
+    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("+34 entradas · −10 saídas · 24 peças em estoque · 0,285 m³");
   });
 
   it("filtra o estoque serrado por essência, espessura, largura e comprimento", async () => {
@@ -103,7 +103,7 @@ describe("EstoquePage", () => {
     await user.type(screen.getByLabelText("Filtrar largura serrada"), "15");
     await user.type(screen.getByLabelText("Filtrar comprimento serrado"), "3");
     expect(screen.getByRole("button", { name: "Exibir comprimentos de Cedrinho 2,5 × 15 cm" })).toBeInTheDocument();
-    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("20 peças · 0,225 m³");
+    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("+26 entradas · −6 saídas · 20 peças em estoque · 0,225 m³");
   });
 
   it("expande uma medida para mostrar os saldos de cada comprimento", async () => {
@@ -122,12 +122,12 @@ describe("EstoquePage", () => {
   it("destaca o saldo negativo criado por uma entrega sem disponibilidade", async () => {
     const user = userEvent.setup();
     estoqueResumoQuery.mockImplementation(() => ({ data: [
-      { madeiraNome: "Itaúba", espessura: "3.00", largura: "5.00", comprimento: "2.00", quantidadeDisponivel: -2, volumeDisponivel: "-0.003000" },
+      { madeiraNome: "Itaúba", espessura: "3.00", largura: "5.00", comprimento: "2.00", quantidadeEntrada: 0, quantidadeSaida: 2, quantidadeDisponivel: -2, volumeDisponivel: "-0.003000" },
     ], isLoading: false }));
     render(<EstoquePage />);
     await user.click(screen.getByRole("tab", { name: "Serrado" }));
 
-    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("-2 peças · -0,003 m³");
+    expect(screen.getByTestId("total-filtrado-serrado")).toHaveTextContent("+0 entradas · −2 saídas · -2 peças em estoque · -0,003 m³");
     expect(screen.getByRole("cell", { name: "-2" })).toHaveClass("text-destructive");
     expect(screen.getByRole("button", { name: "Exibir comprimentos de Itaúba 3 × 5 cm" })).toBeInTheDocument();
   });

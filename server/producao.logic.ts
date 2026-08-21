@@ -214,7 +214,7 @@ export function agruparEstoquePecas(lotes: Array<{
   propriedade?: "proprio" | "terceiro";
   clienteProprietarioId?: number | null;
 }>) {
-  const grupos = new Map<string, { madeiraNome: string; espessura: number; largura: number; comprimento: number; propriedade: "proprio" | "terceiro"; clienteProprietarioId: number | null; quantidadeDisponivel: number; volumeDisponivel: number }>();
+  const grupos = new Map<string, { madeiraNome: string; espessura: number; largura: number; comprimento: number; propriedade: "proprio" | "terceiro"; clienteProprietarioId: number | null; quantidadeEntrada: number; quantidadeSaida: number; quantidadeDisponivel: number; volumeDisponivel: number }>();
   lotes.forEach((lote) => {
     const espessura = numero(lote.espessura);
     const largura = numero(lote.largura);
@@ -222,9 +222,15 @@ export function agruparEstoquePecas(lotes: Array<{
     const propriedade = lote.propriedade ?? "proprio";
     const clienteProprietarioId = lote.clienteProprietarioId ?? null;
     const chave = [lote.madeiraNome.trim().toLocaleUpperCase("pt-BR"), espessura, largura, comprimento, propriedade, clienteProprietarioId ?? ""].join("|");
-    const existente = grupos.get(chave) ?? { madeiraNome: lote.madeiraNome, espessura, largura, comprimento, propriedade, clienteProprietarioId, quantidadeDisponivel: 0, volumeDisponivel: 0 };
+    const existente = grupos.get(chave) ?? { madeiraNome: lote.madeiraNome, espessura, largura, comprimento, propriedade, clienteProprietarioId, quantidadeEntrada: 0, quantidadeSaida: 0, quantidadeDisponivel: 0, volumeDisponivel: 0 };
     existente.quantidadeDisponivel += lote.quantidadeDisponivel;
     const quantidadeProduzida = Math.abs(Number(lote.quantidadeProduzida ?? 0));
+    const quantidadeEntrada = quantidadeProduzida > 0 ? quantidadeProduzida : Math.max(lote.quantidadeDisponivel, 0);
+    const quantidadeSaida = quantidadeProduzida > 0
+      ? Math.max(0, quantidadeProduzida - lote.quantidadeDisponivel)
+      : Math.max(0, -lote.quantidadeDisponivel);
+    existente.quantidadeEntrada += quantidadeEntrada;
+    existente.quantidadeSaida += quantidadeSaida;
     const quantidadeDeReferencia = quantidadeProduzida > 0 ? quantidadeProduzida : Math.max(Math.abs(lote.quantidadeDisponivel), 1);
     const volumeUnitario = numero(lote.volume) / quantidadeDeReferencia;
     existente.volumeDisponivel += volumeUnitario * lote.quantidadeDisponivel;

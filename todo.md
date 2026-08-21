@@ -622,6 +622,10 @@
 - [x] Adicionar filtros rápidos de período para hoje, últimos 7 dias e este mês no Financeiro
 - [x] Exibir totais de contas a pagar e a receber calculados sobre os resultados da pesquisa financeira
 - [x] Cobrir os filtros rápidos e os totais filtrados com testes e validação visual
+- [x] Analisar e documentar o papel de Estoque e Inventário no fluxo operacional
+- [x] Verificar e corrigir a baixa de peças serradas vinculada à entrega de vendas
+- [x] Exibir quantidades de entrada, saída e saldo no estoque de peças serradas
+- [x] Cobrir a integração venda-estoque e os novos indicadores com testes e validação visual
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

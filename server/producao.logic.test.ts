@@ -178,7 +178,7 @@ describe("regras de produção", () => {
     expect(agruparEstoquePecas([
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 10, volume: "0.112500" },
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeDisponivel: 5, volume: "0.056250" },
-    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, propriedade: "proprio", clienteProprietarioId: null, quantidadeDisponivel: 15, volumeDisponivel: 0.16875 }]);
+    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, propriedade: "proprio", clienteProprietarioId: null, quantidadeEntrada: 15, quantidadeSaida: 0, quantidadeDisponivel: 15, volumeDisponivel: 0.16875 }]);
   });
 
   it("mantém peças de terceiros separadas do estoque próprio na mesma medida", () => {
@@ -191,7 +191,18 @@ describe("regras de produção", () => {
   it("mantém o volume proporcional quando o saldo de um lote fica negativo", () => {
     expect(agruparEstoquePecas([
       { madeiraNome: "Cedrinho", espessura: "2.5", largura: "15", comprimento: "3", quantidadeProduzida: 10, quantidadeDisponivel: -4, volume: "0.112500" },
-    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, propriedade: "proprio", clienteProprietarioId: null, quantidadeDisponivel: -4, volumeDisponivel: -0.045 }]);
+    ])).toEqual([{ madeiraNome: "Cedrinho", espessura: 2.5, largura: 15, comprimento: 3, propriedade: "proprio", clienteProprietarioId: null, quantidadeEntrada: 10, quantidadeSaida: 14, quantidadeDisponivel: -4, volumeDisponivel: -0.045 }]);
+  });
+
+  it("separa entradas, saídas e saldo ao consolidar peças produzidas e entregues", () => {
+    expect(agruparEstoquePecas([
+      { madeiraNome: "Garapeira", espessura: "3", largura: "10", comprimento: "4", quantidadeProduzida: 20, quantidadeDisponivel: 13, volume: "0.156000" },
+      { madeiraNome: "Garapeira", espessura: "3", largura: "10", comprimento: "4", quantidadeProduzida: 10, quantidadeDisponivel: 4, volume: "0.078000" },
+    ])).toEqual([{
+      madeiraNome: "Garapeira", espessura: 3, largura: 10, comprimento: 4,
+      propriedade: "proprio", clienteProprietarioId: null,
+      quantidadeEntrada: 30, quantidadeSaida: 13, quantidadeDisponivel: 17, volumeDisponivel: 0.1326,
+    }]);
   });
 
   it("aloca peças FIFO entre lotes equivalentes e bloqueia a entrega sem saldo", () => {

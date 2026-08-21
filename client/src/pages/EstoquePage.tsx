@@ -334,6 +334,8 @@ export default function EstoquePage() {
         largura: number;
         propriedade: "proprio" | "terceiro";
         clienteProprietarioId: number | null;
+        quantidadeEntrada: number;
+        quantidadeSaida: number;
         quantidadeDisponivel: number;
         volumeDisponivel: number;
         itens: any[];
@@ -361,6 +363,8 @@ export default function EstoquePage() {
         largura: number;
         propriedade: "proprio" | "terceiro";
         clienteProprietarioId: number | null;
+        quantidadeEntrada: number;
+        quantidadeSaida: number;
         quantidadeDisponivel: number;
         volumeDisponivel: number;
         itens: any[];
@@ -371,10 +375,14 @@ export default function EstoquePage() {
         largura,
         propriedade,
         clienteProprietarioId,
+        quantidadeEntrada: 0,
+        quantidadeSaida: 0,
         quantidadeDisponivel: 0,
         volumeDisponivel: 0,
         itens: [] as any[],
       };
+      grupo.quantidadeEntrada += num(item.quantidadeEntrada);
+      grupo.quantidadeSaida += num(item.quantidadeSaida);
       grupo.quantidadeDisponivel += num(item.quantidadeDisponivel);
       grupo.volumeDisponivel += num(item.volumeDisponivel);
       grupo.itens.push(item);
@@ -399,10 +407,12 @@ export default function EstoquePage() {
     () =>
       serradoVisivel.reduce(
         (totais, item: any) => ({
+          entradas: totais.entradas + num(item.quantidadeEntrada),
+          saidas: totais.saidas + num(item.quantidadeSaida),
           quantidade: totais.quantidade + num(item.quantidadeDisponivel),
           volume: totais.volume + num(item.volumeDisponivel),
         }),
-        { quantidade: 0, volume: 0 }
+        { entradas: 0, saidas: 0, quantidade: 0, volume: 0 }
       ),
     [serradoVisivel]
   );
@@ -1189,7 +1199,9 @@ export default function EstoquePage() {
                           <TableHead className="text-right">
                             Comprimentos
                           </TableHead>
-                          <TableHead className="text-right">Peças</TableHead>
+                          <TableHead className="text-right">Entradas</TableHead>
+                          <TableHead className="text-right">Saídas</TableHead>
+                          <TableHead className="text-right">Saldo</TableHead>
                           <TableHead className="text-right">Volume</TableHead>
                         </TableRow>
                       </TableHeader>
@@ -1222,11 +1234,17 @@ export default function EstoquePage() {
                       Total filtrado
                     </span>
                     <span className="tabular-nums text-muted-foreground">
+                      <strong className="text-emerald-700 dark:text-emerald-400">
+                        +{formatarNumero(totaisSerradoFiltrado.entradas, 0)} entradas
+                      </strong>{" · "}
+                      <strong className="text-amber-700 dark:text-amber-400">
+                        −{formatarNumero(totaisSerradoFiltrado.saidas, 0)} saídas
+                      </strong>{" · "}
                       <strong className="text-foreground">
                         {formatarNumero(totaisSerradoFiltrado.quantidade, 0)}{" "}
                         {Math.abs(totaisSerradoFiltrado.quantidade) === 1
-                          ? "peça"
-                          : "peças"}
+                          ? "peça em estoque"
+                          : "peças em estoque"}
                       </strong>{" "}
                       ·{" "}
                       <strong className="text-foreground">
@@ -1838,6 +1856,8 @@ function GrupoEstoqueSerrado({
   grupo: {
     madeiraNome: string;
     propriedade?: "proprio" | "terceiro";
+    quantidadeEntrada: number;
+    quantidadeSaida: number;
     quantidadeDisponivel: number;
     volumeDisponivel: number;
     itens: any[];
@@ -1888,9 +1908,13 @@ function GrupoEstoqueSerrado({
             </span>
           </button>
         </TableCell>
-        <TableCell
-          className={`text-right font-semibold tabular-nums ${negativo ? "text-destructive" : ""}`}
-        >
+        <TableCell className="text-right font-semibold tabular-nums text-emerald-700 dark:text-emerald-400">
+          +{formatarNumero(grupo.quantidadeEntrada, 0)}
+        </TableCell>
+        <TableCell className="text-right font-semibold tabular-nums text-amber-700 dark:text-amber-400">
+          −{formatarNumero(grupo.quantidadeSaida, 0)}
+        </TableCell>
+        <TableCell className={`text-right font-semibold tabular-nums ${negativo ? "text-destructive" : ""}`}>
           {formatarNumero(grupo.quantidadeDisponivel, 0)}
         </TableCell>
         <TableCell
@@ -1913,9 +1937,13 @@ function GrupoEstoqueSerrado({
               <TableCell className="text-right text-sm font-medium tabular-nums">
                 {formatarNumero(item.comprimento, 2)} m
               </TableCell>
-              <TableCell
-                className={`text-right tabular-nums ${saldoNegativo ? "font-semibold text-destructive" : ""}`}
-              >
+              <TableCell className="text-right tabular-nums text-emerald-700 dark:text-emerald-400">
+                +{formatarNumero(item.quantidadeEntrada, 0)}
+              </TableCell>
+              <TableCell className="text-right tabular-nums text-amber-700 dark:text-amber-400">
+                −{formatarNumero(item.quantidadeSaida, 0)}
+              </TableCell>
+              <TableCell className={`text-right tabular-nums ${saldoNegativo ? "font-semibold text-destructive" : ""}`}>
                 {formatarNumero(item.quantidadeDisponivel, 0)}
               </TableCell>
               <TableCell

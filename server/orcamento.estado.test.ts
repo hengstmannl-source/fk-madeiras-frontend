@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, configurarCondicaoPagamentoVenda, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
+import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, configurarCondicaoPagamentoVenda, entregarVendaFisicamente, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
 import { formatReceivableSaleReference } from "../client/src/lib/utils";
 
 function criarBancoDeOrcamentoFalso() {
@@ -202,5 +202,33 @@ describe("mudança de estado de orçamento", () => {
       obterCategoriaReceita: async () => 70,
     })).rejects.toThrow("possui parcelas baixadas");
     expect(tx.update).not.toHaveBeenCalled();
+  });
+
+  it("baixa peças serradas vendidas por metro cúbico ao confirmar a entrega", async () => {
+    const atualizacoes: any[] = [];
+    const insercoes: any[] = [];
+    const venda = { id: 150001, empresaId: 7, estado: "aprovado", entregue: false, numero: "VND-000123" };
+    const itemM3 = { id: 91, madeiraNome: "Cedrinho", espessura: "25", largura: "150", comprimento: "3", quantidade: "5", tipoComercializacao: "metro_cubico" };
+    const lote = { id: 301, madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeDisponivel: 12, propriedade: "proprio", tipo: "peca" };
+    const tx = {
+      select: vi.fn()
+        .mockImplementationOnce(() => ({ from: () => ({ where: () => ({ limit: async () => [venda] }) }) }))
+        .mockImplementationOnce(() => ({ from: () => ({ where: async () => [itemM3] }) }))
+        .mockImplementationOnce(() => ({ from: () => ({ where: async () => [lote] }) })),
+      update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
+      insert: vi.fn(() => ({ values: async (dados: any) => { insercoes.push(dados); return [{ insertId: 1 }]; } })),
+    };
+    const database = { transaction: async (executar: (transacao: typeof tx) => unknown) => executar(tx) };
+    const entregueEm = new Date("2030-01-15T12:00:00");
+
+    const resultado = await entregarVendaFisicamente(150001, 9, {
+      entregueEm,
+      modalidadeEntrega: "retirada",
+      responsavelEntrega: "Expedição",
+    }, { database });
+
+    expect(resultado).toMatchObject({ success: true, pecasEntregues: 5, pecasSemEstoque: 0 });
+    expect(atualizacoes[0]).toMatchObject({ quantidadeDisponivel: 7, estado: "disponivel" });
+    expect(insercoes[0]).toMatchObject({ tipo: "saida_entrega", loteId: 301, itemVendaId: 91, quantidade: 5 });
   });
 });

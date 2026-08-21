@@ -3995,7 +3995,7 @@ export async function getResumoEstoqueSerrado(empresaId = 1) {
   const db = await getDb();
   if (!db) return [];
   const lotes = await db.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.empresaId, empresaId));
-  return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado" && lote.quantidadeDisponivel !== 0));
+  return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado"));
 }
 
 export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFinal?: Date, empresaId = 1) {
@@ -4132,10 +4132,10 @@ export async function entregarVendaFisicamente(vendaId: number, userId: number, 
       tx.select().from(lotesPecasSerradas).where(and(eq(lotesPecasSerradas.empresaId, venda.empresaId), eq(lotesPecasSerradas.propriedade, "proprio"))),
     ]);
     const itensParaEstoque = itens
-      .filter((item: any) => Number(item.unidadesPorComercializacao ?? 1) > 0)
+      .filter((item: any) => (item.tipoComercializacao ?? "metro_cubico") === "metro_cubico" && Number(item.quantidade) > 0)
       .map((item: any) => converterDimensoesVendaParaEstoque({
         ...item,
-        quantidade: Number(item.quantidade) * Number(item.unidadesPorComercializacao ?? 1),
+        quantidade: Number(item.quantidade),
       }));
     const { alocacoes, deficits } = alocarPecasPermitindoNegativo(itensParaEstoque, lotes);
     const lotesPorId = new Map<number, any>(lotes.map((lote: any) => [lote.id, lote] as [number, any]));
