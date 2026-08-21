@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AproveitamentoVendaSchema, ItemSchema, RegistroEntregaFisicaSchema } from "./orcamento";
+import { AproveitamentoVendaSchema, CondicaoPagamentoVendaSchema, ItemSchema, RegistroEntregaFisicaSchema } from "./orcamento";
 import { historicoAlteracoes } from "../../drizzle/schema";
 import { classificarCategoriaOperacionalVenda } from "../db";
 
@@ -114,5 +114,16 @@ describe("fluxos independentes de pagamento e entrega", () => {
       responsavelEntrega: "João da Silva",
       aproveitamentos: [{ madeiraNome: "Cedrinho", volume: "0" }],
     })).toThrow("Informe um volume de aproveitamento positivo");
+  });
+});
+
+describe("condição de pagamento da venda", () => {
+  it("aceita vencimentos parcelados e limita a quantidade de títulos", () => {
+    expect(CondicaoPagamentoVendaSchema.parse({
+      id: 12,
+      parcelas: [{ dataVencimento: "2030-01-30" }, { dataVencimento: "2030-03-01" }, { dataVencimento: "2030-03-31" }],
+    }).parcelas).toHaveLength(3);
+    expect(() => CondicaoPagamentoVendaSchema.parse({ id: 12, parcelas: [] })).toThrow("ao menos uma parcela");
+    expect(() => CondicaoPagamentoVendaSchema.parse({ id: 12, parcelas: Array.from({ length: 25 }, () => ({ dataVencimento: "2030-01-30" })) })).toThrow("no máximo 24 parcelas");
   });
 });

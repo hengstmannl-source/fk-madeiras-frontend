@@ -1,5 +1,5 @@
 import { trpc } from "@/lib/trpc";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { BadgeCheck, CalendarDays, CheckCircle2, CircleDollarSign, Download, Eye, FileText, Loader2, LockKeyhole, PackageCheck, RotateCcw, Search, Truck } from "lucide-react";
+import { BadgeCheck, CalendarClock, CalendarDays, CheckCircle2, CircleDollarSign, Download, Eye, FileText, Loader2, PackageCheck, Plus, RotateCcw, Search, Trash2, Truck } from "lucide-react";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
@@ -55,6 +55,9 @@ type CategoriaOperacional = keyof typeof CATEGORIAS;
 type FormaPagamento = (typeof FORMAS_PAGAMENTO)[number][0];
 type ModalidadeEntrega = "retirada" | "entrega";
 type AlvoVenda = { id: number; numero: string; entregue: boolean; pago: boolean };
+type AlvoCondicaoPagamento = AlvoVenda & { clienteNome: string; total: string };
+type TipoCondicaoPagamento = "avista" | "parcelado";
+type ModoVencimento = "dias" | "datas";
 
 const ROTAS_CATEGORIA: Record<CategoriaOperacional, string> = {
   aprovadas: "/orcamentos/aprovados",
@@ -66,6 +69,21 @@ const ROTAS_CATEGORIA: Record<CategoriaOperacional, string> = {
 function dataLocalDeHoje() {
   const hoje = new Date();
   return `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, "0")}-${String(hoje.getDate()).padStart(2, "0")}`;
+}
+
+function somarDiasDataLocal(dias: number) {
+  const data = new Date();
+  data.setHours(12, 0, 0, 0);
+  data.setDate(data.getDate() + dias);
+  return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
+}
+
+function distribuirValorEmParcelas(valorTotal: string, quantidade: number) {
+  const quantidadeSegura = Math.max(quantidade, 1);
+  const totalCentavos = Math.round((Number(valorTotal) || 0) * 100);
+  const valorBase = Math.floor(totalCentavos / quantidadeSegura);
+  const centavosRestantes = totalCentavos % quantidadeSegura;
+  return Array.from({ length: quantidadeSegura }, (_, indice) => ((valorBase + (indice < centavosRestantes ? 1 : 0)) / 100));
 }
 
 function descricaoFormaPagamento(forma?: string | null) {
@@ -94,21 +112,30 @@ export default function OrcamentosAprovadosPage() {
   const clientes = trpc.cliente.list.useQuery();
   const estoqueSerrado = trpc.producao.estoque.resumo.useQuery();
   const registrarPagamento = trpc.orcamento.registrarPagamento.useMutation();
+  const configurarCondicaoPagamento = trpc.orcamento.configurarCondicaoPagamento.useMutation();
   const entregarFisicamente = trpc.orcamento.entregarFisicamente.useMutation();
   const utils = trpc.useUtils();
   const [buscaCliente, setBuscaCliente] = useState("");
   const [dataInicial, setDataInicial] = useState("");
   const [dataFinal, setDataFinal] = useState("");
   const [pagamentoAlvo, setPagamentoAlvo] = useState<AlvoVenda | null>(null);
+  const [condicaoPagamentoAlvo, setCondicaoPagamentoAlvo] = useState<AlvoCondicaoPagamento | null>(null);
   const [entregaAlvo, setEntregaAlvo] = useState<AlvoVenda | null>(null);
   const [reciboParaVisualizar, setReciboParaVisualizar] = useState<AlvoVenda | null>(null);
   const [formaPagamento, setFormaPagamento] = useState<FormaPagamento>("pix");
+  const [tipoCondicaoPagamento, setTipoCondicaoPagamento] = useState<TipoCondicaoPagamento>("avista");
+  const [modoVencimento, setModoVencimento] = useState<ModoVencimento>("datas");
+  const [vencimentosPagamento, setVencimentosPagamento] = useState<string[]>([dataLocalDeHoje()]);
   const [dataPagamento, setDataPagamento] = useState(dataLocalDeHoje);
   const [dataEntrega, setDataEntrega] = useState(dataLocalDeHoje);
   const [modalidadeEntrega, setModalidadeEntrega] = useState<ModalidadeEntrega>("retirada");
   const [responsavelEntrega, setResponsavelEntrega] = useState("");
   const [observacoesEntrega, setObservacoesEntrega] = useState("");
   const [aproveitamentosEntrega, setAproveitamentosEntrega] = useState<Record<string, string>>({});
+  const condicaoAtual = trpc.orcamento.condicaoPagamento.useQuery(
+    { id: condicaoPagamentoAlvo?.id ?? 0 },
+    { enabled: Boolean(condicaoPagamentoAlvo) },
+  );
 
   const clienteMap = useMemo(() => new Map(clientes.data?.map((cliente) => [cliente.id, cliente.nome]) ?? []), [clientes.data]);
   const vendasFiltradas = useMemo(() => {
@@ -129,6 +156,59 @@ export default function OrcamentosAprovadosPage() {
     setBuscaCliente("");
     setDataInicial("");
     setDataFinal("");
+  };
+
+  const abrirCondicaoPagamento = (venda: AlvoCondicaoPagamento) => {
+    setTipoCondicaoPagamento("avista");
+    setModoVencimento("datas");
+    setVencimentosPagamento([dataLocalDeHoje()]);
+    setCondicaoPagamentoAlvo(venda);
+  };
+
+  useEffect(() => {
+    if (!condicaoPagamentoAlvo || !condicaoAtual.data?.possuiParcelamento) return;
+    setTipoCondicaoPagamento("parcelado");
+    setModoVencimento("datas");
+    setVencimentosPagamento(condicaoAtual.data.parcelas.map((parcela) => {
+      const data = new Date(parcela.dataVencimento);
+      return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
+    }));
+  }, [condicaoAtual.data, condicaoPagamentoAlvo]);
+
+  const datasPreviewCondicao = useMemo(() => {
+    if (tipoCondicaoPagamento === "avista") return vencimentosPagamento.slice(0, 1);
+    if (modoVencimento === "datas") return vencimentosPagamento;
+    return vencimentosPagamento.map((dias) => {
+      const valor = Number(dias);
+      return Number.isInteger(valor) && valor >= 1 ? somarDiasDataLocal(valor) : "";
+    });
+  }, [modoVencimento, tipoCondicaoPagamento, vencimentosPagamento]);
+
+  const valoresPreviewCondicao = useMemo(() => distribuirValorEmParcelas(
+    condicaoPagamentoAlvo?.total ?? "0",
+    datasPreviewCondicao.length,
+  ), [condicaoPagamentoAlvo?.total, datasPreviewCondicao.length]);
+
+  const atualizarVencimentoPagamento = (indice: number, valor: string) => {
+    setVencimentosPagamento((atuais) => atuais.map((vencimento, indiceAtual) => (
+      indiceAtual === indice ? valor : vencimento
+    )));
+  };
+
+  const adicionarParcelaPagamento = () => {
+    if (vencimentosPagamento.length >= 24) {
+      toast.error("A condição de pagamento aceita no máximo 24 parcelas.");
+      return;
+    }
+    if (modoVencimento === "dias") {
+      const maiorPrazo = Math.max(...vencimentosPagamento.map((valor) => Number(valor) || 0), 0);
+      setVencimentosPagamento((atuais) => [...atuais, String(maiorPrazo > 0 ? maiorPrazo + 30 : 30)]);
+      return;
+    }
+    const ultimaData = datasPreviewCondicao.at(-1) || dataLocalDeHoje();
+    const [ano, mes, dia] = ultimaData.split("-").map(Number);
+    const proxima = new Date(ano, mes - 1, dia + 30, 12, 0, 0);
+    setVencimentosPagamento((atuais) => [...atuais, `${proxima.getFullYear()}-${String(proxima.getMonth() + 1).padStart(2, "0")}-${String(proxima.getDate()).padStart(2, "0")}`]);
   };
 
   const abrirEntrega = (venda: AlvoVenda) => {
@@ -159,6 +239,34 @@ export default function OrcamentosAprovadosPage() {
           ? "Pagamento registrado. A venda foi movida para Concluídas."
           : "Pagamento registrado. A venda foi movida para Pagas e aguarda a baixa física.");
         setPagamentoAlvo(null);
+        invalidarVendas();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const confirmarCondicaoPagamento = () => {
+    if (!condicaoPagamentoAlvo) return;
+    const datas = datasPreviewCondicao.filter(Boolean);
+    if (datas.length !== datasPreviewCondicao.length || !datas.length) {
+      toast.error(tipoCondicaoPagamento === "avista" ? "Informe a data de vencimento da venda." : "Preencha um prazo ou uma data válida para cada parcela.");
+      return;
+    }
+    if (tipoCondicaoPagamento === "parcelado" && datas.length < 2) {
+      toast.error("Adicione ao menos duas parcelas ou selecione a condição à vista.");
+      return;
+    }
+    configurarCondicaoPagamento.mutate({
+      id: condicaoPagamentoAlvo.id,
+      parcelas: datas.map((dataVencimento) => ({ dataVencimento })),
+    }, {
+      onSuccess: (resultado) => {
+        const quantidade = resultado.parcelas.length;
+        toast.success(quantidade === 1
+          ? "Condição à vista configurada. O recebível foi atualizado no Financeiro."
+          : `Condição configurada com ${quantidade} parcelas rastreáveis no Financeiro.`);
+        setCondicaoPagamentoAlvo(null);
+        utils.orcamento.condicaoPagamento.invalidate();
         invalidarVendas();
       },
       onError: (erro) => toast.error(erro.message),
@@ -236,16 +344,17 @@ export default function OrcamentosAprovadosPage() {
               <TableHeader><TableRow className="bg-muted/50"><TableHead>Venda</TableHead><TableHead>Cliente</TableHead><TableHead>Total</TableHead><TableHead>Pagamento</TableHead><TableHead>Entrega</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader>
               <TableBody>{vendasFiltradas.map((venda) => {
                 const alvo: AlvoVenda = { id: venda.id, numero: venda.numero ?? "Venda sem número", entregue: venda.entregue, pago: venda.pago };
+                const alvoCondicao: AlvoCondicaoPagamento = { ...alvo, clienteNome: clienteMap.get(venda.clienteId) ?? "Cliente não identificado", total: venda.total };
                 return <TableRow key={venda.id} className="hover:bg-muted/30">
                   <TableCell className="font-medium text-primary">{venda.numero ?? "Venda sem número"}</TableCell>
-                  <TableCell>{clienteMap.get(venda.clienteId) ?? "—"}</TableCell>
+                  <TableCell>{categoria === "aprovadas" && !venda.pago ? <Button variant="link" className="h-auto p-0 text-left font-medium text-primary underline-offset-4 hover:underline" onClick={() => abrirCondicaoPagamento(alvoCondicao)}>{alvoCondicao.clienteNome}</Button> : (clienteMap.get(venda.clienteId) ?? "—")}</TableCell>
                   <TableCell className="font-semibold">{formatarMoeda.format(Number(venda.total))}</TableCell>
-                  <TableCell>{venda.pago ? <div className="space-y-1"><div className="flex items-center gap-2"><Badge variant="outline" className="border-emerald-200 bg-emerald-100 text-emerald-800">Pago</Badge>{venda.pagoEm && <span className="text-xs text-muted-foreground">{new Date(venda.pagoEm).toLocaleDateString("pt-BR")}</span>}</div><p className="text-xs text-muted-foreground">{descricaoFormaPagamento(venda.formaPagamento)}</p></div> : <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Em aberto</Badge>}</TableCell>
+                  <TableCell>{venda.pago ? <div className="space-y-1"><div className="flex items-center gap-2"><Badge variant="outline" className="border-emerald-200 bg-emerald-100 text-emerald-800">Pago</Badge>{venda.pagoEm && <span className="text-xs text-muted-foreground">{new Date(venda.pagoEm).toLocaleDateString("pt-BR")}</span>}</div><p className="text-xs text-muted-foreground">{descricaoFormaPagamento(venda.formaPagamento)}</p></div> : <div className="space-y-1"><Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-700">Em aberto</Badge>{(venda.totalParcelasFinanceiras ?? 1) > 1 && <p className="text-xs text-muted-foreground">Parcelado · {venda.parcelasQuitadasFinanceiras ?? 0}/{venda.totalParcelasFinanceiras} quitadas</p>}</div>}</TableCell>
                   <TableCell>{venda.entregue ? <div className="space-y-1"><div className="flex items-center gap-2"><Badge variant="outline" className="border-sky-200 bg-sky-100 text-sky-800">Entregue</Badge>{venda.entregueEm && <span className="text-xs text-muted-foreground">{new Date(venda.entregueEm).toLocaleDateString("pt-BR")}</span>}</div><p className="text-xs text-muted-foreground">{descricaoModalidadeEntrega(venda.modalidadeEntrega)}{venda.responsavelEntrega ? ` · ${venda.responsavelEntrega}` : ""}</p></div> : <Badge variant="outline" className="border-muted bg-muted text-muted-foreground">Aguardando baixa física</Badge>}</TableCell>
                   <TableCell className="text-sm text-muted-foreground">{new Date(venda.createdAt).toLocaleDateString("pt-BR")}</TableCell>
                   <TableCell className="text-right"><div className="flex min-w-max items-center justify-end gap-1">
                     <Button variant="ghost" size="icon" className="h-8 w-8" aria-label="Ver venda" onClick={() => setLocation(`/orcamentos/${venda.id}`)}><Eye className="h-4 w-4" /></Button>
-                    {!venda.pago && <Button size="sm" className="h-8 bg-emerald-700 text-white hover:bg-emerald-800" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo(alvo)}><CircleDollarSign className="mr-1.5 h-4 w-4" />Registrar pagamento</Button>}
+                    {!venda.pago && (venda.totalParcelasFinanceiras ?? 1) <= 1 && <Button size="sm" className="h-8 bg-emerald-700 text-white hover:bg-emerald-800" disabled={registrarPagamento.isPending} onClick={() => setPagamentoAlvo(alvo)}><CircleDollarSign className="mr-1.5 h-4 w-4" />Registrar pagamento</Button>}
                     {!venda.entregue && <Button size="sm" className="h-8 bg-sky-700 text-white hover:bg-sky-800" disabled={entregarFisicamente.isPending} onClick={() => abrirEntrega(alvo)}><Truck className="mr-1.5 h-4 w-4" />Registrar entrega</Button>}
                     {venda.pago && <Button variant="outline" size="sm" className="h-8" onClick={() => setReciboParaVisualizar(alvo)}><Download className="mr-1.5 h-4 w-4" />Recibo</Button>}
                     {venda.pago && venda.entregue && <CheckCircle2 className="mx-1 h-4 w-4 text-emerald-600" aria-label="Venda concluída" />}
@@ -255,6 +364,57 @@ export default function OrcamentosAprovadosPage() {
             </Table></div>
           ) : <div className="p-14 text-center text-muted-foreground"><FileText className="mx-auto mb-3 h-10 w-10 opacity-30" /><p className="text-sm">{configuracao.vazio}</p></div>}
       </div>
+
+      <Dialog open={Boolean(condicaoPagamentoAlvo)} onOpenChange={(aberto) => !aberto && setCondicaoPagamentoAlvo(null)}>
+        <DialogContent className="max-h-[calc(100vh-2rem)] overflow-y-auto sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><CalendarClock className="h-5 w-5 text-primary" />Condição de pagamento</DialogTitle>
+            <DialogDescription>Defina os vencimentos de {condicaoPagamentoAlvo?.numero ?? ""}. Ao confirmar, o recebível atual sem baixas será substituído por títulos independentes e rastreáveis.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-5 py-2">
+            <div className="grid gap-3 rounded-lg border border-primary/15 bg-primary/5 p-3 sm:grid-cols-3">
+              <div><p className="text-xs font-medium text-muted-foreground">Cliente</p><p className="truncate text-sm font-semibold">{condicaoPagamentoAlvo?.clienteNome ?? "—"}</p></div>
+              <div><p className="text-xs font-medium text-muted-foreground">Venda</p><p className="text-sm font-semibold">{condicaoPagamentoAlvo?.numero ?? "—"}</p></div>
+              <div><p className="text-xs font-medium text-muted-foreground">Valor total</p><p className="text-sm font-semibold text-primary">{formatarMoeda.format(Number(condicaoPagamentoAlvo?.total ?? 0))}</p></div>
+            </div>
+
+            {condicaoAtual.isLoading ? <div className="flex items-center gap-2 rounded-lg border p-4 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando condição atual...</div> : <>
+              {condicaoAtual.data?.parcelas.some((parcela) => Number(parcela.valorBaixado) > 0) && <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">Há baixa registrada nesta venda. Estorne as baixas no Financeiro antes de alterar a condição de pagamento.</div>}
+              <div className="space-y-2">
+                <Label>Tipo de condição</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button type="button" variant={tipoCondicaoPagamento === "avista" ? "default" : "outline"} className="justify-start" onClick={() => { setTipoCondicaoPagamento("avista"); setVencimentosPagamento((atuais) => [atuais[0] || dataLocalDeHoje()]); }}>À vista <span className="ml-1 text-xs opacity-75">(1 parcela)</span></Button>
+                  <Button type="button" variant={tipoCondicaoPagamento === "parcelado" ? "default" : "outline"} className="justify-start" onClick={() => { setTipoCondicaoPagamento("parcelado"); setVencimentosPagamento((atuais) => atuais.length >= 2 ? atuais : [atuais[0] || (modoVencimento === "dias" ? "30" : dataLocalDeHoje()), modoVencimento === "dias" ? "60" : somarDiasDataLocal(30)]); }}>Parcelado <span className="ml-1 text-xs opacity-75">(2 ou mais parcelas)</span></Button>
+                </div>
+              </div>
+
+              {tipoCondicaoPagamento === "parcelado" && <div className="space-y-2">
+                <Label>Informar vencimentos por</Label>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <Button type="button" variant={modoVencimento === "dias" ? "secondary" : "outline"} className="justify-start" onClick={() => { setModoVencimento("dias"); setVencimentosPagamento((atuais) => atuais.map((_, indice) => String((indice + 1) * 30))); }}>Dias a partir de hoje</Button>
+                  <Button type="button" variant={modoVencimento === "datas" ? "secondary" : "outline"} className="justify-start" onClick={() => { setModoVencimento("datas"); setVencimentosPagamento(datasPreviewCondicao.map((data) => data || dataLocalDeHoje())); }}>Datas específicas</Button>
+                </div>
+              </div>}
+
+              <div className="overflow-hidden rounded-lg border">
+                <div className="grid grid-cols-[minmax(5rem,0.8fr)_minmax(8.5rem,1.1fr)_minmax(7rem,0.8fr)_2.5rem] gap-2 bg-muted/60 px-3 py-2 text-xs font-semibold text-muted-foreground"><span>Parcela</span><span>{modoVencimento === "dias" && tipoCondicaoPagamento === "parcelado" ? "Prazo" : "Vencimento"}</span><span className="text-right">Valor</span><span /></div>
+                <div className="divide-y">{vencimentosPagamento.map((vencimento, indice) => <div key={`${indice}-${vencimento}`} className="grid grid-cols-[minmax(5rem,0.8fr)_minmax(8.5rem,1.1fr)_minmax(7rem,0.8fr)_2.5rem] items-center gap-2 px-3 py-2">
+                  <span className="text-sm font-medium">{indice + 1}/{vencimentosPagamento.length}</span>
+                  {modoVencimento === "dias" && tipoCondicaoPagamento === "parcelado" ? <div className="flex items-center gap-2"><Input aria-label={`Prazo da parcela ${indice + 1} em dias`} type="number" min="1" inputMode="numeric" value={vencimento} onChange={(event) => atualizarVencimentoPagamento(indice, event.target.value)} /><span className="text-xs text-muted-foreground">dias</span></div> : <Input aria-label={`Vencimento da parcela ${indice + 1}`} type="date" value={vencimento} onChange={(event) => atualizarVencimentoPagamento(indice, event.target.value)} />}
+                  <div className="text-right text-sm font-semibold">{formatarMoeda.format(valoresPreviewCondicao[indice] ?? 0)}{modoVencimento === "dias" && tipoCondicaoPagamento === "parcelado" && datasPreviewCondicao[indice] && <p className="mt-0.5 text-[11px] font-normal text-muted-foreground">{new Date(`${datasPreviewCondicao[indice]}T12:00:00`).toLocaleDateString("pt-BR")}</p>}</div>
+                  <div>{tipoCondicaoPagamento === "parcelado" && vencimentosPagamento.length > 2 && <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-destructive" aria-label={`Remover parcela ${indice + 1}`} onClick={() => setVencimentosPagamento((atuais) => atuais.filter((_, indiceAtual) => indiceAtual !== indice))}><Trash2 className="h-4 w-4" /></Button>}</div>
+                </div>)}</div>
+              </div>
+              {tipoCondicaoPagamento === "parcelado" && <Button type="button" variant="outline" className="w-full" onClick={adicionarParcelaPagamento} disabled={vencimentosPagamento.length >= 24}><Plus className="mr-2 h-4 w-4" />Adicionar parcela</Button>}
+              <p className="text-xs text-muted-foreground">Os valores são distribuídos automaticamente sem perda de centavos. O recebimento de cada parcela deverá ser baixado individualmente no módulo Financeiro.</p>
+            </>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCondicaoPagamentoAlvo(null)} disabled={configurarCondicaoPagamento.isPending}>Cancelar</Button>
+            <Button onClick={confirmarCondicaoPagamento} disabled={condicaoAtual.isLoading || configurarCondicaoPagamento.isPending || Boolean(condicaoAtual.data?.parcelas.some((parcela) => Number(parcela.valorBaixado) > 0))}>{configurarCondicaoPagamento.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{configurarCondicaoPagamento.isPending ? "Salvando..." : "Confirmar condição"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={Boolean(pagamentoAlvo)} onOpenChange={(aberto) => !aberto && setPagamentoAlvo(null)}>
         <DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Registrar pagamento</DialogTitle><DialogDescription>Informe a forma e a data exata da quitação de {pagamentoAlvo?.numero ?? ""}. A entrega física continua independente deste registo.</DialogDescription></DialogHeader>

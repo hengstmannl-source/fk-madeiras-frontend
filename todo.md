@@ -68,6 +68,11 @@
 - [x] Retirar ou cancelar a conta a receber vinculada quando uma venda aprovada for excluída
 - [x] Gerar um número sequencial, único e definitivo somente na aprovação da venda
 - [x] Exibir a numeração definitiva em vendas, recebíveis e documentos após a aprovação
+- [x] Permitir configurar a condição de pagamento parcelada ao clicar no cliente de uma venda aprovada
+- [x] Criar parcelas rastreáveis no Financeiro, cancelando o recebível único sem baixas
+- [x] Cancelar todos os recebíveis vinculados ao excluir uma venda parcelada sem baixas
+- [x] Cobrir o parcelamento de vendas e seus bloqueios de baixa com testes automatizados
+- [x] Validar visualmente e publicar a condição de pagamento parcelada
 - [x] Testar a exclusão de vendas aprovadas e a unicidade da numeração sequencial
 - [x] Exibir explicitamente o número sequencial definitivo da venda na conta a receber vinculada
 - [x] Testar a apresentação do número definitivo da venda nos recebíveis após aprovação
@@ -606,3 +611,8 @@
 - [x] Substituir no PDF da venda a listagem de peças romaneadas por uma grade de medidas e comprimentos
 - [x] Preservar o resumo final de peças e percentual por bitola após a nova grade
 - [x] Cobrir a grade do PDF de vendas com testes de conteúdo, paginação e revisão visual
+- [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
+- [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
+- [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela
+- [x] Abrir o formulário de condição de pagamento ao clicar no cliente em Vendas Aprovadas
+- [x] Cobrir parcelamento, vencimentos e atualização da listagem com testes e validação visual

@@ -7,6 +7,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   venda: {} as Record<string, unknown>,
   entregar: vi.fn(),
+  configurar: vi.fn(),
   estornar: vi.fn(),
   invalidar: vi.fn(),
   localizacao: "/vendas/aprovadas",
@@ -19,7 +20,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 vi.mock("@/lib/trpc", () => ({
   trpc: {
     useUtils: () => ({
-      orcamento: { list: { invalidate: state.invalidar }, resumoFilas: { invalidate: state.invalidar }, get: { invalidate: state.invalidar } },
+      orcamento: { list: { invalidate: state.invalidar }, resumoFilas: { invalidate: state.invalidar }, get: { invalidate: state.invalidar }, condicaoPagamento: { invalidate: state.invalidar } },
       producao: { estoque: { resumo: { invalidate: state.invalidar } } },
     }),
     cliente: { list: { useQuery: () => ({ data: [{ id: 1, nome: "Cliente de teste" }] }) } },
@@ -27,6 +28,8 @@ vi.mock("@/lib/trpc", () => ({
         list: { useQuery: () => ({ data: [state.venda], isLoading: false }) },
         resumoFilas: { useQuery: () => ({ data: { aprovadas: 3, pagas: 2, entregues: 1, concluidas: 4 }, isLoading: false }) },
       registrarPagamento: { useMutation: () => ({ isPending: false, mutate: vi.fn() }) },
+      condicaoPagamento: { useQuery: () => ({ data: { possuiParcelamento: false, parcelas: [] }, isLoading: false }) },
+      configurarCondicaoPagamento: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; parcelas: Array<{ dataVencimento: string }> }, callbacks: { onSuccess?: (resultado: { parcelas: Array<{ id: number }> }) => void }) => { state.configurar(input); callbacks.onSuccess?.({ parcelas: input.parcelas.map((_, indice) => ({ id: indice + 1 })) }); } }) },
       entregarFisicamente: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; entregueEm: string; modalidadeEntrega: "retirada" | "entrega"; responsavelEntrega: string; observacoesEntrega?: string; aproveitamentos?: Array<{ madeiraNome: string; volume: string }> }, callbacks: { onSuccess?: (resultado: { pecasEntregues: number; pecasSemEstoque?: number; aproveitamentoEntregue?: number; aproveitamentoSemEstoque?: number }) => void }) => { state.entregar(input); callbacks.onSuccess?.({ pecasEntregues: 4, pecasSemEstoque: 2, aproveitamentoEntregue: 0, aproveitamentoSemEstoque: 0 }); } }) },
       estornarEntrega: { useMutation: () => ({ isPending: false, mutate: (input: { id: number; motivo: string }, callbacks: { onSuccess?: (resultado: { pecasDevolvidas: number }) => void }) => { state.estornar(input); callbacks.onSuccess?.({ pecasDevolvidas: 4 }); } }) },
     },
@@ -40,6 +43,7 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
   beforeEach(() => {
     cleanup();
     state.entregar.mockReset();
+    state.configurar.mockReset();
     state.estornar.mockReset();
     state.invalidar.mockReset();
     state.navegar.mockReset();
@@ -123,5 +127,27 @@ describe("OrcamentosAprovadosPage — entrega física independente", () => {
     expect(screen.getByLabelText("Total de vendas Pagas")).toHaveTextContent("2");
     expect(screen.getByLabelText("Total de vendas Entregues")).toHaveTextContent("1");
     expect(screen.getByLabelText("Total de vendas Concluídas")).toHaveTextContent("4");
+  });
+
+  it("configura vencimentos parcelados por prazo ao clicar no cliente da venda aprovada", async () => {
+    const user = userEvent.setup();
+    state.venda = { ...state.venda, pago: false, pagoEm: null, formaPagamento: null };
+    render(<OrcamentosAprovadosPage />);
+
+    await user.click(screen.getByRole("button", { name: "Cliente de teste" }));
+    expect(screen.getByRole("heading", { name: "Condição de pagamento" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /Parcelado/i }));
+    await user.click(screen.getByRole("button", { name: "Dias a partir de hoje" }));
+    await user.clear(screen.getByLabelText("Prazo da parcela 1 em dias"));
+    await user.type(screen.getByLabelText("Prazo da parcela 1 em dias"), "30");
+    await user.clear(screen.getByLabelText("Prazo da parcela 2 em dias"));
+    await user.type(screen.getByLabelText("Prazo da parcela 2 em dias"), "60");
+    await user.click(screen.getByRole("button", { name: "Confirmar condição" }));
+
+    expect(state.configurar).toHaveBeenCalledWith({
+      id: 25,
+      parcelas: [expect.objectContaining({ dataVencimento: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) }), expect.objectContaining({ dataVencimento: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) })],
+    });
+    expect(state.invalidar).toHaveBeenCalled();
   });
 });

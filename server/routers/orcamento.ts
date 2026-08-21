@@ -49,6 +49,13 @@ export const RegistroPagamentoSchema = z.object({
   pagoEm: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data de pagamento válida").default(() => new Date().toISOString().slice(0, 10)),
 });
 
+export const CondicaoPagamentoVendaSchema = z.object({
+  id: z.number().int().positive(),
+  parcelas: z.array(z.object({
+    dataVencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data de vencimento válida"),
+  })).min(1, "Informe ao menos uma parcela").max(24, "A condição de pagamento suporta no máximo 24 parcelas"),
+});
+
 const BaixaAproveitamentoSchema = z.object({
   madeiraNome: z.string().trim().min(2, "Informe a essência do aproveitamento").max(200),
   volume: z.union([z.string(), z.number()])
@@ -159,6 +166,14 @@ export const orcamentoRouter = router({
     .input(z.object({ id: z.number() }))
     .query(async ({ ctx, input }) => {
       return db.getOrcamentoWithItems(input.id, ctx.empresaAtiva!.empresa.id);
+    }),
+
+  condicaoPagamento: protectedProcedure
+    .input(z.object({ id: z.number().int().positive() }))
+    .query(async ({ ctx, input }) => {
+      const condicao = await db.getCondicaoPagamentoVenda(input.id, ctx.empresaAtiva!.empresa.id);
+      if (!condicao) throw new Error("Venda não encontrada para a empresa ativa");
+      return condicao;
     }),
 
   create: protectedProcedure
@@ -274,6 +289,18 @@ export const orcamentoRouter = router({
         dataVencimento: parseDataFinanceira(input.dataVencimento),
         competencia: parseDataFinanceira(input.competencia),
       }, input.confirmacaoDupla);
+    }),
+
+  configurarCondicaoPagamento: protectedProcedure
+    .input(CondicaoPagamentoVendaSchema)
+    .mutation(async ({ ctx, input }) => {
+      await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
+      return db.configurarCondicaoPagamentoVenda(
+        input.id,
+        input.parcelas.map((parcela) => ({ dataVencimento: parseDataFinanceira(parcela.dataVencimento) })),
+        ctx.user.id,
+        ctx.empresaAtiva!.empresa.id,
+      );
     }),
 
   delete: protectedProcedure

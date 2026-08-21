@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
+import { atribuirNumeroVendaAprovada, atualizarDatasOrcamento, cancelarRecebivelDeVendaExcluida, configurarCondicaoPagamentoVenda, listTitulosFinanceiros, updateOrcamentoEstado } from "./db";
 import { formatReceivableSaleReference } from "../client/src/lib/utils";
 
 function criarBancoDeOrcamentoFalso() {
@@ -102,7 +102,7 @@ describe("mudança de estado de orçamento", () => {
   it("cancela o recebível sem baixa antes de excluir uma venda aprovada", async () => {
     const atualizacoes: any[] = [];
     const db = {
-      select: vi.fn(() => ({ from: () => ({ where: () => ({ limit: async () => [{ id: 101, valorBaixado: "0" }] }) }) })),
+      select: vi.fn(() => ({ from: () => ({ where: async () => [{ id: 101, valorBaixado: "0", estado: "aberto" }] }) })),
       update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
     };
     await expect(cancelarRecebivelDeVendaExcluida(150001, 1, db)).resolves.toMatchObject({ cancelado: true, tituloId: 101 });
@@ -124,7 +124,7 @@ describe("mudança de estado de orçamento", () => {
     const db = {
       select: vi.fn()
         .mockImplementationOnce(() => ({ from: () => ({ where: () => ({ limit: async () => [venda] }) }) }))
-        .mockImplementationOnce(() => ({ from: () => ({ where: () => ({ limit: async () => [titulo] }) }) })),
+        .mockImplementationOnce(() => ({ from: () => ({ where: async () => [titulo] }) })),
       update: vi.fn(() => ({
         set: (dados: any) => {
           atualizacoes.push(dados);
@@ -137,8 +137,70 @@ describe("mudança de estado de orçamento", () => {
 
     const resultado = await atualizarDatasOrcamento(150001, { dataVencimento, competencia }, false, db);
 
-    expect(resultado).toEqual({ success: true, tituloAtualizado: true });
+    expect(resultado).toEqual({ success: true, tituloAtualizado: true, parcelasPreservadas: false });
     expect(atualizacoes[0]).toEqual({ dataVencimento, competencia });
     expect(atualizacoes[1]).toMatchObject({ dataVencimento, competencia, estado: "aberto" });
+  });
+
+  it("substitui o recebível único por parcelas rastreáveis sem perder centavos", async () => {
+    const atualizacoes: any[] = [];
+    const insercoes: any[] = [];
+    const parcelasCriadas = [
+      { id: 201, numeroParcela: 1, totalParcelas: 3, dataVencimento: new Date("2030-01-30T12:00:00"), valorOriginal: "333.34" },
+      { id: 202, numeroParcela: 2, totalParcelas: 3, dataVencimento: new Date("2030-03-01T12:00:00"), valorOriginal: "333.33" },
+      { id: 203, numeroParcela: 3, totalParcelas: 3, dataVencimento: new Date("2030-03-31T12:00:00"), valorOriginal: "333.33" },
+    ];
+    let selecao = 0;
+    const tx = {
+      select: vi.fn(() => ({
+        from: () => ({
+          where: () => {
+            selecao += 1;
+            if (selecao === 1) return { limit: async () => [{ id: 150001, estado: "aprovado", pago: false, total: "1000.00", numero: "VND-000123", clienteId: 11, competencia: new Date("2030-01-01T12:00:00") }] };
+            if (selecao === 2) return [{ id: 101, estado: "aberto", valorBaixado: "0" }];
+            return { orderBy: async () => parcelasCriadas };
+          },
+        }),
+      })),
+      update: vi.fn(() => ({ set: (dados: any) => { atualizacoes.push(dados); return { where: async () => undefined }; } })),
+      insert: vi.fn(() => ({ values: async (dados: any) => { insercoes.push(dados); return [{ insertId: 1 }]; } })),
+    };
+    const database = { transaction: async (executar: (transacao: typeof tx) => unknown) => executar(tx) };
+
+    const resultado = await configurarCondicaoPagamentoVenda(150001, [
+      { dataVencimento: new Date("2030-03-31T12:00:00") },
+      { dataVencimento: new Date("2030-01-30T12:00:00") },
+      { dataVencimento: new Date("2030-03-01T12:00:00") },
+    ], 9, 1, { database, obterCategoriaReceita: async () => 70 });
+
+    expect(atualizacoes[0]).toMatchObject({ estado: "cancelado", canceladoPor: 9 });
+    expect(insercoes[0]).toHaveLength(3);
+    expect(insercoes[0].map((parcela: any) => parcela.valorOriginal)).toEqual(["333.34", "333.33", "333.33"]);
+    expect(insercoes[0].map((parcela: any) => [parcela.numeroParcela, parcela.totalParcelas])).toEqual([[1, 3], [2, 3], [3, 3]]);
+    expect(resultado.parcelas.map((parcela) => parcela.id)).toEqual([201, 202, 203]);
+  });
+
+  it("impede alterar a condição quando uma parcela já possui baixa", async () => {
+    let selecao = 0;
+    const tx = {
+      select: vi.fn(() => ({
+        from: () => ({
+          where: () => {
+            selecao += 1;
+            if (selecao === 1) return { limit: async () => [{ id: 150001, estado: "aprovado", pago: false, total: "1000.00" }] };
+            return [{ id: 101, estado: "parcial", valorBaixado: "100.00" }];
+          },
+        }),
+      })),
+      update: vi.fn(),
+      insert: vi.fn(),
+    };
+    const database = { transaction: async (executar: (transacao: typeof tx) => unknown) => executar(tx) };
+
+    await expect(configurarCondicaoPagamentoVenda(150001, [{ dataVencimento: new Date("2030-01-30T12:00:00") }], 9, 1, {
+      database,
+      obterCategoriaReceita: async () => 70,
+    })).rejects.toThrow("possui parcelas baixadas");
+    expect(tx.update).not.toHaveBeenCalled();
   });
 });

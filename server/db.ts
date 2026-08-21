@@ -13,7 +13,7 @@ import {
   type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
 } from "../drizzle/schema";
 import { ENV } from './_core/env';
-import { calcularEstadoTitulo, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
+import { calcularEstadoTitulo, calcularParcelas, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorDosCheques } from "./financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "./financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "./fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "./estoque.intercambio";
@@ -676,7 +676,58 @@ export async function listOrcamentos(filters?: { estado?: string; clienteId?: nu
   if (filters?.categoria === "entregues") conditions.push(eq(orcamentos.pago, false), eq(orcamentos.entregue, true));
   if (filters?.categoria === "concluidas") conditions.push(eq(orcamentos.pago, true), eq(orcamentos.entregue, true));
   const where = conditions.length > 0 ? and(...conditions) : undefined;
-  return db.select().from(orcamentos).where(where).orderBy(desc(orcamentos.createdAt));
+  const vendas = await db.select().from(orcamentos).where(where).orderBy(desc(orcamentos.createdAt));
+  if (!vendas.length) return [];
+  const titulos = await db.select({
+    orcamentoId: titulosFinanceiros.orcamentoId,
+    estado: titulosFinanceiros.estado,
+    totalParcelas: titulosFinanceiros.totalParcelas,
+  }).from(titulosFinanceiros).where(and(
+    eq(titulosFinanceiros.empresaId, empresaId),
+    eq(titulosFinanceiros.origem, "orcamento"),
+    inArray(titulosFinanceiros.orcamentoId, vendas.map((venda) => venda.id)),
+    ne(titulosFinanceiros.estado, "cancelado"),
+  ));
+  const titulosPorVenda = new Map<number, typeof titulos>();
+  for (const titulo of titulos) {
+    if (!titulo.orcamentoId) continue;
+    titulosPorVenda.set(titulo.orcamentoId, [...(titulosPorVenda.get(titulo.orcamentoId) ?? []), titulo]);
+  }
+  return vendas.map((venda) => {
+    const titulosDaVenda = titulosPorVenda.get(venda.id) ?? [];
+    return {
+      ...venda,
+      totalParcelasFinanceiras: Math.max(...titulosDaVenda.map((titulo) => titulo.totalParcelas ?? 1), 1),
+      parcelasQuitadasFinanceiras: titulosDaVenda.filter((titulo) => titulo.estado === "quitado").length,
+    };
+  });
+}
+
+export async function getCondicaoPagamentoVenda(orcamentoId: number, empresaId = 1) {
+  const db = await getDb();
+  if (!db) return undefined;
+  const venda = await getOrcamentoById(orcamentoId, empresaId);
+  if (!venda) return undefined;
+  const parcelas = await db.select({
+    id: titulosFinanceiros.id,
+    dataVencimento: titulosFinanceiros.dataVencimento,
+    valorOriginal: titulosFinanceiros.valorOriginal,
+    valorBaixado: titulosFinanceiros.valorBaixado,
+    estado: titulosFinanceiros.estado,
+    grupoParcelamento: titulosFinanceiros.grupoParcelamento,
+    numeroParcela: titulosFinanceiros.numeroParcela,
+    totalParcelas: titulosFinanceiros.totalParcelas,
+  }).from(titulosFinanceiros).where(and(
+    eq(titulosFinanceiros.empresaId, empresaId),
+    eq(titulosFinanceiros.origem, "orcamento"),
+    eq(titulosFinanceiros.orcamentoId, orcamentoId),
+    ne(titulosFinanceiros.estado, "cancelado"),
+  )).orderBy(asc(titulosFinanceiros.numeroParcela), asc(titulosFinanceiros.dataVencimento));
+  return {
+    venda: { id: venda.id, numero: venda.numero, total: venda.total, dataVencimento: venda.dataVencimento, pago: venda.pago },
+    parcelas,
+    possuiParcelamento: parcelas.length > 1,
+  };
 }
 
 export async function getResumoFilasVendas(empresaId = 1): Promise<Record<CategoriaOperacionalVenda, number>> {
@@ -876,16 +927,20 @@ export async function updateOrcamento(id: number, data: Partial<InsertOrcamento>
 export async function cancelarRecebivelDeVendaExcluida(orcamentoId: number, userId: number, database?: any) {
   const db = database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await db.select().from(titulosFinanceiros)
-    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, orcamentoId))).limit(1);
-  if (!titulo[0]) return { cancelado: false };
-  if (decimalParaNumero(titulo[0].valorBaixado) > 0) {
+  const titulos = await db.select().from(titulosFinanceiros)
+    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, orcamentoId)));
+  if (!titulos.length) return { cancelado: false, tituloIds: [] };
+  if (titulos.some((titulo: { valorBaixado: string }) => decimalParaNumero(titulo.valorBaixado) > 0)) {
     throw new Error("A venda possui recebimentos registrados e não pode ser excluída. Regularize as baixas primeiro.");
   }
   const resolvidoEm = new Date();
-  await db.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: resolvidoEm, canceladoPor: userId }).where(eq(titulosFinanceiros.id, titulo[0].id));
-  await db.update(alertasFinanceiros).set({ resolvidoEm }).where(eq(alertasFinanceiros.tituloId, titulo[0].id));
-  return { cancelado: true, tituloId: titulo[0].id };
+  const titulosAtivos = titulos.filter((titulo: { estado: string }) => titulo.estado !== "cancelado");
+  if (!titulosAtivos.length) return { cancelado: false, tituloIds: [] };
+  const tituloIds = titulosAtivos.map((titulo: { id: number }) => titulo.id);
+  await db.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: resolvidoEm, canceladoPor: userId })
+    .where(inArray(titulosFinanceiros.id, tituloIds));
+  await db.update(alertasFinanceiros).set({ resolvidoEm }).where(inArray(alertasFinanceiros.tituloId, tituloIds));
+  return { cancelado: true, tituloIds, tituloId: tituloIds[0] };
 }
 
 export async function deleteOrcamento(id: number, confirmacaoDupla = false, userId?: number) {
@@ -954,6 +1009,17 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
   if (!orcamento) throw new Error("Orçamento não encontrado");
   if (orcamento.estado !== "aprovado") throw new Error("Apenas orçamentos aprovados podem ser marcados como pagos");
   if (orcamento.pago) throw new Error("Este orçamento já foi registrado como pago");
+
+  const titulosAtivos = await db.select().from(titulosFinanceiros)
+    .where(and(
+      eq(titulosFinanceiros.origem, "orcamento"),
+      eq(titulosFinanceiros.orcamentoId, id),
+      eq(titulosFinanceiros.empresaId, orcamento.empresaId),
+      ne(titulosFinanceiros.estado, "cancelado"),
+    ));
+  if (titulosAtivos.length > 1) {
+    throw new Error("Esta venda possui condição parcelada. Registre o recebimento de cada parcela no módulo Financeiro.");
+  }
 
   const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm);
   if (titulo) {
@@ -1743,6 +1809,21 @@ export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empre
       dataVencimento: titulo.dataVencimento,
     });
     await tx.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(eq(titulosFinanceiros.id, titulo.id));
+    if (titulo.orcamentoId && titulo.origem === "orcamento") {
+      const parcelasDaVenda = await tx.select({ id: titulosFinanceiros.id, estado: titulosFinanceiros.estado }).from(titulosFinanceiros).where(and(
+        eq(titulosFinanceiros.orcamentoId, titulo.orcamentoId),
+        eq(titulosFinanceiros.origem, "orcamento"),
+        eq(titulosFinanceiros.empresaId, empresaId),
+        ne(titulosFinanceiros.estado, "cancelado"),
+      ));
+      const vendaQuitada = parcelasDaVenda.length && parcelasDaVenda.every((parcela: { id: number; estado: string }) => (
+        parcela.id === titulo.id ? novoEstado === "quitado" : parcela.estado === "quitado"
+      ));
+      if (vendaQuitada) {
+        await tx.update(orcamentos).set({ pago: true, pagoEm: data.dataBaixa, formaPagamento: data.formaPagamento, pagoPor: data.criadoPor })
+          .where(and(eq(orcamentos.id, titulo.orcamentoId), eq(orcamentos.empresaId, empresaId)));
+      }
+    }
     return { id: baixaId, estado: novoEstado, valorBaixado: novoValorBaixado };
   });
 }
@@ -2107,6 +2188,18 @@ export async function estornarBaixaFinanceira(
     conciliadaEm: null,
   }).where(and(eq(baixasFinanceiras.id, id), eq(baixasFinanceiras.empresaId, empresaId)));
   await db.update(titulosFinanceiros).set({ valorBaixado: novoValorBaixado, estado: novoEstado }).where(and(eq(titulosFinanceiros.id, titulo.id), eq(titulosFinanceiros.empresaId, empresaId)));
+  if (titulo.orcamentoId && titulo.origem === "orcamento") {
+    const parcelasDaVenda = await db.select({ estado: titulosFinanceiros.estado }).from(titulosFinanceiros).where(and(
+      eq(titulosFinanceiros.orcamentoId, titulo.orcamentoId),
+      eq(titulosFinanceiros.origem, "orcamento"),
+      eq(titulosFinanceiros.empresaId, empresaId),
+      ne(titulosFinanceiros.estado, "cancelado"),
+    ));
+    if (parcelasDaVenda.some((parcela: { estado: string }) => parcela.estado !== "quitado")) {
+      await db.update(orcamentos).set({ pago: false, pagoEm: null, formaPagamento: null, pagoPor: null })
+        .where(and(eq(orcamentos.id, titulo.orcamentoId), eq(orcamentos.empresaId, empresaId)));
+    }
+  }
   return { success: true, tituloId: titulo.id, estado: novoEstado, valorBaixado: novoValorBaixado };
 }
 
@@ -2305,7 +2398,12 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
   const orcamento = await getOrcamentoById(orcamentoId);
   if (!orcamento || orcamento.estado !== "aprovado" || orcamento.pago) return undefined;
   const existente = await db.select().from(titulosFinanceiros)
-    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, orcamentoId))).limit(1);
+    .where(and(
+      eq(titulosFinanceiros.origem, "orcamento"),
+      eq(titulosFinanceiros.orcamentoId, orcamentoId),
+      eq(titulosFinanceiros.empresaId, orcamento.empresaId),
+      ne(titulosFinanceiros.estado, "cancelado"),
+    )).limit(1);
   if (existente[0]) return existente[0];
   const categoriaId = await getOrCreateCategoriaReceitaVendas(userId, orcamento.empresaId);
   const criacao = await createTituloFinanceiro({
@@ -2325,6 +2423,130 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
   return getTituloFinanceiroById(criacao.id);
 }
 
+export type ParcelaCondicaoPagamentoVenda = {
+  dataVencimento: Date;
+};
+
+export async function configurarCondicaoPagamentoVenda(
+  orcamentoId: number,
+  parcelasInformadas: ParcelaCondicaoPagamentoVenda[],
+  userId: number,
+  empresaId = 1,
+  dependencias?: { database?: any; obterCategoriaReceita?: (usuarioId: number, empresa: number) => Promise<number> },
+) {
+  const db = dependencias?.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  if (!parcelasInformadas.length) throw new Error("Informe ao menos uma parcela para a condição de pagamento");
+
+  const parcelas = [...parcelasInformadas].sort((primeira, segunda) => (
+    primeira.dataVencimento.getTime() - segunda.dataVencimento.getTime()
+  ));
+  if (parcelas.some((parcela) => Number.isNaN(parcela.dataVencimento.getTime()))) {
+    throw new Error("Informe datas de vencimento válidas para todas as parcelas");
+  }
+  const categoriaId = await (dependencias?.obterCategoriaReceita ?? getOrCreateCategoriaReceitaVendas)(userId, empresaId);
+
+  return db.transaction(async (tx: any) => {
+    const orcamento = (await tx.select().from(orcamentos)
+      .where(and(eq(orcamentos.id, orcamentoId), eq(orcamentos.empresaId, empresaId))).limit(1))[0];
+    if (!orcamento) throw new Error("Venda não encontrada para a empresa ativa");
+    if (orcamento.estado !== "aprovado") throw new Error("A condição de pagamento só pode ser configurada em vendas aprovadas");
+    if (orcamento.pago) throw new Error("A venda já está quitada e não pode ter a condição de pagamento alterada");
+
+    const titulosExistentes = await tx.select().from(titulosFinanceiros).where(and(
+      eq(titulosFinanceiros.origem, "orcamento"),
+      eq(titulosFinanceiros.orcamentoId, orcamentoId),
+      eq(titulosFinanceiros.empresaId, empresaId),
+    ));
+    if (titulosExistentes.some((titulo: { valorBaixado: string }) => decimalParaNumero(titulo.valorBaixado) > 0)) {
+      throw new Error("Não é possível alterar a condição de uma venda que possui parcelas baixadas. Estorne as baixas primeiro.");
+    }
+
+    const titulosAtivos = titulosExistentes.filter((titulo: { estado: string }) => titulo.estado !== "cancelado");
+    const tituloIdsAtivos = titulosAtivos.map((titulo: { id: number }) => titulo.id);
+    const agora = new Date();
+    if (tituloIdsAtivos.length) {
+      await tx.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: agora, canceladoPor: userId })
+        .where(inArray(titulosFinanceiros.id, tituloIdsAtivos));
+      await tx.update(alertasFinanceiros).set({ resolvidoEm: agora })
+        .where(inArray(alertasFinanceiros.tituloId, tituloIdsAtivos));
+    }
+
+    const valoresParcelas = calcularParcelas(orcamento.total, parcelas.length);
+    const grupoParcelamento = `VND-${orcamentoId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const novasParcelas: InsertTituloFinanceiro[] = parcelas.map((parcela, indice) => ({
+      tipo: "receber",
+      origem: "orcamento",
+      descricao: `Venda ${orcamento.numero ?? orcamentoId} · Parcela ${indice + 1}/${parcelas.length}`,
+      clienteId: orcamento.clienteId,
+      fornecedorId: null,
+      contraparteNome: null,
+      orcamentoId,
+      categoriaId,
+      recorrenciaId: null,
+      grupoParcelamento,
+      numeroParcela: indice + 1,
+      totalParcelas: parcelas.length,
+      valorOriginal: valoresParcelas[indice],
+      desconto: "0",
+      juros: "0",
+      valorBaixado: "0",
+      dataEmissao: agora,
+      dataVencimento: parcela.dataVencimento,
+      competencia: orcamento.competencia,
+      estado: calcularEstadoTitulo({ valorOriginal: valoresParcelas[indice], dataVencimento: parcela.dataVencimento }),
+      observacoes: `Condição de pagamento da venda ${orcamento.numero ?? orcamentoId}`,
+      criadoPor: userId,
+      empresaId,
+    }));
+    await tx.insert(titulosFinanceiros).values(novasParcelas);
+    const parcelasCriadas = await tx.select({
+      id: titulosFinanceiros.id,
+      numeroParcela: titulosFinanceiros.numeroParcela,
+      totalParcelas: titulosFinanceiros.totalParcelas,
+      dataVencimento: titulosFinanceiros.dataVencimento,
+      valorOriginal: titulosFinanceiros.valorOriginal,
+    }).from(titulosFinanceiros).where(and(
+      eq(titulosFinanceiros.empresaId, empresaId),
+      eq(titulosFinanceiros.grupoParcelamento, grupoParcelamento),
+    )).orderBy(asc(titulosFinanceiros.numeroParcela));
+
+    await tx.update(orcamentos).set({ dataVencimento: parcelas[0].dataVencimento })
+      .where(and(eq(orcamentos.id, orcamentoId), eq(orcamentos.empresaId, empresaId)));
+    await tx.insert(historicoAlteracoes).values({
+      empresaId,
+      orcamentoId,
+      usuarioId: userId,
+      tipo: "alteracao" as any,
+      detalhes: JSON.stringify({
+        acao: "condicao_pagamento_configurada",
+        grupoParcelamento,
+        totalParcelas: parcelas.length,
+        vencimentos: parcelas.map((parcela) => parcela.dataVencimento.toISOString()),
+      }),
+    });
+
+    return {
+      success: true,
+      grupoParcelamento,
+      parcelas: parcelasCriadas.map((parcela: {
+        id: number;
+        numeroParcela: number | null;
+        totalParcelas: number | null;
+        dataVencimento: Date;
+        valorOriginal: string;
+      }) => ({
+        id: parcela.id,
+        numeroParcela: parcela.numeroParcela,
+        totalParcelas: parcela.totalParcelas,
+        dataVencimento: parcela.dataVencimento,
+        valor: parcela.valorOriginal,
+      })),
+      titulosCancelados: tituloIdsAtivos,
+    };
+  });
+}
+
 export async function atualizarDatasOrcamento(
   id: number,
   datas: { dataVencimento: Date; competencia: Date },
@@ -2336,24 +2558,32 @@ export async function atualizarDatasOrcamento(
   await validarAlteracaoOrcamento(id, confirmacaoDupla, db);
   await db.update(orcamentos).set(datas).where(eq(orcamentos.id, id));
 
-  const titulo = await db.select().from(titulosFinanceiros)
-    .where(and(eq(titulosFinanceiros.origem, "orcamento"), eq(titulosFinanceiros.orcamentoId, id))).limit(1);
-  if (titulo[0]) {
+  const titulosAtivos = await db.select().from(titulosFinanceiros)
+    .where(and(
+      eq(titulosFinanceiros.origem, "orcamento"),
+      eq(titulosFinanceiros.orcamentoId, id),
+      ne(titulosFinanceiros.estado, "cancelado"),
+    ));
+  const titulo = titulosAtivos.length === 1 ? titulosAtivos[0] : undefined;
+  if (titulo) {
     const estado = calcularEstadoTitulo({
-      valorOriginal: titulo[0].valorOriginal,
-      desconto: titulo[0].desconto,
-      juros: titulo[0].juros,
-      valorBaixado: titulo[0].valorBaixado,
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      valorBaixado: titulo.valorBaixado,
       dataVencimento: datas.dataVencimento,
-      cancelado: titulo[0].estado === "cancelado",
+      cancelado: titulo.estado === "cancelado",
     });
     await db.update(titulosFinanceiros).set({
       dataVencimento: datas.dataVencimento,
       competencia: datas.competencia,
       estado,
-    }).where(eq(titulosFinanceiros.id, titulo[0].id));
+    }).where(eq(titulosFinanceiros.id, titulo.id));
+  } else if (titulosAtivos.length > 1) {
+    await db.update(titulosFinanceiros).set({ competencia: datas.competencia })
+      .where(inArray(titulosFinanceiros.id, titulosAtivos.map((titulo: { id: number }) => titulo.id)));
   }
-  return { success: true, tituloAtualizado: Boolean(titulo[0]) };
+  return { success: true, tituloAtualizado: Boolean(titulo), parcelasPreservadas: titulosAtivos.length > 1 };
 }
 
 export async function listRecorrenciasFinanceiras() {
