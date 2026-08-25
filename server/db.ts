@@ -26,6 +26,7 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "./conciliacao.intercambio";
 import { sugerirConciliacoes } from "./conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../shared/plaquetas";
+import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "./empresaAtiva.logic";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -96,14 +97,15 @@ export async function getCredencialPorEmail(emailNormalizado: string) {
 export async function getEmpresaAtivaDoUsuario(usuarioId: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const result = await db
-    .select({ membro: empresaMembros, empresa: empresas })
-    .from(empresaMembros)
-    .innerJoin(empresas, eq(empresas.id, empresaMembros.empresaId))
-    .where(and(eq(empresaMembros.usuarioId, usuarioId), eq(empresaMembros.ativo, true), eq(empresas.ativa, true)))
-    .orderBy(asc(empresaMembros.id))
-    .limit(1);
-  return result[0];
+  const [usuario, empresasDisponiveis] = await Promise.all([
+    getUserById(usuarioId),
+    listarEmpresasDoUsuario(usuarioId),
+  ]);
+  const empresaAtiva = resolverEmpresaAtiva(empresasDisponiveis, usuario?.empresaAtivaId);
+  if (empresaAtiva && usuario?.empresaAtivaId !== empresaAtiva.empresa.id) {
+    await db.update(users).set({ empresaAtivaId: empresaAtiva.empresa.id }).where(eq(users.id, usuarioId));
+  }
+  return empresaAtiva;
 }
 
 export async function listarEmpresasDoUsuario(usuarioId: number) {
@@ -115,6 +117,15 @@ export async function listarEmpresasDoUsuario(usuarioId: number) {
     .innerJoin(empresas, eq(empresas.id, empresaMembros.empresaId))
     .where(and(eq(empresaMembros.usuarioId, usuarioId), eq(empresaMembros.ativo, true), eq(empresas.ativa, true)))
     .orderBy(asc(empresas.nome));
+}
+
+export async function selecionarEmpresaAtivaDoUsuario(usuarioId: number, empresaId: number) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const empresasDisponiveis = await listarEmpresasDoUsuario(usuarioId);
+  if (!podeSelecionarEmpresa(empresasDisponiveis, empresaId)) return undefined;
+  await db.update(users).set({ empresaAtivaId: empresaId }).where(eq(users.id, usuarioId));
+  return empresasDisponiveis.find(({ empresa }) => empresa.id === empresaId);
 }
 
 export async function registrarFalhaAutenticacao(credencialId: number, bloqueadoAte: Date | null) {
@@ -203,6 +214,7 @@ export async function aceitarConviteCriandoUsuario(data: {
       email: convite.emailNormalizado,
       loginMethod: "senha",
       role: "user",
+      empresaAtivaId: convite.empresaId,
       lastSignedIn: new Date(),
     });
     const usuarioId = Number((resultadoUsuario as MysqlInsertResult)[0]?.insertId ?? 0);
@@ -262,6 +274,7 @@ export async function criarEmpresaComProprietario(data: {
       email: data.emailNormalizado,
       loginMethod: "senha",
       role: "user",
+      empresaAtivaId: empresaId,
       lastSignedIn: new Date(),
     });
     const usuarioId = Number((resultadoUsuario as MysqlInsertResult)[0]?.insertId ?? 0);

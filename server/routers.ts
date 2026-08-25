@@ -22,12 +22,21 @@ export const appRouter = router({
   system: systemRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
-    contexto: protectedProcedure.query(({ ctx }) => ({
+    contexto: protectedProcedure.query(async ({ ctx }) => ({
       usuario: ctx.user,
       empresa: ctx.empresaAtiva.empresa,
       membro: ctx.empresaAtiva.membro,
-      empresasDisponiveis: db.listarEmpresasDoUsuario(ctx.user.id),
+      empresasDisponiveis: await db.listarEmpresasDoUsuario(ctx.user.id),
     })),
+    selecionarEmpresa: protectedProcedure
+      .input(z.object({ empresaId: z.number().int().positive() }))
+      .mutation(async ({ ctx, input }) => {
+        const empresaAtiva = await db.selecionarEmpresaAtivaDoUsuario(ctx.user.id, input.empresaId);
+        if (!empresaAtiva) {
+          throw new TRPCError({ code: "FORBIDDEN", message: "Você não possui vínculo ativo com a empresa selecionada." });
+        }
+        return { empresa: empresaAtiva.empresa, membro: empresaAtiva.membro };
+      }),
     entrar: publicProcedure
       .input(z.object({ email: z.string().email(), senha: z.string().min(1).max(200) }))
       .mutation(async ({ ctx, input }) => {

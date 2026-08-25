@@ -655,6 +655,13 @@
 - [x] Proteger leituras, criações, alterações e exclusões contra acesso cross-tenant
 - [x] Criar regressões para leitura, criação, alteração, exclusão e ausência de contexto empresarial
 - [x] Validar ausência de fallbacks perigosos, TypeScript e suíte completa
+- [x] Auditar sessão, empresaMembros, empresas, contexto tRPC e mecanismos existentes de empresa ativa
+- [x] Definir persistência segura da empresa ativa sem duplicar estruturas existentes
+- [x] Criar listagem de empresas do usuário e seleção validada por vínculo empresarial
+- [x] Propagar empresa ativa e perfil do vínculo ao contexto e às permissões
+- [x] Adicionar seletor de empresa no layout e invalidar dados após a troca
+- [x] Cobrir primeiro acesso, troca, negação de seleção indevida e limpeza de cache com testes
+- [x] Validar tipagem, isolamento e suíte completa sem reintroduzir fallback de empresa
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela
