@@ -20,6 +20,7 @@ import {
 import { getDb } from "../db";
 import { calcularCustoColaboradorGerencialRh, type ConfiguracaoCustosGerenciaisRh, type RegraCustoGerencialRh } from "../rh.gestao.logic";
 import { protectedProcedure, router } from "../_core/trpc";
+import { garantirTituloFinanceiroComChave } from "../repositories/financeiro";
 
 const idSchema = z.number().int().positive();
 const dataSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe uma data válida");
@@ -179,8 +180,23 @@ export const fichasFinanceirasRh = router({
       const id = Number(criado[0].insertId); let tituloFinanceiroId: number | null = null;
       if (input.gerarFinanceiro) {
         const categoriaId = await garantirCategoriaFinanceiraRh(db, empresaId, ctx.user.id);
-        const titulo = await db.insert(titulosFinanceiros).values({ empresaId, tipo: "pagar", origem: "manual", chaveImportacao: `RH-FICHA-${id}`, descricao: `Pagamento de colaborador — ${colaborador.nome}: ${input.descricao}`, contraparteNome: colaborador.nome, categoriaId, valorOriginal: decimal(input.valor), dataEmissao: dataLocal(input.dataLancamento), dataVencimento: dataLocal(input.dataLancamento), competencia, estado: "aberto", observacoes: textoNulo(input.observacoes), criadoPor: ctx.user.id });
-        tituloFinanceiroId = Number(titulo[0].insertId); await db.update(lancamentosColaboradoresRh).set({ tituloFinanceiroId }).where(eq(lancamentosColaboradoresRh.id, id));
+        const titulo = await garantirTituloFinanceiroComChave({
+          tipo: "pagar",
+          origem: "manual",
+          chaveIdempotencia: `RH-FICHA-${id}`,
+          descricao: `Pagamento de colaborador — ${colaborador.nome}: ${input.descricao}`,
+          contraparteNome: colaborador.nome,
+          categoriaId,
+          valorOriginal: decimal(input.valor),
+          dataEmissao: dataLocal(input.dataLancamento),
+          dataVencimento: dataLocal(input.dataLancamento),
+          competencia,
+          observacoes: textoNulo(input.observacoes),
+          criadoPor: ctx.user.id,
+          database: db,
+        });
+        tituloFinanceiroId = titulo.id;
+        await db.update(lancamentosColaboradoresRh).set({ tituloFinanceiroId }).where(eq(lancamentosColaboradoresRh.id, id));
       }
       await auditar(empresaId, ctx.user.id, "lancamento_ficha", id, "criado", { tipo: input.tipo, colaboradorId: input.colaboradorId, gerarFinanceiro: input.gerarFinanceiro }); return { id, tituloFinanceiroId };
     }),

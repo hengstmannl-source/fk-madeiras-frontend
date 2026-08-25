@@ -70,13 +70,18 @@ export type CriarTituloFinanceiroInput = {
   observacoes?: string | null;
 };
 
-export type GarantirTituloAutomaticoInput = Omit<CriarTituloFinanceiroInput, "empresaId" | "chaveImportacao"> & {
-  origem: Exclude<OrigemTituloFinanceiro, "manual">;
+export type GarantirTituloComChaveInput = Omit<CriarTituloFinanceiroInput, "empresaId" | "chaveImportacao"> & {
+  origem: OrigemTituloFinanceiro;
   chaveIdempotencia: string;
   romaneioCargaId?: number | null;
   notaDieselId?: number | null;
   serragemTerceirosId?: number | null;
   database?: DatabaseConnection | any;
+};
+
+/** Contrato semântico dos eventos automáticos de domínio. */
+export type GarantirTituloAutomaticoInput = GarantirTituloComChaveInput & {
+  origem: Exclude<OrigemTituloFinanceiro, "manual">;
 };
 
 export async function listFornecedores() {
@@ -446,7 +451,7 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
  * O helper não altera títulos existentes, preservando baixas, conciliações e edições
  * financeiras já realizadas.
  */
-export async function garantirTituloFinanceiroAutomatico(input: GarantirTituloAutomaticoInput) {
+export async function garantirTituloFinanceiroComChave(input: GarantirTituloComChaveInput) {
   const empresaId = (await getEmpresaUnica()).id;
   const db = input.database ?? await getDb();
   if (!db) throw new Error("Database not available");
@@ -506,6 +511,11 @@ export async function garantirTituloFinanceiroAutomatico(input: GarantirTituloAu
     if (concorrente?.origem === input.origem) return { id: concorrente.id, criado: false, titulo: concorrente };
     throw error;
   }
+}
+
+/** Encaminha eventos automáticos ao único mecanismo central idempotente. */
+export async function garantirTituloFinanceiroAutomatico(input: GarantirTituloAutomaticoInput) {
+  return garantirTituloFinanceiroComChave(input);
 }
 
 export async function getTituloFinanceiroById(id: number) {
@@ -1580,11 +1590,14 @@ export async function configurarCondicaoPagamentoVenda(
       observacoes: `Condição de pagamento da venda ${orcamento.numero ?? orcamentoId}`,
       criadoPor: userId,
     }));
-    await Promise.all(novasParcelas.map((parcela, indice) => garantirTituloFinanceiroAutomatico({
-      ...parcela,
-      chaveIdempotencia: `FIN-ORCAMENTO-${orcamentoId}-${grupoParcelamento}-PARCELA-${indice + 1}`,
-      database: tx,
-    })));
+    for (let indice = 0; indice < novasParcelas.length; indice += 1) {
+      const parcela = novasParcelas[indice];
+      await garantirTituloFinanceiroAutomatico({
+        ...parcela,
+        chaveIdempotencia: `FIN-ORCAMENTO-${orcamentoId}-${grupoParcelamento}-PARCELA-${indice + 1}`,
+        database: tx,
+      });
+    }
     const parcelasCriadas = await tx.select({
       id: titulosFinanceiros.id,
       numeroParcela: titulosFinanceiros.numeroParcela,

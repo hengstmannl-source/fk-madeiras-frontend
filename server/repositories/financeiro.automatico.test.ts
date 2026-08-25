@@ -8,7 +8,7 @@ vi.mock("./core", () => ({
   getDb: vi.fn(),
 }));
 
-import { garantirTituloFinanceiroAutomatico } from "./financeiro";
+import { garantirTituloFinanceiroAutomatico, garantirTituloFinanceiroComChave } from "./financeiro";
 
 describe("motor financeiro automático", () => {
   const titulos: Array<Record<string, unknown>> = [];
@@ -70,5 +70,55 @@ describe("motor financeiro automático", () => {
       ...entrada,
       origem: "nota_diesel",
     })).rejects.toThrow("outra origem financeira");
+  });
+
+  it("preserva a idempotência para lançamentos manuais assistidos", async () => {
+    const manual = {
+      ...entrada,
+      tipo: "pagar" as const,
+      origem: "manual" as const,
+      chaveIdempotencia: "RH-FICHA-77",
+      descricao: "Pagamento de colaborador — teste",
+    };
+
+    const primeiro = await garantirTituloFinanceiroComChave(manual);
+    const repetido = await garantirTituloFinanceiroComChave(manual);
+
+    expect(primeiro).toMatchObject({ id: 1, criado: true });
+    expect(repetido).toMatchObject({ id: 1, criado: false });
+    expect(titulos).toHaveLength(1);
+    expect(titulos[0]).toMatchObject({ origem: "manual", chaveImportacao: "RH-FICHA-77" });
+  });
+
+  it("recupera o título já criado quando uma corrida encontra a chave única", async () => {
+    const titulosConcorrentes: Array<Record<string, unknown>> = [];
+    const databaseConcorrente = {
+      select: () => ({
+        from: () => ({
+          where: () => ({
+            limit: async () => [...titulosConcorrentes],
+          }),
+        }),
+      }),
+      insert: () => ({
+        values: async (dados: Record<string, unknown>) => {
+          if (titulosConcorrentes.some((titulo) => titulo.chaveImportacao === dados.chaveImportacao)) {
+            throw new Error("Duplicate entry for chaveImportacao");
+          }
+          const titulo = { id: titulosConcorrentes.length + 1, ...dados };
+          titulosConcorrentes.push(titulo);
+          return [{ insertId: titulo.id }, undefined] as const;
+        },
+      }),
+    };
+
+    const resultados = await Promise.all([
+      garantirTituloFinanceiroAutomatico({ ...entrada, database: databaseConcorrente }),
+      garantirTituloFinanceiroAutomatico({ ...entrada, database: databaseConcorrente }),
+    ]);
+
+    expect(resultados.map((resultado) => resultado.id)).toEqual([1, 1]);
+    expect(resultados.map((resultado) => resultado.criado).sort()).toEqual([false, true]);
+    expect(titulosConcorrentes).toHaveLength(1);
   });
 });

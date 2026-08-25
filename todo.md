@@ -709,3 +709,9 @@
 - [x] Remover criações diretas duplicadas de títulos em routers e módulos operacionais preservando edições e sincronizações permitidas
 - [x] Criar regressões de idempotência, parcelamento e origem para os títulos financeiros automáticos
 - [x] Validar TypeScript, testes, build e fluxos financeiros antes de publicar a primeira etapa
+- [x] Inventariar todas as inserções diretas e contratos de títulos financeiros por origem antes da centralização definitiva
+- [x] Criar adaptadores de domínio para venda, romaneio, diesel, serragem, folha, recorrência e lançamento manual sobre o Motor Financeiro
+- [x] Remover toda inserção direta em titulosFinanceiros fora do núcleo financeiro, preservando atualizações, vínculos e títulos manuais
+- [x] Validar idempotência de vendas parceladas, romaneios e sincronizações sem duplicar títulos ou alterar baixas existentes
+- [x] Adicionar regressões que comprovem o núcleo financeiro como único ponto de persistência automática
+- [x] Executar auditoria global, TypeScript, suíte e build antes de publicar a centralização definitiva
