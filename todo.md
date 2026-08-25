@@ -675,3 +675,7 @@
 - [x] Eliminar any desnecessários no backend, priorizando dados financeiros e operações críticas
 - [x] Fortalecer tipos do frontend e pontos compartilhados sem alterar comportamento visual
 - [x] Documentar exceções justificadas, validar TypeScript e executar a suíte completa
+- [x] Mapear o cálculo atual de participação por bitola no PDF de Produção Diária
+- [x] Calcular percentuais de peças separadamente por essência produzida
+- [x] Separar e identificar no PDF o resumo de peças de cada essência
+- [x] Cobrir o cálculo multiespécie com testes, validar PDF e suíte completa

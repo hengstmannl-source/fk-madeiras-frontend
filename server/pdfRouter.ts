@@ -5,6 +5,7 @@ import { storageGetSignedUrl } from "./storage";
 import { sdk } from "./_core/sdk";
 import { etiquetaPlaqueta } from "../shared/plaquetas";
 import { calcularAproveitamentoPorEssencia } from "../shared/aproveitamentoPorEssencia";
+import { resumirPecasPdfPorEssencia, type GrupoBitolaPdfProducao, type ResumoEssenciaPdfProducao } from "./pdf.producao.logic";
 
 const A4: [number, number] = [595, 842];
 const MARGEM_LATERAL = 48;
@@ -699,43 +700,27 @@ export async function registerPdfRoutes(app: any) {
       layout.escreverParagrafo(`Volume de toras: ${formatMeasurement(data.romaneio.volumeTora)} m³   •   Fita/Linha: ${normalizarTexto(data.romaneio.fita) || "Não informada"}   •   Responsável: ${normalizarTexto(data.romaneio.responsavel) || "Não informado"}`, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
       layout.mover(12);
 
-      const totalPecas = (data.itens ?? []).reduce((total: number, item: any) => total + Number(item.quantidade ?? 0), 0);
-      const totalMetros = (data.itens ?? []).reduce((total: number, item: any) => total + Number(item.metrosLineares ?? 0), 0);
-      const totalVolume = (data.itens ?? []).reduce((total: number, item: any) => total + Number(item.volume ?? 0), 0);
-      const gruposPorBitola = Array.from((data.itens ?? []).reduce((grupos: Map<string, any>, item: any) => {
-        const essencia = normalizarTexto(item.madeiraNome) || "Não informada";
-        const espessura = Number(item.espessura ?? 0);
-        const largura = Number(item.largura ?? 0);
-        const chave = `${espessura}|${largura}`;
-        const grupo = grupos.get(chave) ?? { essencias: new Set<string>(), espessura, largura, comprimentos: new Map<number, number>(), totalPecas: 0, volume: 0 };
-        grupo.essencias.add(essencia);
-        const comprimento = Number(item.comprimento ?? 0);
-        grupo.comprimentos.set(comprimento, (grupo.comprimentos.get(comprimento) ?? 0) + Number(item.quantidade ?? 0));
-        grupo.totalPecas += Number(item.quantidade ?? 0);
-        grupo.volume += Number(item.volume ?? 0);
-        grupos.set(chave, grupo);
-        return grupos;
-      }, new Map<string, any>()).values()).sort((a: any, b: any) => a.espessura - b.espessura || a.largura - b.largura);
-      const comprimentosDaGrade = Array.from(new Set((data.itens ?? [])
-        .map((item: any) => Number(item.comprimento ?? 0))
-        .filter((comprimento) => Number.isFinite(comprimento) && comprimento > 0)))
-        .sort((a, b) => a - b);
+      const resumosPecasPorEssencia = resumirPecasPdfPorEssencia(data.itens ?? []);
+      const totalPecas = resumosPecasPorEssencia.reduce((total, resumo) => total + resumo.totalPecas, 0);
+      const totalMetros = resumosPecasPorEssencia.reduce((total, resumo) => total + resumo.totalMetros, 0);
+      const totalVolume = resumosPecasPorEssencia.reduce((total, resumo) => total + resumo.totalVolume, 0);
       const larguraGrade = width - (MARGEM_LATERAL * 2);
       const larguraComprimento = 48;
       const maximoBitolasPorPagina = 7;
-      const blocosBitola = gruposPorBitola.reduce((blocos: any[][], grupo: any, indice: number) => {
+      const separarBitolasPorPagina = (gruposPorBitola: GrupoBitolaPdfProducao[]) => gruposPorBitola.reduce((blocos: GrupoBitolaPdfProducao[][], grupo, indice) => {
         const bloco = Math.floor(indice / maximoBitolasPorPagina);
         if (!blocos[bloco]) blocos[bloco] = [];
         blocos[bloco].push(grupo);
         return blocos;
       }, []);
-      const desenharGradePecas = (bitolas: any[], continuacao = false) => {
+      const desenharGradePecas = (resumo: ResumoEssenciaPdfProducao, bitolas: GrupoBitolaPdfProducao[], totalBlocos: number, continuacao = false) => {
         layout.garantirEspaco(50);
-        const sufixo = blocosBitola.length > 1 ? ` — BITOLAS ${gruposPorBitola.indexOf(bitolas[0]) + 1}–${gruposPorBitola.indexOf(bitolas.at(-1)) + 1}` : "";
-        layout.page.drawText(continuacao ? `GRADE DE PRODUÇÃO POR BITOLA${sufixo} — CONTINUAÇÃO` : `GRADE DE PRODUÇÃO POR BITOLA${sufixo}`, { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
+        const sufixo = totalBlocos > 1 ? ` — BITOLAS ${resumo.gruposPorBitola.indexOf(bitolas[0]) + 1}–${resumo.gruposPorBitola.indexOf(bitolas.at(-1)!) + 1}` : "";
+        const titulo = `GRADE DE PRODUÇÃO POR BITOLA — ${resumo.essencia}${sufixo}`;
+        layout.page.drawText(continuacao ? `${titulo} — CONTINUAÇÃO` : titulo, { x: MARGEM_LATERAL, y: layout.y, size: 10, font: boldFont, color: COR_MARROM });
         layout.mover(17);
         const larguraBitola = (larguraGrade - larguraComprimento) / Math.max(bitolas.length, 1);
-        const cabecalhos = ["Comp.", ...bitolas.map((grupo: any) => `${formatMeasurement(grupo.espessura)} × ${formatMeasurement(grupo.largura)} cm`)];
+        const cabecalhos = ["Comp.", ...bitolas.map((grupo) => `${formatMeasurement(grupo.espessura)} × ${formatMeasurement(grupo.largura)} cm`)];
         const larguras = [larguraComprimento, ...bitolas.map(() => larguraBitola)];
         let x = MARGEM_LATERAL;
         cabecalhos.forEach((cabecalho, indice) => {
@@ -744,58 +729,53 @@ export async function registerPdfRoutes(app: any) {
           x += larguras[indice];
         });
         layout.mover(20);
-        const essencias = ["Essência", ...bitolas.map((grupo: any) => Array.from(grupo.essencias).join(" · "))];
-        let xEssencia = MARGEM_LATERAL;
-        essencias.forEach((essencia, indice) => {
-          desenharTextoAjustado(layout.page, indice === 0 ? boldFont : font, essencia, xEssencia + 3, layout.y - 1, larguras[indice] - 6, 6.5, indice === 0 ? { color: COR_TEXTO_SECUNDARIO } : { color: COR_TEXTO_SECUNDARIO });
-          xEssencia += larguras[indice];
-        });
-        layout.mover(15);
       };
-      // A grade recebe sempre uma página própria: as toras nunca a deixam dividida ao fim da folha anterior.
-      layout.novaPagina(false);
-      blocosBitola.forEach((bitolas: any[], indiceBloco: number) => {
-        if (indiceBloco > 0) layout.novaPagina(true);
-        desenharGradePecas(bitolas, indiceBloco > 0);
-        const larguraBitola = (larguraGrade - larguraComprimento) / Math.max(bitolas.length, 1);
-        comprimentosDaGrade.forEach((comprimento, indiceComprimento: number) => {
-          if (!layout.temEspaco(18)) {
-            layout.novaPagina(true);
-            desenharGradePecas(bitolas, true);
-          }
-          const valores = [`${formatMeasurement(comprimento)} m`, ...bitolas.map((grupo: any) => {
-            const quantidade = grupo.comprimentos.get(comprimento) ?? 0;
-            return quantidade ? formatMeasurement(quantidade) : "—";
-          })];
-          const larguras = [larguraComprimento, ...bitolas.map(() => larguraBitola)];
-          if (indiceComprimento % 2 === 0) layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 12, width: larguraGrade, height: 17, color: rgb(0.975, 0.97, 0.94) });
-          let x = MARGEM_LATERAL;
-          valores.forEach((valor, posicao) => {
-            desenharTextoAjustado(layout.page, posicao === 0 ? boldFont : font, valor, x + 3, layout.y - 1, larguras[posicao] - 6, 7.5, posicao === 0 ? { color: COR_MARROM } : {});
-            x += larguras[posicao];
+      // Cada essência recebe uma grade própria; uma bitola nunca soma volumes de essências distintas.
+      resumosPecasPorEssencia.forEach((resumo, indiceEssencia) => {
+        const blocosBitola = separarBitolasPorPagina(resumo.gruposPorBitola);
+        blocosBitola.forEach((bitolas, indiceBloco) => {
+          layout.novaPagina(indiceEssencia > 0 || indiceBloco > 0);
+          desenharGradePecas(resumo, bitolas, blocosBitola.length, indiceBloco > 0);
+          const larguraBitola = (larguraGrade - larguraComprimento) / Math.max(bitolas.length, 1);
+          resumo.comprimentos.forEach((comprimento, indiceComprimento) => {
+            if (!layout.temEspaco(18)) {
+              layout.novaPagina(true);
+              desenharGradePecas(resumo, bitolas, blocosBitola.length, true);
+            }
+            const valores = [`${formatMeasurement(comprimento)} m`, ...bitolas.map((grupo) => {
+              const quantidade = grupo.comprimentos.get(comprimento) ?? 0;
+              return quantidade ? formatMeasurement(quantidade) : "—";
+            })];
+            const larguras = [larguraComprimento, ...bitolas.map(() => larguraBitola)];
+            if (indiceComprimento % 2 === 0) layout.page.drawRectangle({ x: MARGEM_LATERAL, y: layout.y - 12, width: larguraGrade, height: 17, color: rgb(0.975, 0.97, 0.94) });
+            let x = MARGEM_LATERAL;
+            valores.forEach((valor, posicao) => {
+              desenharTextoAjustado(layout.page, posicao === 0 ? boldFont : font, valor, x + 3, layout.y - 1, larguras[posicao] - 6, 7.5, posicao === 0 ? { color: COR_MARROM } : {});
+              x += larguras[posicao];
+            });
+            layout.mover(18);
           });
-          layout.mover(18);
-        });
 
-        layout.garantirEspaco(44);
-        let xResumo = MARGEM_LATERAL;
-        const largurasResumo = [larguraComprimento, ...bitolas.map(() => larguraBitola)];
-        ["Resumo", ...bitolas.map((grupo: any) => ({
-          pecas: `${formatMeasurement(grupo.totalPecas)} peças`,
-          volume: `${formatMeasurement(grupo.volume)} m³`,
-          percentual: `${formatPercentage(totalVolume > 0 ? (grupo.volume / totalVolume) * 100 : 0)}% da produção`,
-        }))].forEach((valor, indice) => {
-          layout.page.drawRectangle({ x: xResumo, y: layout.y - 28, width: largurasResumo[indice], height: 34, color: rgb(0.93, 0.96, 0.92) });
-          if (typeof valor === "string") {
-            desenharTextoAjustado(layout.page, boldFont, valor, xResumo + 4, layout.y - 3, largurasResumo[indice] - 8, 7.5, { color: COR_MARROM });
-          } else {
-            desenharTextoAjustado(layout.page, boldFont, valor.pecas, xResumo + 4, layout.y - 2, largurasResumo[indice] - 8, 7, { color: rgb(0.12, 0.42, 0.25) });
-            desenharTextoAjustado(layout.page, font, valor.volume, xResumo + 4, layout.y - 12, largurasResumo[indice] - 8, 7, { color: COR_TEXTO_SECUNDARIO });
-            desenharTextoAjustado(layout.page, font, valor.percentual, xResumo + 4, layout.y - 22, largurasResumo[indice] - 8, 7, { color: COR_TEXTO_SECUNDARIO });
-          }
-          xResumo += largurasResumo[indice];
+          layout.garantirEspaco(44);
+          let xResumo = MARGEM_LATERAL;
+          const largurasResumo = [larguraComprimento, ...bitolas.map(() => larguraBitola)];
+          ["Resumo", ...bitolas.map((grupo) => ({
+            pecas: `${formatMeasurement(grupo.totalPecas)} peças`,
+            volume: `${formatMeasurement(grupo.volume)} m³`,
+            percentual: `${formatPercentage(grupo.percentualDaEssencia)}% da produção`,
+          }))].forEach((valor, indice) => {
+            layout.page.drawRectangle({ x: xResumo, y: layout.y - 28, width: largurasResumo[indice], height: 34, color: rgb(0.93, 0.96, 0.92) });
+            if (typeof valor === "string") {
+              desenharTextoAjustado(layout.page, boldFont, valor, xResumo + 4, layout.y - 3, largurasResumo[indice] - 8, 7.5, { color: COR_MARROM });
+            } else {
+              desenharTextoAjustado(layout.page, boldFont, valor.pecas, xResumo + 4, layout.y - 2, largurasResumo[indice] - 8, 7, { color: rgb(0.12, 0.42, 0.25) });
+              desenharTextoAjustado(layout.page, font, valor.volume, xResumo + 4, layout.y - 12, largurasResumo[indice] - 8, 7, { color: COR_TEXTO_SECUNDARIO });
+              desenharTextoAjustado(layout.page, font, valor.percentual, xResumo + 4, layout.y - 22, largurasResumo[indice] - 8, 7, { color: COR_TEXTO_SECUNDARIO });
+            }
+            xResumo += largurasResumo[indice];
+          });
+          layout.mover(38);
         });
-        layout.mover(38);
       });
 
       layout.garantirEspaco(78);

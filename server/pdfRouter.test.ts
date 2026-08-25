@@ -342,18 +342,20 @@ describe("rotas de PDF protegidas", () => {
     expect(textos).toContain("Volume de toras: 2 m³");
     expect(textos).toContain("Aproveitamento: 60%");
     expect(textos).toContain("Rendimento inclui aproveitamento");
-    expect(textos).toContain("GRADE DE PRODUÇÃO POR BITOLA");
+    expect(textos).toContain("GRADE DE PRODUÇÃO POR BITOLA — Cedrinho");
     expect(textos).toContain("Comp.");
     expect(textos).toContain("Essência");
     expect(textos).toContain("2 × 10 cm");
-    expect(textos).toContain("166");
-    expect(textos).toContain("75%");
-    expect(textos).not.toContain("74,49%");
+    expect(textos).toContain("116");
+    expect(textos).toContain("50");
+    expect(textos).not.toContain("166 peças");
+    expect(textos).toContain("100%");
+    expect(textos).not.toContain("75%");
     expect(textos).toContain("Peças romaneadas: 2 m³");
     expect(textos).toContain("Aproveitamento manual: 0,2 m³");
     expect(textos).toContain("Produção total: 2,2 m³");
 
-    const paginaDaGrade = pdfCanvas.drawText.mock.calls.find(([texto]) => texto === "GRADE DE PRODUÇÃO POR BITOLA")?.[2];
+    const paginaDaGrade = pdfCanvas.drawText.mock.calls.find(([texto]) => String(texto).startsWith("GRADE DE PRODUÇÃO POR BITOLA — Cedrinho"))?.[2];
     const paginasDasToras = pdfCanvas.drawText.mock.calls
       .filter(([texto]) => String(texto).startsWith("Plaqueta:"))
       .map(([, , pagina]) => pdfCanvas.pages.indexOf(pagina));
