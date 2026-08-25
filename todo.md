@@ -679,3 +679,8 @@
 - [x] Calcular percentuais de peças separadamente por essência produzida
 - [x] Separar e identificar no PDF o resumo de peças de cada essência
 - [x] Cobrir o cálculo multiespécie com testes, validar PDF e suíte completa
+- [x] Inventariar páginas, componentes, hooks, routers, assets, testes, scripts e dependências
+- [x] Comprovar referências de candidatos a código legado, incluindo Home.tsx
+- [x] Remover somente arquivos, imports e dependências comprovadamente mortos
+- [x] Validar TypeScript, build e suíte sem alteração de funcionalidades
+- [x] Registrar itens removidos e itens suspeitos mantidos por segurança
