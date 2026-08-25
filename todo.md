@@ -684,3 +684,8 @@
 - [x] Remover somente arquivos, imports e dependências comprovadamente mortos
 - [x] Validar TypeScript, build e suíte sem alteração de funcionalidades
 - [x] Registrar itens removidos e itens suspeitos mantidos por segurança
+- [x] Mapear integralmente exports, helpers, tipos, transações e dependências de server/db.ts
+- [x] Classificar funções por domínio e definir repositories sem dependências circulares
+- [x] Migrar implementações por domínio preservando APIs, transações e empresa ativa
+- [x] Reduzir server/db.ts à conexão e às reexportações de compatibilidade necessárias
+- [x] Validar imports, TypeScript, testes por domínio e suíte completa sem mudanças de negócio
