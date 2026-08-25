@@ -16,7 +16,7 @@ const acessosPorModulo: Record<ModuloOperacional, readonly string[]> = {
   financeiro: ["proprietario", "administrador", "financeiro"],
   rh: ["proprietario", "administrador", "rh"],
   vendas: ["proprietario", "administrador", "vendas"],
-  producao: ["proprietario", "administrador", "producao_estoque"],
+  producao: ["proprietario", "administrador", "producao"],
 };
 
 const moduloDaRota: Record<string, ModuloOperacional> = {

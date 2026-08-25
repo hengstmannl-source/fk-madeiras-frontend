@@ -644,6 +644,11 @@
 - [x] Permitir editar fornecedor e datas de romaneios de produção após consumo das toras
 - [x] Preservar plaquetas, peças, saldos e movimentações ao editar somente o cabeçalho
 - [x] Cobrir permissões de edição de cabeçalhos com testes e validação visual
+- [x] Mapear ocorrências e registros persistidos de `producao_estoque` e `producao`
+- [x] Padronizar autorização, convites e interface para usar exclusivamente o perfil `producao`
+- [x] Converter registros legados de perfil somente se forem encontrados no banco
+- [x] Cobrir o acesso de `producao` ao módulo permitido e a negação de privilégios indevidos
+- [x] Validar tipagem, testes e ausência de ocorrências funcionais de `producao_estoque`
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

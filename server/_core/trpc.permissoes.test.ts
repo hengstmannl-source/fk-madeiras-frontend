@@ -5,7 +5,7 @@ describe("permissões empresariais por módulo", () => {
   it("libera cada perfil operacional no seu módulo", () => {
     expect(mensagemDeBloqueioPorPerfil({ papel: "financeiro", papelPlataforma: "user", caminho: "financeiro.titulos.list", tipo: "query" })).toBeNull();
     expect(mensagemDeBloqueioPorPerfil({ papel: "vendas", papelPlataforma: "user", caminho: "orcamento.create", tipo: "mutation" })).toBeNull();
-    expect(mensagemDeBloqueioPorPerfil({ papel: "producao_estoque", papelPlataforma: "user", caminho: "producao.romaneios.confirmar", tipo: "mutation" })).toBeNull();
+    expect(mensagemDeBloqueioPorPerfil({ papel: "producao", papelPlataforma: "user", caminho: "producao.romaneios.confirmar", tipo: "mutation" })).toBeNull();
   });
 
   it("bloqueia o acesso cruzado entre módulos", () => {
