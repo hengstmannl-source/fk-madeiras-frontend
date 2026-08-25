@@ -649,6 +649,12 @@
 - [x] Converter registros legados de perfil somente se forem encontrados no banco
 - [x] Cobrir o acesso de `producao` ao módulo permitido e a negação de privilégios indevidos
 - [x] Validar tipagem, testes e ausência de ocorrências funcionais de `producao_estoque`
+- [x] Auditar defaults, parâmetros opcionais e filtros de empresa em código de produção
+- [x] Mapear a fonte confiável de empresa ativa no contexto autenticado e nos routers
+- [x] Remover fallbacks operacionais de empresa 1 e tornar o escopo empresarial explícito
+- [x] Proteger leituras, criações, alterações e exclusões contra acesso cross-tenant
+- [x] Criar regressões para leitura, criação, alteração, exclusão e ausência de contexto empresarial
+- [x] Validar ausência de fallbacks perigosos, TypeScript e suíte completa
 - [x] Mapear a criação e edição atual de contas a receber vinculadas a vendas aprovadas
 - [x] Modelar a condição de pagamento e recriar títulos a receber em parcelas rastreáveis
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela

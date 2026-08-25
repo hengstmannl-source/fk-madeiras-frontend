@@ -276,13 +276,13 @@ export async function criarEmpresaComProprietario(data: {
 }
 
 // ─── Madeiras ───
-export async function listMadeiras(empresaId = 1) {
+export async function listMadeiras(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(madeiras).where(eq(madeiras.empresaId, empresaId)).orderBy(desc(madeiras.createdAt));
 }
 
-export async function getMadeiraById(id: number, empresaId = 1) {
+export async function getMadeiraById(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(madeiras).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId))).limit(1);
@@ -296,14 +296,14 @@ export async function createMadeira(data: InsertMadeira) {
   return result;
 }
 
-export async function updateMadeira(id: number, data: Partial<InsertMadeira>, empresaId = 1) {
+export async function updateMadeira(id: number, data: Partial<InsertMadeira>, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(madeiras).set(data).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteMadeira(id: number, empresaId = 1) {
+export async function deleteMadeira(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(madeiras).set({ ativo: false }).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId)));
@@ -311,7 +311,7 @@ export async function deleteMadeira(id: number, empresaId = 1) {
 }
 
 // ─── Bitolas ───
-export async function listBitolas(madeiraId?: number, empresaId = 1) {
+export async function listBitolas(madeiraId: number | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   if (madeiraId) {
@@ -320,7 +320,7 @@ export async function listBitolas(madeiraId?: number, empresaId = 1) {
   return db.select().from(bitolas).where(eq(bitolas.empresaId, empresaId)).orderBy(desc(bitolas.createdAt));
 }
 
-export async function getBitolaById(id: number, empresaId = 1) {
+export async function getBitolaById(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(bitolas).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId))).limit(1);
@@ -334,14 +334,14 @@ export async function createBitola(data: InsertBitola) {
   return result;
 }
 
-export async function updateBitola(id: number, data: Partial<InsertBitola>, empresaId = 1) {
+export async function updateBitola(id: number, data: Partial<InsertBitola>, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(bitolas).set(data).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteBitola(id: number, empresaId = 1) {
+export async function deleteBitola(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(bitolas).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId)));
@@ -349,26 +349,26 @@ export async function deleteBitola(id: number, empresaId = 1) {
 }
 
 // ─── Clientes ───
-export async function listClientes(empresaId = 1) {
+export async function listClientes(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(clientes).where(and(eq(clientes.ativo, true), eq(clientes.empresaId, empresaId))).orderBy(desc(clientes.createdAt));
 }
 
-export async function listAllClientes(empresaId = 1) {
+export async function listAllClientes(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(clientes).where(eq(clientes.empresaId, empresaId)).orderBy(desc(clientes.createdAt));
 }
 
-export async function getClienteById(id: number, empresaId = 1) {
+export async function getClienteById(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(clientes).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getPerfilCliente(id: number, empresaId = 1) {
+export async function getPerfilCliente(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const cliente = await getClienteById(id, empresaId);
@@ -409,14 +409,14 @@ export async function createCliente(data: InsertCliente) {
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateCliente(id: number, data: Partial<InsertCliente>, empresaId = 1) {
+export async function updateCliente(id: number, data: Partial<InsertCliente>, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(clientes).set(data).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteCliente(id: number, empresaId = 1) {
+export async function deleteCliente(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(clientes).set({ ativo: false }).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId)));
@@ -460,7 +460,7 @@ export async function clearEmpresaLogo(empresaId: number) {
 }
 
 // ─── Orçamentos ───
-export async function listModelosMedidaVenda(empresaId = 1) {
+export async function listModelosMedidaVenda(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(modelosMedidaVenda).where(eq(modelosMedidaVenda.empresaId, empresaId)).orderBy(asc(modelosMedidaVenda.nome));
@@ -473,7 +473,7 @@ export async function createModeloMedidaVenda(data: InsertModeloMedidaVenda) {
   return Number(resultado[0].insertId);
 }
 
-export async function deleteModeloMedidaVenda(id: number, userId: number, empresaId = 1) {
+export async function deleteModeloMedidaVenda(id: number, userId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId), eq(modelosMedidaVenda.empresaId, empresaId)));
@@ -488,7 +488,7 @@ export type ComponenteComercialInput = {
   quantidade: number;
 };
 
-export async function listProdutosComerciais(empresaId = 1, incluirInativos = false) {
+export async function listProdutosComerciais(empresaId: number, incluirInativos = false) {
   const db = await getDb();
   if (!db) return [];
   const condicao = incluirInativos
@@ -529,7 +529,7 @@ export async function updateProdutoComercial(
   id: number,
   data: Partial<InsertProdutoComercial>,
   componentes: ComponenteComercialInput[] | undefined,
-  empresaId = 1,
+  empresaId: number,
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -673,7 +673,7 @@ export function classificarCategoriaOperacionalVenda(pago: boolean, entregue: bo
   return "aprovadas";
 }
 
-export async function listOrcamentos(filters?: { estado?: string; clienteId?: number; categoria?: CategoriaOperacionalVenda }, empresaId = 1) {
+export async function listOrcamentos(filters: { estado?: string; clienteId?: number; categoria?: CategoriaOperacionalVenda } | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
@@ -712,7 +712,7 @@ export async function listOrcamentos(filters?: { estado?: string; clienteId?: nu
   });
 }
 
-export async function getCondicaoPagamentoVenda(orcamentoId: number, empresaId = 1) {
+export async function getCondicaoPagamentoVenda(orcamentoId: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const venda = await getOrcamentoById(orcamentoId, empresaId);
@@ -739,7 +739,7 @@ export async function getCondicaoPagamentoVenda(orcamentoId: number, empresaId =
   };
 }
 
-export async function getResumoFilasVendas(empresaId = 1): Promise<Record<CategoriaOperacionalVenda, number>> {
+export async function getResumoFilasVendas(empresaId: number): Promise<Record<CategoriaOperacionalVenda, number>> {
   const db = await getDb();
   const resumo: Record<CategoriaOperacionalVenda, number> = { aprovadas: 0, pagas: 0, entregues: 0, concluidas: 0 };
   if (!db) return resumo;
@@ -751,7 +751,7 @@ export async function getResumoFilasVendas(empresaId = 1): Promise<Record<Catego
 }
 
 /** Retorna vendas aprovadas com todos os abatimentos comerciais já consolidados. */
-export async function getRelatorioMargemVendas(empresaId = 1) {
+export async function getRelatorioMargemVendas(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
 
@@ -797,7 +797,7 @@ export async function getRelatorioMargemVendas(empresaId = 1) {
   });
 }
 
-export async function getOrcamentoWithItems(id: number, empresaId = 1) {
+export async function getOrcamentoWithItems(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const orc = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
@@ -822,7 +822,7 @@ export function podeAlterarOrcamentoPago(pago: boolean, confirmacaoDupla: boolea
   return !pago || confirmacaoDupla;
 }
 
-export async function getOrcamentoById(id: number, empresaId = 1) {
+export async function getOrcamentoById(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
@@ -1030,15 +1030,16 @@ export async function updateOrcamentoEstado(
     });
   }
   if (novoEstado === "aprovado" && userId) {
-    await (dependencias?.criarTituloReceber ?? criarTituloReceberDeOrcamento)(id, userId);
+    if (dependencias?.criarTituloReceber) await dependencias.criarTituloReceber(id, userId);
+    else await criarTituloReceberDeOrcamento(id, userId, undefined, orcamento.empresaId);
   }
   return { success: true };
 }
 
-export async function registrarPagamentoOrcamento(id: number, userId: number, formaPagamento: string, pagoEm: Date) {
+export async function registrarPagamentoOrcamento(id: number, userId: number, formaPagamento: string, pagoEm: Date, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const orcamento = await getOrcamentoById(id);
+  const orcamento = await getOrcamentoById(id, empresaId);
   if (!orcamento) throw new Error("Orçamento não encontrado");
   if (orcamento.estado !== "aprovado") throw new Error("Apenas orçamentos aprovados podem ser marcados como pagos");
   if (orcamento.pago) throw new Error("Este orçamento já foi registrado como pago");
@@ -1054,7 +1055,7 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
     throw new Error("Esta venda possui condição parcelada. Registre o recebimento de cada parcela no módulo Financeiro.");
   }
 
-  const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm);
+  const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm, empresaId);
   if (titulo) {
     const contaFinanceiraId = await getOrCreateContaFinanceiraPadrao(userId, orcamento.empresaId);
     await registrarBaixaFinanceira({
@@ -1064,7 +1065,7 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
       dataBaixa: pagoEm,
       formaPagamento,
       criadoPor: userId,
-    });
+    }, empresaId);
   }
   await db.update(orcamentos).set({ pago: true, pagoEm, formaPagamento, pagoPor: userId }).where(eq(orcamentos.id, id));
   await db.insert(historicoAlteracoes).values({
@@ -1077,10 +1078,10 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
   return { success: true, pagoEm, formaPagamento };
 }
 
-export async function duplicateOrcamento(id: number) {
+export async function duplicateOrcamento(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const data = await getOrcamentoWithItems(id);
+  const data = await getOrcamentoWithItems(id, empresaId);
   if (!data) throw new Error("Orçamento não encontrado");
   const { orcamento, itens } = data;
   const novoOrc: InsertOrcamento = {
@@ -1172,7 +1173,7 @@ export type CriarTituloFinanceiroInput = {
   observacoes?: string | null;
 };
 
-export async function listFornecedores(empresaId = 1) {
+export async function listFornecedores(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(fornecedores).where(and(eq(fornecedores.ativo, true), eq(fornecedores.empresaId, empresaId))).orderBy(desc(fornecedores.createdAt));
@@ -1191,7 +1192,7 @@ export function getModeloImportacaoFornecedoresCsv() {
 
 export async function prepararImportacaoFornecedoresCsv(
   conteudo: string,
-  dependencias?: { database?: any; empresaId?: number; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
+  dependencias: { database?: any; empresaId: number; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
@@ -1200,21 +1201,19 @@ export async function prepararImportacaoFornecedoresCsv(
     nome: fornecedores.nome,
     email: fornecedores.email,
     documento: fornecedores.documento,
-  }).from(fornecedores).where(eq(fornecedores.empresaId, dependencias?.empresaId ?? 1));
+  }).from(fornecedores).where(eq(fornecedores.empresaId, dependencias.empresaId));
   return prepararImportacaoFornecedores({ conteudo, fornecedoresExistentes });
 }
 
 export async function importarFornecedoresCsv(
   conteudo: string,
   userId: number,
-  empresaIdOuDependencias: number | { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> } = 1,
+  empresaId: number,
   dependencias?: { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
 ) {
-  const empresaId = typeof empresaIdOuDependencias === "number" ? empresaIdOuDependencias : 1;
-  const dependenciasResolvidas = typeof empresaIdOuDependencias === "number" ? dependencias : empresaIdOuDependencias;
-  const db = dependenciasResolvidas?.database ?? await getDb();
+  const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const preparo = await prepararImportacaoFornecedoresCsv(conteudo, { database: db, empresaId, fornecedoresExistentes: dependenciasResolvidas?.fornecedoresExistentes });
+  const preparo = await prepararImportacaoFornecedoresCsv(conteudo, { database: db, empresaId, fornecedoresExistentes: dependencias?.fornecedoresExistentes });
   if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
   await db.transaction(async (tx: any) => {
     await tx.insert(fornecedores).values(preparo.linhas.map((linha) => ({
@@ -1232,18 +1231,18 @@ export async function importarFornecedoresCsv(
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>, empresaId = 1) {
+export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(fornecedores).set(data).where(and(eq(fornecedores.id, id), eq(fornecedores.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function archiveFornecedor(id: number, empresaId = 1) {
+export async function archiveFornecedor(id: number, empresaId: number) {
   return updateFornecedor(id, { ativo: false }, empresaId);
 }
 
-export async function listCategoriasFinanceiras(empresaId = 1) {
+export async function listCategoriasFinanceiras(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(categoriasFinanceiras).where(and(eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).orderBy(desc(categoriasFinanceiras.createdAt));
@@ -1256,14 +1255,14 @@ export async function createCategoriaFinanceira(data: InsertCategoriaFinanceira)
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>, empresaId = 1) {
+export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(categoriasFinanceiras).set(data).where(and(eq(categoriasFinanceiras.id, id), eq(categoriasFinanceiras.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function listContasFinanceiras(empresaId = 1) {
+export async function listContasFinanceiras(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).orderBy(desc(contasFinanceiras.createdAt));
@@ -1276,7 +1275,7 @@ export async function createContaFinanceira(data: InsertContaFinanceira) {
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>, empresaId = 1) {
+export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(contasFinanceiras).set(data).where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId)));
@@ -1284,7 +1283,7 @@ export async function updateContaFinanceira(id: number, data: Partial<InsertCont
 }
 
 /** Exclui uma conta apenas quando não existir dependência financeira, bancária ou programada. */
-export async function excluirContaFinanceira(id: number, empresaId = 1) {
+export async function excluirContaFinanceira(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const conta = (await db.select({ id: contasFinanceiras.id }).from(contasFinanceiras)
@@ -1305,7 +1304,7 @@ export async function excluirContaFinanceira(id: number, empresaId = 1) {
   return { success: true };
 }
 
-export async function listCaixasCheque(empresaId = 1) {
+export async function listCaixasCheque(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(contasFinanceiras)
@@ -1314,8 +1313,8 @@ export async function listCaixasCheque(empresaId = 1) {
 }
 
 export async function listChequesFinanceiros(
-  filters: { contaFinanceiraId?: number; estado?: "disponivel" | "utilizado" | "estornado" | "depositado" } = {},
-  empresaId = 1,
+  filters: { contaFinanceiraId?: number; estado?: "disponivel" | "utilizado" | "estornado" | "depositado" },
+  empresaId: number,
 ) {
   const db = await getDb();
   if (!db) return [];
@@ -1358,7 +1357,7 @@ export async function listChequesFinanceiros(
 }
 
 /** Histórico auditável de cheques transferidos do Caixa Cheque para contas bancárias. */
-export async function listHistoricoDepositosPorConta(contaFinanceiraId?: number, empresaId = 1) {
+export async function listHistoricoDepositosPorConta(contaFinanceiraId: number | undefined, empresaId: number) {
   const cheques = await listChequesFinanceiros({ estado: "depositado" }, empresaId);
   return cheques
     .filter((cheque) => !contaFinanceiraId || cheque.contaDestinoId === contaFinanceiraId)
@@ -1373,7 +1372,7 @@ export async function depositarChequeFinanceiro(input: {
   id: number;
   contaDestinoId: number;
   dataDeposito: Date;
-}, empresaId = 1) {
+}, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -1406,7 +1405,7 @@ export async function depositarChequeFinanceiro(input: {
   return { success: true, chequeId: cheque[0].id, contaDestinoId: contaDestino[0].id };
 }
 
-export async function getResumoCaixaCheque(empresaId = 1) {
+export async function getResumoCaixaCheque(empresaId: number) {
   const [contas, cheques] = await Promise.all([
     listCaixasCheque(empresaId),
     listChequesFinanceiros({}, empresaId),
@@ -1519,14 +1518,14 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function getTituloFinanceiroById(id: number, empresaId = 1) {
+export async function getTituloFinanceiroById(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, id), eq(titulosFinanceiros.empresaId, empresaId))).limit(1);
   return result[0];
 }
 
-export async function listAnexosFinanceiros(tituloId: number, empresaId = 1) {
+export async function listAnexosFinanceiros(tituloId: number, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const titulo = await getTituloFinanceiroById(tituloId, empresaId);
@@ -1545,7 +1544,7 @@ export async function createAnexoFinanceiro(input: {
   storageKey: string;
   url: string;
   criadoPor: number;
-  empresaId?: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1556,15 +1555,15 @@ export async function createAnexoFinanceiro(input: {
   return { id: getInsertedId(result as MysqlInsertResult), ...input, empresaId: input.empresaId };
 }
 
-export async function removerAnexoFinanceiro(input: { id: number; tituloId: number; empresaId?: number }) {
+export async function removerAnexoFinanceiro(input: { id: number; tituloId: number; empresaId: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId ?? 1);
+  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const anexo = (await db.select().from(anexosFinanceiros)
-    .where(and(eq(anexosFinanceiros.id, input.id), eq(anexosFinanceiros.tituloId, input.tituloId))).limit(1))[0];
+    .where(and(eq(anexosFinanceiros.id, input.id), eq(anexosFinanceiros.tituloId, input.tituloId), eq(anexosFinanceiros.empresaId, input.empresaId))).limit(1))[0];
   if (!anexo) throw new Error("Anexo financeiro não encontrado");
-  await db.delete(anexosFinanceiros).where(eq(anexosFinanceiros.id, anexo.id));
+  await db.delete(anexosFinanceiros).where(and(eq(anexosFinanceiros.id, anexo.id), eq(anexosFinanceiros.empresaId, input.empresaId)));
   return { success: true, id: anexo.id };
 }
 
@@ -1572,27 +1571,27 @@ export async function atualizarDadosBoleto(input: {
   tituloId: number;
   codigoBarrasBoleto: string | null;
   linhaDigitavelBoleto: string | null;
-  empresaId?: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId ?? 1);
+  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const boletoConfirmadoEm = input.codigoBarrasBoleto || input.linhaDigitavelBoleto ? new Date() : null;
   await db.update(titulosFinanceiros).set({
     codigoBarrasBoleto: input.codigoBarrasBoleto,
     linhaDigitavelBoleto: input.linhaDigitavelBoleto,
     boletoConfirmadoEm,
-  }).where(and(eq(titulosFinanceiros.id, input.tituloId), eq(titulosFinanceiros.empresaId, input.empresaId ?? 1)));
+  }).where(and(eq(titulosFinanceiros.id, input.tituloId), eq(titulosFinanceiros.empresaId, input.empresaId)));
   return { ...input, boletoConfirmadoEm };
 }
 
-export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date; empresaId?: number }) {
+export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date; empresaId: number }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async (tx: any) => {
-    const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, input.id), eq(titulosFinanceiros.empresaId, input.empresaId ?? 1))).limit(1))[0];
+    const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, input.id), eq(titulosFinanceiros.empresaId, input.empresaId))).limit(1))[0];
     if (!titulo) throw new Error("Agendamento financeiro não encontrado");
     if (["quitado", "cancelado"].includes(titulo.estado)) {
       throw new Error("Não é possível alterar o vencimento de um título quitado ou cancelado");
@@ -1635,7 +1634,7 @@ export async function atualizarEstadoTituloFinanceiro(titulo: any) {
 }
 
 export async function listTitulosFinanceiros(
-  filters?: {
+  filters: {
     tipo?: TipoTituloFinanceiro;
     estado?: string;
     clienteId?: number;
@@ -1646,13 +1645,13 @@ export async function listTitulosFinanceiros(
     valorMaximo?: number;
     dataInicio?: Date;
     dataFim?: Date;
-  },
-  dependencias?: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[]; empresaId?: number },
+  } | undefined,
+  dependencias: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[]; empresaId: number },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db && !dependencias?.titulos) return [];
   const conditions = [];
-  conditions.push(eq(titulosFinanceiros.empresaId, dependencias?.empresaId ?? 1));
+  conditions.push(eq(titulosFinanceiros.empresaId, dependencias.empresaId));
   if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
   if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado as any));
   else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
@@ -1691,12 +1690,12 @@ export function getModeloImportacaoLancamentosCsv() {
   return criarModeloCsvLancamentos();
 }
 
-export async function exportarLancamentosFinanceirosCsv(filters?: { tipo?: TipoTituloFinanceiro }) {
+export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTituloFinanceiro } | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [titulos, categorias] = await Promise.all([
-    listTitulosFinanceiros(filters),
-    listCategoriasFinanceiras(),
+    listTitulosFinanceiros(filters, { empresaId }),
+    listCategoriasFinanceiras(empresaId),
   ]);
   const categoriasPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome]));
   return exportarLancamentosCsv(titulos
@@ -1719,18 +1718,20 @@ export async function exportarLancamentosFinanceirosCsv(filters?: { tipo?: TipoT
 export async function importarLancamentosFinanceirosCsv(
   conteudo: string,
   userId: number,
+  empresaId: number,
   dependencias?: { database?: any; categorias?: any[]; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const [categorias, titulosExistentes] = await Promise.all([
-    dependencias?.categorias ?? listCategoriasFinanceiras(),
-    dependencias?.titulosExistentes ?? db.select({ id: titulosFinanceiros.id, chaveImportacao: titulosFinanceiros.chaveImportacao }).from(titulosFinanceiros),
+    dependencias?.categorias ?? listCategoriasFinanceiras(empresaId),
+    dependencias?.titulosExistentes ?? db.select({ id: titulosFinanceiros.id, chaveImportacao: titulosFinanceiros.chaveImportacao }).from(titulosFinanceiros).where(eq(titulosFinanceiros.empresaId, empresaId)),
   ]);
   const preparo = prepararImportacaoLancamentos({ conteudo, categorias, titulosExistentes });
   if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
   await db.transaction(async (tx: any) => {
     await tx.insert(titulosFinanceiros).values(preparo.linhas.map((linha) => ({
+      empresaId,
       tipo: linha.tipo,
       origem: "manual" as const,
       chaveImportacao: linha.referencia,
@@ -1764,7 +1765,7 @@ type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "contaFinan
   chequeIdsUtilizados?: number[];
 };
 
-export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empresaId = 1) {
+export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {
@@ -1882,7 +1883,7 @@ export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empre
   });
 }
 
-export async function listBaixasFinanceiras(tituloId: number, empresaId = 1) {
+export async function listBaixasFinanceiras(tituloId: number, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const titulo = await getTituloFinanceiroById(tituloId, empresaId);
@@ -1911,7 +1912,7 @@ export async function listBaixasFinanceiras(tituloId: number, empresaId = 1) {
     .orderBy(desc(baixasFinanceiras.dataBaixa));
 }
 
-export async function conciliarBaixaFinanceira(id: number, conciliada: boolean, empresaId = 1) {
+export async function conciliarBaixaFinanceira(id: number, conciliada: boolean, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const baixa = (await db.select({ tituloId: baixasFinanceiras.tituloId }).from(baixasFinanceiras).where(eq(baixasFinanceiras.id, id)).limit(1))[0];
@@ -2187,8 +2188,8 @@ export async function estornarBaixaFinanceira(
   id: number,
   userId: number,
   motivo: string,
-  dependencias?: { database?: any; buscarBaixa?: (id: number) => Promise<any>; buscarTitulo?: (id: number) => Promise<any>; agora?: Date },
-  empresaId = 1,
+  dependencias: { database?: any; buscarBaixa?: (id: number) => Promise<any>; buscarTitulo?: (id: number) => Promise<any>; agora?: Date } | undefined,
+  empresaId: number,
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
@@ -2262,7 +2263,7 @@ export async function devolverChequeFinanceiro(input: {
   motivo: string;
   dataDevolucao: Date;
   userId: number;
-}, empresaId = 1) {
+}, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const cheque = (await db.select().from(chequesFinanceiros)
@@ -2332,7 +2333,7 @@ export async function atualizarTituloFinanceiro(
     juros?: string;
     observacoes?: string | null;
   },
-  empresaId = 1,
+  empresaId: number,
 ) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -2391,7 +2392,7 @@ export async function atualizarTitulosFinanceirosEmLote(
     contraparteNome?: string | null;
     observacoes?: string | null;
   },
-  empresaId = 1,
+  empresaId: number,
 ) {
   const unicos = Array.from(new Set(ids));
   if (!unicos.length) throw new Error("Selecione pelo menos um lançamento");
@@ -2417,7 +2418,7 @@ export async function atualizarTitulosFinanceirosEmLote(
   return { success: true, atualizados: unicos.length };
 }
 
-export async function excluirTituloFinanceiro(id: number, userId: number, empresaId = 1) {
+export async function excluirTituloFinanceiro(id: number, userId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const titulo = await getTituloFinanceiroById(id, empresaId);
@@ -2436,7 +2437,7 @@ export async function excluirTituloFinanceiro(id: number, userId: number, empres
   return { success: true, baixasEstornadas: baixas.length };
 }
 
-export async function cancelarTituloFinanceiro(id: number, userId: number, dependencias?: { database?: any; buscarTitulo?: (id: number) => Promise<any> }, empresaId = 1) {
+export async function cancelarTituloFinanceiro(id: number, userId: number, dependencias: { database?: any; buscarTitulo?: (id: number) => Promise<any> } | undefined, empresaId: number) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const titulo = dependencias?.buscarTitulo ? await dependencias.buscarTitulo(id) : await getTituloFinanceiroById(id, empresaId);
@@ -2446,10 +2447,10 @@ export async function cancelarTituloFinanceiro(id: number, userId: number, depen
   return { success: true };
 }
 
-export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento?: Date) {
+export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento: Date | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const orcamento = await getOrcamentoById(orcamentoId);
+  const orcamento = await getOrcamentoById(orcamentoId, empresaId);
   if (!orcamento || orcamento.estado !== "aprovado" || orcamento.pago) return undefined;
   const existente = await db.select().from(titulosFinanceiros)
     .where(and(
@@ -2474,7 +2475,7 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
     criadoPor: userId,
     empresaId: orcamento.empresaId,
   });
-  return getTituloFinanceiroById(criacao.id);
+  return getTituloFinanceiroById(criacao.id, empresaId);
 }
 
 export type ParcelaCondicaoPagamentoVenda = {
@@ -2485,7 +2486,7 @@ export async function configurarCondicaoPagamentoVenda(
   orcamentoId: number,
   parcelasInformadas: ParcelaCondicaoPagamentoVenda[],
   userId: number,
-  empresaId = 1,
+  empresaId: number,
   dependencias?: { database?: any; obterCategoriaReceita?: (usuarioId: number, empresa: number) => Promise<number> },
 ) {
   const db = dependencias?.database ?? await getDb();
@@ -2831,7 +2832,7 @@ export async function processarRecorrenciasFinanceiras(agora = new Date(), datab
 }
 
 // ─── Dashboard ───
-export async function getDashboardStats(empresaId = 1) {
+export async function getDashboardStats(empresaId: number) {
   const db = await getDb();
   if (!db) return { totalOrcamentos: 0, totalAprovados: 0, totalRascunhos: 0, totalEnviados: 0, totalRejeitados: 0, totalValor: "0", totalClientes: 0, totalMadeiras: 0 };
   const allOrcamentos = await db.select().from(orcamentos).where(eq(orcamentos.empresaId, empresaId));
@@ -2859,7 +2860,7 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
   });
 }
 
-export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, empresaId = 1) {
+export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, empresaId: number) {
   const db = await getDb();
   const codigo = normalizarCodigoPlaqueta(codigoInformado);
   if (!db || !codigo) return null;
@@ -2879,7 +2880,7 @@ export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, em
   return candidatas.find(item => item.estado === "disponivel") ?? null;
 }
 
-export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId = 1) {
+export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId: number) {
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, volumeMedioPorTora: 0, essenciasDisponiveis: [], alertaVariacaoAtipica: false, essenciasAtipicas: [], variacoesAtipicas: [], proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
@@ -2935,7 +2936,7 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
   return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, variacoesAtipicas, proximoDeslocamento };
 }
 
-export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number, empresaId = 1) {
+export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const registros = variacoes
@@ -2955,7 +2956,7 @@ export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ ess
   return { confirmadas: registros.length };
 }
 
-export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId = 1) {
+export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId: number) {
   const db = await getDb();
   if (!db) return { resumo: { duplicadas: 0, semPlaqueta: 0, pendentesConferencia: 0, disponiveis: 0 }, itens: [] };
   const brutas = await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
@@ -3000,7 +3001,7 @@ export function prepararTorasSerragemTerceirosCsv(conteudo: string) {
   return validarCsvTorasSerragemTerceiros(conteudo);
 }
 
-export async function prepararTorasProducaoCsv(conteudo: string, empresaId = 1) {
+export async function prepararTorasProducaoCsv(conteudo: string, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const estoque = await db.select({
@@ -3015,7 +3016,7 @@ export async function prepararTorasProducaoCsv(conteudo: string, empresaId = 1) 
   return prepararImportacaoTorasProducao({ conteudo, plaquetas: estoque });
 }
 
-export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}, empresaId = 1) {
+export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const origem = filtros.origem?.trim().toLocaleLowerCase("pt-BR");
@@ -3028,7 +3029,7 @@ export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dat
   return origem ? resultado.filter((item) => (item.origem ?? "").toLocaleLowerCase("pt-BR").includes(origem)) : resultado;
 }
 
-export async function getRomaneioCargaComPlaquetas(id: number, empresaId = 1) {
+export async function getRomaneioCargaComPlaquetas(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) return undefined;
   const carga = await db.select().from(romaneiosCargaToras).where(and(eq(romaneiosCargaToras.id, id), eq(romaneiosCargaToras.empresaId, empresaId))).limit(1);
@@ -3077,7 +3078,7 @@ function gerarCodigoInternoPlaqueta() {
   return `INT-${crypto.randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase()}`;
 }
 
-async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado?: string | null, empresaId = 1): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
+async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado: string | null | undefined, empresaId: number): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
   const codigoFisico = normalizarCodigoPlaqueta(codigoInformado ?? "") || null;
   if (!codigoFisico) {
     return { codigo: `SEM-PLQ-${gerarCodigoInternoPlaqueta().slice(4)}`, codigoFisico: null, situacaoIdentificacao: "sem_plaqueta" };
@@ -3360,7 +3361,7 @@ export async function createPlaqueta(data: {
   localizacao?: string | null;
   observacoes?: string | null;
   criadoPor: number;
-  empresaId?: number;
+  empresaId: number;
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -3369,7 +3370,7 @@ export async function createPlaqueta(data: {
     throw new Error("Informe madeira e volume inicial válidos para a plaqueta");
   }
   return db.transaction(async (tx: any) => {
-    const empresaId = data.empresaId ?? 1;
+    const empresaId = data.empresaId;
     const identificacao = await prepararIdentificacaoPlaqueta(tx, data.codigo, empresaId);
     const result = await tx.insert(plaquetas).values({
       empresaId,
@@ -3393,7 +3394,7 @@ export async function createPlaqueta(data: {
   });
 }
 
-export async function listRomaneiosProducao(empresaId = 1) {
+export async function listRomaneiosProducao(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const [romaneios, totaisToras, totaisPecas] = await Promise.all([
@@ -3446,13 +3447,13 @@ export async function listRomaneiosProducao(empresaId = 1) {
   });
 }
 
-export async function listItensRomaneioProducao(romaneioId: number, empresaId = 1) {
+export async function listItensRomaneioProducao(romaneioId: number, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select().from(itensRomaneioProducao).where(and(eq(itensRomaneioProducao.romaneioId, romaneioId), eq(itensRomaneioProducao.empresaId, empresaId))).orderBy(itensRomaneioProducao.id);
 }
 
-export async function getRomaneioProducaoComItens(romaneioId: number, empresaId = 1) {
+export async function getRomaneioProducaoComItens(romaneioId: number, empresaId: number) {
   const db = await getDb();
   if (!db) return null;
   const romaneio = (await db.select({
@@ -3737,7 +3738,7 @@ export async function criarSerragemTerceiros(data: {
   });
 }
 
-export async function listSerragensTerceiros(empresaId = 1) {
+export async function listSerragensTerceiros(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   return db.select({
@@ -3748,7 +3749,7 @@ export async function listSerragensTerceiros(empresaId = 1) {
     .where(eq(serragensTerceiros.empresaId, empresaId)).orderBy(desc(serragensTerceiros.dataProducao), desc(serragensTerceiros.id));
 }
 
-export async function getDetalheSerragemTerceiros(id: number, empresaId = 1) {
+export async function getDetalheSerragemTerceiros(id: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const servico = (await db.select({
@@ -4025,14 +4026,14 @@ export async function excluirRomaneioProducao(id: number, empresaId: number) {
   });
 }
 
-export async function getResumoEstoqueSerrado(empresaId = 1) {
+export async function getResumoEstoqueSerrado(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const lotes = await db.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.empresaId, empresaId));
   return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado"));
 }
 
-export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFinal?: Date, empresaId = 1) {
+export async function getRelatorioInventarioSerrado(dataInicial: Date | undefined, dataFinal: Date | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) return { linhas: [], resumo: { itensAnalisados: 0, itensEmRutura: 0, itensCriticos: 0, pecasEmDeficit: 0, saidasNoPeriodo: 0 }, periodo: { dataInicial: new Date(), dataFinal: new Date(), dias: 1 } };
   const fim = dataFinal ? new Date(dataFinal) : new Date();
@@ -4055,7 +4056,7 @@ export async function getRelatorioInventarioSerrado(dataInicial?: Date, dataFina
   };
 }
 
-export async function listAjustesEstoqueSerrado(empresaId = 1) {
+export async function listAjustesEstoqueSerrado(empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const [movimentos, lotes, utilizadores] = await Promise.all([
@@ -4380,7 +4381,7 @@ async function getOrCreateCategoriaPagamentoDiesel(tx: any, userId: number): Pro
   return getInsertedId(resultado as MysqlInsertResult);
 }
 
-export async function getResumoTanqueDiesel(empresaId = 1) {
+export async function getResumoTanqueDiesel(empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [notasComFornecedor, abastecimentos, titulos] = await Promise.all([
@@ -4469,7 +4470,7 @@ export async function criarNotaDiesel(data: {
   });
 }
 
-export async function excluirNotaDiesel(id: number, userId: number, empresaId = 1) {
+export async function excluirNotaDiesel(id: number, userId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {

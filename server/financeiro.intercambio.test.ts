@@ -48,12 +48,12 @@ describe("intercâmbio de lançamentos financeiros", () => {
     };
     const categorias = [{ id: 7, nome: "Despesas", tipo: "despesa" as const }];
     const invalido = "referencia;tipo;descricao;categoria;valor;data_emissao;data_vencimento;competencia;contraparte;observacoes\nINV-1;pagar;Compra;Inexistente;10;2026-08-01;2026-08-10;;;;";
-    await expect(importarLancamentosFinanceirosCsv(invalido, 2, { database, categorias, titulosExistentes: [] })).resolves.toMatchObject({ importados: 0, erros: [expect.stringMatching(/não encontrada/i)] });
+    await expect(importarLancamentosFinanceirosCsv(invalido, 2, 1, { database, categorias, titulosExistentes: [] })).resolves.toMatchObject({ importados: 0, erros: [expect.stringMatching(/não encontrada/i)] });
     expect(transacoes).toBe(0);
     expect(lotes).toEqual([]);
 
     const valido = "referencia;tipo;descricao;categoria;valor;data_emissao;data_vencimento;competencia;contraparte;observacoes\nIMP-10;pagar;Compra;Despesas;10;2026-08-01;2026-08-10;;;;";
-    await expect(importarLancamentosFinanceirosCsv(valido, 2, { database, categorias, titulosExistentes: [] })).resolves.toEqual({ importados: 1, erros: [] });
+    await expect(importarLancamentosFinanceirosCsv(valido, 2, 1, { database, categorias, titulosExistentes: [] })).resolves.toEqual({ importados: 1, erros: [] });
     expect(transacoes).toBe(1);
     expect(lotes).toEqual([expect.arrayContaining([expect.objectContaining({ chaveImportacao: "IMP-10", categoriaId: 7, criadoPor: 2 })])]);
   });

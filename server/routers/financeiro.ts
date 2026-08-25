@@ -167,7 +167,7 @@ export const financeiroRouter = router({
     list: protectedProcedure.input(z.object({
       contaFinanceiraId: z.number().int().positive().optional(),
       estado: z.enum(["disponivel", "utilizado", "estornado", "depositado"]).optional(),
-    }).optional()).query(({ ctx, input }) => db.listChequesFinanceiros(input, ctx.empresaAtiva!.empresa.id)),
+    }).optional()).query(({ ctx, input }) => db.listChequesFinanceiros(input ?? {}, ctx.empresaAtiva!.empresa.id)),
     depositar: protectedProcedure.input(z.object({
       id: z.number().int().positive(),
       contaDestinoId: z.number().int().positive(),
@@ -205,10 +205,10 @@ export const financeiroRouter = router({
     modeloLancamentosCsv: protectedProcedure.query(() => db.getModeloImportacaoLancamentosCsv()),
     exportarLancamentosCsv: protectedProcedure.input(z.object({
       tipo: TipoTituloSchema.optional(),
-    }).optional()).query(({ input }) => db.exportarLancamentosFinanceirosCsv(input)),
+    }).optional()).query(({ ctx, input }) => db.exportarLancamentosFinanceirosCsv(input, ctx.empresaAtiva!.empresa.id)),
     importarLancamentosCsv: protectedProcedure.input(z.object({
       conteudo: z.string().min(1, "Selecione um arquivo CSV").max(1_000_000, "O arquivo excede o limite de 1 MB"),
-    })).mutation(({ ctx, input }) => db.importarLancamentosFinanceirosCsv(input.conteudo, ctx.user.id)),
+    })).mutation(({ ctx, input }) => db.importarLancamentosFinanceirosCsv(input.conteudo, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
   }),
 
   conciliacao: router({

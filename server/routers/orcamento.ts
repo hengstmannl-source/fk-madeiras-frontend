@@ -271,7 +271,7 @@ export const orcamentoRouter = router({
       await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       await db.updateOrcamentoEstado(input.id, input.estado, ctx.user.id, input.confirmacaoDupla);
       if (input.estado === "aprovado") {
-        await db.criarTituloReceberDeOrcamento(input.id, ctx.user.id);
+        await db.criarTituloReceberDeOrcamento(input.id, ctx.user.id, undefined, ctx.empresaAtiva!.empresa.id);
       }
       return { success: true };
     }),
@@ -316,7 +316,7 @@ export const orcamentoRouter = router({
     .mutation(async ({ ctx, input }) => {
       await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
       const dataPagamento = parseDataFinanceira(input.pagoEm);
-      return db.registrarPagamentoOrcamento(input.id, ctx.user.id, input.formaPagamento, dataPagamento);
+      return db.registrarPagamentoOrcamento(input.id, ctx.user.id, input.formaPagamento, dataPagamento, ctx.empresaAtiva!.empresa.id);
     }),
 
   entregarFisicamente: protectedProcedure
@@ -372,6 +372,6 @@ export const orcamentoRouter = router({
     .input(z.object({ id: z.number() }))
     .mutation(async ({ ctx, input }) => {
       await garantirVendaDaEmpresa(input.id, ctx.empresaAtiva!.empresa.id);
-      return db.duplicateOrcamento(input.id);
+      return db.duplicateOrcamento(input.id, ctx.empresaAtiva!.empresa.id);
     }),
 });
