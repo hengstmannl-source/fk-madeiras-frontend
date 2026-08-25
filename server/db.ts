@@ -1,4 +1,4 @@
-import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectModel, type SQL } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
@@ -405,6 +405,14 @@ export async function getPerfilCliente(id: number, empresaId: number) {
 }
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
+type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
+type TituloFinanceiro = InferSelectModel<typeof titulosFinanceiros>;
+type CategoriaFinanceira = InferSelectModel<typeof categoriasFinanceiras>;
+type Fornecedor = InferSelectModel<typeof fornecedores>;
+type AtualizacaoCabecalhoCarga = Partial<typeof romaneiosCargaToras.$inferInsert>;
+type AtualizacaoCabecalhoSerragem = Partial<typeof serragensTerceiros.$inferInsert>;
+type EstadoOrcamento = InferSelectModel<typeof orcamentos>["estado"];
+type AtualizacaoCabecalhoProducao = Partial<typeof romaneiosProducao.$inferInsert>;
 
 /** Extrai o ID devolvido pelo mysql2, cuja resposta é [ResultSetHeader, fields]. */
 export function getInsertedId(result: MysqlInsertResult): number {
@@ -576,10 +584,10 @@ export async function atualizarCabecalhoCargasEmLote(data: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.transaction(async (tx: any) => {
+  return db.transaction(async (tx) => {
     const cargas = await tx.select().from(romaneiosCargaToras).where(and(eq(romaneiosCargaToras.empresaId, data.empresaId), inArray(romaneiosCargaToras.id, data.ids)));
     if (cargas.length !== data.ids.length) throw new Error("Um ou mais romaneios de carga não foram encontrados");
-    let fornecedorNovo: any = null;
+    let fornecedorNovo: Fornecedor | null = null;
     if (data.fornecedorId) {
       fornecedorNovo = (await tx.select().from(fornecedores).where(and(eq(fornecedores.id, data.fornecedorId), eq(fornecedores.empresaId, data.empresaId))).limit(1))[0];
       if (!fornecedorNovo) throw new Error("Fornecedor não encontrado");
@@ -594,7 +602,7 @@ export async function atualizarCabecalhoCargasEmLote(data: {
       const valorTotal = Number((decimalParaNumero(carga.valorProdutos) + frete).toFixed(2));
       const alteraFinanceiro = data.dataCarga !== undefined || data.dataVencimento !== undefined || data.fornecedorId !== undefined || data.fretePorMetroCubico !== undefined;
       if (titulo && alteraFinanceiro && (decimalParaNumero(titulo.valorBaixado) > 0 || titulo.estado === "quitado" || titulo.estado === "cancelado")) throw new Error(`A carga ${carga.numero} possui conta financeira movimentada e não pode ser alterada em lote`);
-      const cabecalho: any = {};
+      const cabecalho: AtualizacaoCabecalhoCarga = {};
       if (data.dataCarga) cabecalho.dataCarga = dataCarga;
       if (data.dataVencimento) cabecalho.dataVencimento = dataVencimento;
       if (data.origem !== undefined) cabecalho.origem = normalizarTextoCabecalho(data.origem);
@@ -626,7 +634,7 @@ export async function atualizarCabecalhoProducaoEmLote(data: {
   if (!db) throw new Error("Database not available");
   const romaneios = await db.select({ id: romaneiosProducao.id }).from(romaneiosProducao).where(and(eq(romaneiosProducao.empresaId, data.empresaId), inArray(romaneiosProducao.id, data.ids)));
   if (romaneios.length !== data.ids.length) throw new Error("Um ou mais romaneios de produção não foram encontrados");
-  const cabecalho: any = {};
+  const cabecalho: AtualizacaoCabecalhoProducao = {};
   if (data.dataProducao) cabecalho.dataProducao = data.dataProducao;
   if (data.fita !== undefined) cabecalho.fita = normalizarTextoCabecalho(data.fita);
   if (data.responsavel !== undefined) cabecalho.responsavel = normalizarTextoCabecalho(data.responsavel);
@@ -640,7 +648,7 @@ export async function atualizarCabecalhoSerragensEmLote(data: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.transaction(async (tx: any) => {
+  return db.transaction(async (tx) => {
     const servicos = await tx.select().from(serragensTerceiros).where(and(eq(serragensTerceiros.empresaId, data.empresaId), inArray(serragensTerceiros.id, data.ids)));
     if (servicos.length !== data.ids.length) throw new Error("Uma ou mais serragens não foram encontradas");
     const clienteNovo = data.clienteId ? (await tx.select().from(clientes).where(and(eq(clientes.id, data.clienteId), eq(clientes.empresaId, data.empresaId))).limit(1))[0] : null;
@@ -660,7 +668,7 @@ export async function atualizarCabecalhoSerragensEmLote(data: {
         }
         await tx.update(lotesPecasSerradas).set({ clienteProprietarioId: data.clienteId }).where(and(eq(lotesPecasSerradas.serragemTerceirosId, servico.id), eq(lotesPecasSerradas.empresaId, data.empresaId)));
       }
-      const cabecalho: any = {};
+      const cabecalho: AtualizacaoCabecalhoSerragem = {};
       if (data.clienteId) cabecalho.clienteId = data.clienteId;
       if (data.dataProducao) cabecalho.dataProducao = dataProducao;
       if (data.dataVencimento) cabecalho.dataVencimento = dataVencimento;
@@ -686,12 +694,12 @@ export function classificarCategoriaOperacionalVenda(pago: boolean, entregue: bo
   return "aprovadas";
 }
 
-export async function listOrcamentos(filters: { estado?: string; clienteId?: number; categoria?: CategoriaOperacionalVenda } | undefined, empresaId: number) {
+export async function listOrcamentos(filters: { estado?: EstadoOrcamento; clienteId?: number; categoria?: CategoriaOperacionalVenda } | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
   conditions.push(eq(orcamentos.empresaId, empresaId));
-  if (filters?.estado) conditions.push(eq(orcamentos.estado, filters.estado as any));
+  if (filters?.estado) conditions.push(eq(orcamentos.estado, filters.estado));
   if (filters?.clienteId) conditions.push(eq(orcamentos.clienteId, filters.clienteId));
   if (filters?.categoria === "aprovadas") conditions.push(eq(orcamentos.pago, false), eq(orcamentos.entregue, false));
   if (filters?.categoria === "pagas") conditions.push(eq(orcamentos.pago, true), eq(orcamentos.entregue, false));
@@ -1630,7 +1638,7 @@ export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVe
   });
 }
 
-export async function atualizarEstadoTituloFinanceiro(titulo: any) {
+export async function atualizarEstadoTituloFinanceiro(titulo: TituloFinanceiro): Promise<TituloFinanceiro> {
   const novoEstado = calcularEstadoTitulo({
     valorOriginal: titulo.valorOriginal,
     desconto: titulo.desconto,
@@ -1649,7 +1657,7 @@ export async function atualizarEstadoTituloFinanceiro(titulo: any) {
 export async function listTitulosFinanceiros(
   filters: {
     tipo?: TipoTituloFinanceiro;
-    estado?: string;
+    estado?: TituloFinanceiro["estado"];
     clienteId?: number;
     fornecedorId?: number;
     categoriaId?: number;
@@ -1659,22 +1667,22 @@ export async function listTitulosFinanceiros(
     dataInicio?: Date;
     dataFim?: Date;
   } | undefined,
-  dependencias: { database?: any; atualizarEstado?: (titulo: any) => Promise<any>; titulos?: any[]; empresaId: number },
+  dependencias: { database?: DatabaseConnection; atualizarEstado?: (titulo: TituloFinanceiro) => Promise<TituloFinanceiro>; titulos?: TituloFinanceiro[]; empresaId: number },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db && !dependencias?.titulos) return [];
   const conditions = [];
   conditions.push(eq(titulosFinanceiros.empresaId, dependencias.empresaId));
   if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
-  if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado as any));
+  if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado));
   else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
   if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
   if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
   if (filters?.categoriaId) conditions.push(eq(titulosFinanceiros.categoriaId, filters.categoriaId));
-  const titulos = dependencias?.titulos ?? await db.select().from(titulosFinanceiros)
+  const titulos = dependencias?.titulos ?? await db!.select().from(titulosFinanceiros)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(titulosFinanceiros.dataVencimento));
-  const titulosVisiveis = titulos.filter((titulo: any) => {
+  const titulosVisiveis = titulos.filter((titulo) => {
     if (!filters?.estado && titulo.estado === "cancelado") return false;
     if (filters?.estado && titulo.estado !== filters.estado) return false;
     if (filters?.tipo && titulo.tipo !== filters.tipo) return false;
@@ -1691,7 +1699,7 @@ export async function listTitulosFinanceiros(
     if (filters?.dataFim && vencimento > filters.dataFim.getTime()) return false;
     return true;
   });
-  return Promise.all(titulosVisiveis.map((titulo: any) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
+  return Promise.all(titulosVisiveis.map((titulo) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
 }
 
 function dataImportada(valor: string): Date {
@@ -1732,7 +1740,7 @@ export async function importarLancamentosFinanceirosCsv(
   conteudo: string,
   userId: number,
   empresaId: number,
-  dependencias?: { database?: any; categorias?: any[]; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
+  dependencias?: { database?: DatabaseConnection; categorias?: CategoriaFinanceira[]; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
@@ -1742,7 +1750,7 @@ export async function importarLancamentosFinanceirosCsv(
   ]);
   const preparo = prepararImportacaoLancamentos({ conteudo, categorias, titulosExistentes });
   if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
-  await db.transaction(async (tx: any) => {
+  await db.transaction(async (tx) => {
     await tx.insert(titulosFinanceiros).values(preparo.linhas.map((linha) => ({
       empresaId,
       tipo: linha.tipo,
@@ -1781,7 +1789,7 @@ type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "contaFinan
 export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  return db.transaction(async (tx: any) => {
+  return db.transaction(async (tx) => {
     const titulo = (await tx.select().from(titulosFinanceiros)
       .where(and(eq(titulosFinanceiros.id, data.tituloId), eq(titulosFinanceiros.empresaId, empresaId))).limit(1))[0];
     if (!titulo) throw new Error("Título financeiro não encontrado");
@@ -1954,10 +1962,10 @@ export async function prepararImportacaoExtratoBancario(conteudo: string, format
   return prepararImportacaoExtrato(conteudo, formato);
 }
 
-export async function importarExtratoBancario(input: { contaFinanceiraId: number; nomeArquivo: string; formato: "csv" | "ofx"; conteudo: string }, userId: number) {
+export async function importarExtratoBancario(input: { contaFinanceiraId: number; nomeArquivo: string; formato: "csv" | "ofx"; conteudo: string }, userId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, input.contaFinanceiraId), eq(contasFinanceiras.ativa, true))).limit(1);
+  const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, input.contaFinanceiraId), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).limit(1);
   if (!conta[0]) throw new Error("A conta financeira selecionada não está ativa");
   if (conta[0].tipo !== "banco") throw new Error("Selecione uma conta do tipo banco para importar um extrato");
   const preparo = prepararImportacaoExtrato(input.conteudo, input.formato);
@@ -1966,8 +1974,9 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
   const existentes = chaves.length ? await db.select({ chaveUnica: movimentosExtratoBancario.chaveUnica }).from(movimentosExtratoBancario).where(inArray(movimentosExtratoBancario.chaveUnica, chaves)) : [];
   if (existentes.length) return { importados: 0, erros: [`${existentes.length} movimento(s) do arquivo já foram importados anteriormente para esta conta`] };
   const datas = preparo.linhas.map((linha) => dataExtrato(linha.dataMovimento));
-  await db.transaction(async (tx: any) => {
+  await db.transaction(async (tx) => {
     const criado = await tx.insert(extratosBancarios).values({
+      empresaId,
       contaFinanceiraId: input.contaFinanceiraId,
       nomeArquivo: input.nomeArquivo.slice(0, 300),
       formato: input.formato,
@@ -1978,6 +1987,7 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
     });
     const extratoId = getInsertedId(criado as MysqlInsertResult);
     await tx.insert(movimentosExtratoBancario).values(preparo.linhas.map((linha) => ({
+      empresaId,
       extratoId,
       contaFinanceiraId: input.contaFinanceiraId,
       dataMovimento: dataExtrato(linha.dataMovimento),
@@ -1992,13 +2002,12 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function listConciliacaoBancaria(filtros?: { contaFinanceiraId?: number; estado?: "pendente" | "conciliado" | "ignorado" | "divergente" }) {
+export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: number; estado?: "pendente" | "conciliado" | "ignorado" | "divergente" } | undefined, empresaId: number) {
   const db = await getDb();
   if (!db) return [];
-  const condicoes = [
-    filtros?.contaFinanceiraId ? eq(movimentosExtratoBancario.contaFinanceiraId, filtros.contaFinanceiraId) : undefined,
-    filtros?.estado ? eq(movimentosExtratoBancario.estado, filtros.estado) : undefined,
-  ].filter(Boolean) as any[];
+  const condicoes: SQL[] = [eq(movimentosExtratoBancario.empresaId, empresaId)];
+  if (filtros?.contaFinanceiraId) condicoes.push(eq(movimentosExtratoBancario.contaFinanceiraId, filtros.contaFinanceiraId));
+  if (filtros?.estado) condicoes.push(eq(movimentosExtratoBancario.estado, filtros.estado));
   const consultaMovimentos = db.select({
     id: movimentosExtratoBancario.id,
     extratoId: movimentosExtratoBancario.extratoId,
@@ -2038,55 +2047,56 @@ export async function listConciliacaoBancaria(filtros?: { contaFinanceiraId?: nu
     contaFinanceiraId: baixasFinanceiras.contaFinanceiraId,
   }).from(baixasFinanceiras)
     .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
-    .where(and(inArray(baixasFinanceiras.contaFinanceiraId, contasIds), eq(baixasFinanceiras.estornada, false), eq(baixasFinanceiras.conciliada, false))) : [];
+    .where(and(eq(baixasFinanceiras.empresaId, empresaId), inArray(baixasFinanceiras.contaFinanceiraId, contasIds), eq(baixasFinanceiras.estornada, false), eq(baixasFinanceiras.conciliada, false))) : [];
   return movimentos.map((movimento) => ({
     ...movimento,
     sugestoes: movimento.estado === "pendente" ? sugerirConciliacoes(movimento, baixas.filter((baixa) => baixa.contaFinanceiraId === movimento.contaFinanceiraId)) : [],
   }));
 }
 
-export async function confirmarConciliacaoBancaria(input: { movimentoId: number; baixaFinanceiraId: number }, userId: number) {
+export async function confirmarConciliacaoBancaria(input: { movimentoId: number; baixaFinanceiraId: number }, userId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(eq(movimentosExtratoBancario.id, input.movimentoId)).limit(1);
+  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
   if (!movimento[0]) throw new Error("Movimento bancário não encontrado");
   if (movimento[0].estado === "conciliado") throw new Error("Este movimento já foi conciliado");
-  const baixa = await db.select({ id: baixasFinanceiras.id, contaFinanceiraId: baixasFinanceiras.contaFinanceiraId, valor: baixasFinanceiras.valor, estornada: baixasFinanceiras.estornada, conciliada: baixasFinanceiras.conciliada, tipoTitulo: titulosFinanceiros.tipo }).from(baixasFinanceiras).innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id)).where(eq(baixasFinanceiras.id, input.baixaFinanceiraId)).limit(1);
+  const baixa = await db.select({ id: baixasFinanceiras.id, contaFinanceiraId: baixasFinanceiras.contaFinanceiraId, valor: baixasFinanceiras.valor, estornada: baixasFinanceiras.estornada, conciliada: baixasFinanceiras.conciliada, tipoTitulo: titulosFinanceiros.tipo }).from(baixasFinanceiras).innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id)).where(and(eq(baixasFinanceiras.id, input.baixaFinanceiraId), eq(baixasFinanceiras.empresaId, empresaId), eq(titulosFinanceiros.empresaId, empresaId))).limit(1);
   if (!baixa[0] || baixa[0].estornada) throw new Error("A baixa selecionada não está disponível para conciliação");
   if (baixa[0].conciliada) throw new Error("A baixa selecionada já foi conciliada em outro movimento");
   if (baixa[0].contaFinanceiraId !== movimento[0].contaFinanceiraId) throw new Error("O movimento e a baixa devem pertencer à mesma conta financeira");
   if ((movimento[0].tipo === "entrada" ? "receber" : "pagar") !== baixa[0].tipoTitulo) throw new Error("O tipo do movimento não corresponde ao tipo da baixa");
   if (Math.abs(decimalParaNumero(movimento[0].valor) - decimalParaNumero(baixa[0].valor)) > 0.01) throw new Error("O valor do movimento é diferente do valor da baixa");
-  await db.transaction(async (tx: any) => {
-    await tx.update(baixasFinanceiras).set({ conciliada: true, conciliadaEm: new Date() }).where(eq(baixasFinanceiras.id, baixa[0].id));
-    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId: baixa[0].id, conciliadoEm: new Date(), conciliadoPor: userId, observacoes: null }).where(eq(movimentosExtratoBancario.id, movimento[0].id));
+  await db.transaction(async (tx) => {
+    await tx.update(baixasFinanceiras).set({ conciliada: true, conciliadaEm: new Date() }).where(and(eq(baixasFinanceiras.id, baixa[0].id), eq(baixasFinanceiras.empresaId, empresaId)));
+    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId: baixa[0].id, conciliadoEm: new Date(), conciliadoPor: userId, observacoes: null }).where(and(eq(movimentosExtratoBancario.id, movimento[0].id), eq(movimentosExtratoBancario.empresaId, empresaId)));
   });
   return { success: true };
 }
 
-export async function desfazerConciliacaoBancaria(movimentoId: number) {
+export async function desfazerConciliacaoBancaria(movimentoId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(eq(movimentosExtratoBancario.id, movimentoId)).limit(1);
+  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
   if (!movimento[0] || movimento[0].estado !== "conciliado" || !movimento[0].baixaFinanceiraId) throw new Error("Este movimento não possui uma conciliação para desfazer");
-  await db.transaction(async (tx: any) => {
-    await tx.update(baixasFinanceiras).set({ conciliada: false, conciliadaEm: null }).where(eq(baixasFinanceiras.id, movimento[0].baixaFinanceiraId!));
-    await tx.update(movimentosExtratoBancario).set({ estado: "pendente", baixaFinanceiraId: null, conciliadoEm: null, conciliadoPor: null }).where(eq(movimentosExtratoBancario.id, movimentoId));
+  await db.transaction(async (tx) => {
+    await tx.update(baixasFinanceiras).set({ conciliada: false, conciliadaEm: null }).where(and(eq(baixasFinanceiras.id, movimento[0].baixaFinanceiraId!), eq(baixasFinanceiras.empresaId, empresaId)));
+    await tx.update(movimentosExtratoBancario).set({ estado: "pendente", baixaFinanceiraId: null, conciliadoEm: null, conciliadoPor: null }).where(and(eq(movimentosExtratoBancario.id, movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId)));
   });
   return { success: true };
 }
 
-export async function criarLancamentoDaConciliacao(input: { movimentoId: number; categoriaId: number; descricao: string; observacoes?: string | null }, userId: number) {
+export async function criarLancamentoDaConciliacao(input: { movimentoId: number; categoriaId: number; descricao: string; observacoes?: string | null }, userId: number, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(eq(movimentosExtratoBancario.id, input.movimentoId)).limit(1);
+  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
   if (!movimento[0] || movimento[0].estado !== "pendente") throw new Error("O movimento deve estar pendente para criar um lançamento");
-  const categoria = await db.select().from(categoriasFinanceiras).where(and(eq(categoriasFinanceiras.id, input.categoriaId), eq(categoriasFinanceiras.ativo, true))).limit(1);
+  const categoria = await db.select().from(categoriasFinanceiras).where(and(eq(categoriasFinanceiras.id, input.categoriaId), eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).limit(1);
   if (!categoria[0]) throw new Error("Selecione uma categoria financeira ativa");
   const tipo = movimento[0].tipo === "entrada" ? "receber" as const : "pagar" as const;
   if (categoria[0].tipo !== "ambos" && categoria[0].tipo !== (tipo === "receber" ? "receita" : "despesa")) throw new Error("A categoria selecionada não corresponde ao tipo do movimento");
-  await db.transaction(async (tx: any) => {
+  await db.transaction(async (tx) => {
     const tituloInserido = await tx.insert(titulosFinanceiros).values({
+      empresaId,
       tipo,
       origem: "manual",
       descricao: input.descricao.trim(),
@@ -2104,6 +2114,7 @@ export async function criarLancamentoDaConciliacao(input: { movimentoId: number;
     });
     const tituloId = getInsertedId(tituloInserido as MysqlInsertResult);
     const baixaInserida = await tx.insert(baixasFinanceiras).values({
+      empresaId,
       tituloId,
       contaFinanceiraId: movimento[0].contaFinanceiraId,
       valor: movimento[0].valor,
@@ -2115,18 +2126,18 @@ export async function criarLancamentoDaConciliacao(input: { movimentoId: number;
       criadoPor: userId,
     });
     const baixaFinanceiraId = getInsertedId(baixaInserida as MysqlInsertResult);
-    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId, conciliadoEm: new Date(), conciliadoPor: userId, observacoes: input.observacoes ?? null }).where(eq(movimentosExtratoBancario.id, movimento[0].id));
+    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId, conciliadoEm: new Date(), conciliadoPor: userId, observacoes: input.observacoes ?? null }).where(and(eq(movimentosExtratoBancario.id, movimento[0].id), eq(movimentosExtratoBancario.empresaId, empresaId)));
   });
   return { success: true };
 }
 
-export async function definirEstadoMovimentoBancario(input: { movimentoId: number; estado: "ignorado" | "divergente"; observacoes?: string | null }) {
+export async function definirEstadoMovimentoBancario(input: { movimentoId: number; estado: "ignorado" | "divergente"; observacoes?: string | null }, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(eq(movimentosExtratoBancario.id, input.movimentoId)).limit(1);
+  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
   if (!movimento[0]) throw new Error("Movimento bancário não encontrado");
   if (movimento[0].estado === "conciliado") throw new Error("Desfaça a conciliação antes de alterar o estado do movimento");
-  await db.update(movimentosExtratoBancario).set({ estado: input.estado, observacoes: input.observacoes ?? null }).where(eq(movimentosExtratoBancario.id, input.movimentoId));
+  await db.update(movimentosExtratoBancario).set({ estado: input.estado, observacoes: input.observacoes ?? null }).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId)));
   return { success: true };
 }
 

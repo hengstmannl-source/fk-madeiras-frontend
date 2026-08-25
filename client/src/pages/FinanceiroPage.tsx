@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearch } from "wouter";
-import { trpc } from "@/lib/trpc";
+import { trpc, type RouterOutputs } from "@/lib/trpc";
 import { formatCurrency, formatReceivableSaleReference } from "@/lib/utils";
 import { exportarListaFinanceiraPdf } from "@/lib/financeiroPdf";
 import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
@@ -74,6 +74,10 @@ type EntidadeContextual = "cliente" | "fornecedor" | "categoria" | "conta";
 type DestinoContextual = "lancamento" | "recorrencia" | "baixa" | "cheque";
 type VisaoFinanceira = "pagar" | "receber" | "pagas" | "recebidas";
 type ChequeRecebidoForm = { referencia: string; valor: string; clienteId: string; dataCompensacao: string };
+type TituloFinanceiro = RouterOutputs["financeiro"]["titulos"]["list"][number];
+type FornecedorFinanceiro = RouterOutputs["financeiro"]["fornecedores"]["list"][number];
+type ContaFinanceira = RouterOutputs["financeiro"]["contas"]["list"][number];
+type ChequeDisponivel = RouterOutputs["financeiro"]["cheques"]["list"][number];
 
 const opcoesVisaoFinanceira: Array<{ id: VisaoFinanceira; label: string; descricao: string }> = [
   { id: "pagar", label: "Contas a pagar", descricao: "Compromissos em aberto e em atraso" },
@@ -84,7 +88,7 @@ const opcoesVisaoFinanceira: Array<{ id: VisaoFinanceira; label: string; descric
 
 const valorInicialFiltrosFinanceiros = () => ({ descricao: "", valorMinimo: "", valorMaximo: "", dataInicio: "", dataFim: "", clienteId: "", categoriaId: "" });
 
-function saldoTitulo(titulo: any): number {
+function saldoTitulo(titulo: TituloFinanceiro): number {
   return Math.max(0,
     Number(titulo.valorOriginal || 0) - Number(titulo.desconto || 0) + Number(titulo.juros || 0) - Number(titulo.valorBaixado || 0),
   );
@@ -100,7 +104,7 @@ function dataChaveFinanceira(value?: string | Date | null): string {
   return Number.isNaN(data.getTime()) ? "" : data.toISOString().slice(0, 10);
 }
 
-function valorTotalTitulo(titulo: any): number {
+function valorTotalTitulo(titulo: TituloFinanceiro): number {
   return Number(titulo.valorOriginal || 0) - Number(titulo.desconto || 0) + Number(titulo.juros || 0);
 }
 
@@ -133,7 +137,7 @@ export default function FinanceiroPage() {
   const [lancamentoAberto, setLancamentoAberto] = useState(false);
   const [baixaAberta, setBaixaAberta] = useState(false);
   const [fornecedorAberto, setFornecedorAberto] = useState(false);
-  const [fornecedorEditando, setFornecedorEditando] = useState<any>(null);
+  const [fornecedorEditando, setFornecedorEditando] = useState<FornecedorFinanceiro | null>(null);
   const [categoriaAberta, setCategoriaAberta] = useState(false);
   const [contaAberta, setContaAberta] = useState(false);
   const [clienteAberto, setClienteAberto] = useState(false);
@@ -146,16 +150,16 @@ export default function FinanceiroPage() {
   const [filtrosFinanceiros, setFiltrosFinanceiros] = useState(valorInicialFiltrosFinanceiros);
   const [filtrosAplicados, setFiltrosAplicados] = useState<ReturnType<typeof valorInicialFiltrosFinanceiros> | null>(null);
   const [recorrenciaAberta, setRecorrenciaAberta] = useState(false);
-  const [tituloSelecionado, setTituloSelecionado] = useState<any>(null);
-  const [tituloParaEditar, setTituloParaEditar] = useState<any>(null);
+  const [tituloSelecionado, setTituloSelecionado] = useState<TituloFinanceiro | null>(null);
+  const [tituloParaEditar, setTituloParaEditar] = useState<TituloFinanceiro | null>(null);
   const [titulosSelecionados, setTitulosSelecionados] = useState<number[]>([]);
   const [edicaoLoteAberta, setEdicaoLoteAberta] = useState(false);
   const [edicaoLote, setEdicaoLote] = useState({ descricao: "", categoriaId: "", dataVencimento: "", observacoes: "" });
   const [lancamentoEditado, setLancamentoEditado] = useState(valorInicialLancamento);
-  const [tituloBaixas, setTituloBaixas] = useState<any>(null);
-  const [tituloParaExcluir, setTituloParaExcluir] = useState<any>(null);
+  const [tituloBaixas, setTituloBaixas] = useState<TituloFinanceiro | null>(null);
+  const [tituloParaExcluir, setTituloParaExcluir] = useState<TituloFinanceiro | null>(null);
   const [baixaParaEstornar, setBaixaParaEstornar] = useState<any>(null);
-  const [contaParaExcluir, setContaParaExcluir] = useState<any>(null);
+  const [contaParaExcluir, setContaParaExcluir] = useState<ContaFinanceira | null>(null);
   const [motivoEstorno, setMotivoEstorno] = useState("");
   const [periodoFluxo, setPeriodoFluxo] = useState({ dataInicio: primeiroDiaDoMes(), dataFim: hoje() });
   const [importacaoAberta, setImportacaoAberta] = useState(false);
@@ -205,7 +209,7 @@ export default function FinanceiroPage() {
   const categorias = trpc.financeiro.categorias.list.useQuery();
   const fornecedores = trpc.financeiro.fornecedores.list.useQuery();
   const contas = trpc.financeiro.contas.list.useQuery();
-  const contaBaixa = (contas.data ?? []).find((item: any) => String(item.id) === baixa.contaFinanceiraId);
+  const contaBaixa = (contas.data ?? []).find((item) => String(item.id) === baixa.contaFinanceiraId);
   const caixaChequeSelecionado = contaBaixa?.tipo === "caixa_cheque";
   const chequesDisponiveis = trpc.financeiro.cheques.list.useQuery(
     { contaFinanceiraId: Number(baixa.contaFinanceiraId || 0), estado: "disponivel" },
@@ -266,15 +270,15 @@ export default function FinanceiroPage() {
     { enabled: Boolean(tituloParaEditar) },
   );
   const removerAnexoFinanceiro = trpc.financeiro.anexos.remove.useMutation();
-  const maiorFluxoDiario = useMemo(() => Math.max(...(fluxoCaixa.data?.dias ?? []).flatMap((dia: any) => [Number(dia.entradas), Number(dia.saidas)]), 1), [fluxoCaixa.data]);
+  const maiorFluxoDiario = useMemo(() => Math.max(...(fluxoCaixa.data?.dias ?? []).flatMap((dia) => [Number(dia.entradas), Number(dia.saidas)]), 1), [fluxoCaixa.data]);
   const totalChequesRecebidos = useMemo(() => chequesRecebidos.reduce((total, cheque) => total + Number(cheque.valor.replace(",", ".") || 0), 0), [chequesRecebidos]);
   const totalChequesSelecionados = useMemo(() => (chequesDisponiveis.data ?? [])
-    .filter((cheque: any) => chequesSelecionados.includes(cheque.id))
-    .reduce((total: number, cheque: any) => total + Number(cheque.valor), 0), [chequesDisponiveis.data, chequesSelecionados]);
+    .filter((cheque: ChequeDisponivel) => chequesSelecionados.includes(cheque.id))
+    .reduce((total, cheque: ChequeDisponivel) => total + Number(cheque.valor), 0), [chequesDisponiveis.data, chequesSelecionados]);
 
   const resumo = useMemo(() => {
     const dados = titulos.data ?? [];
-    return dados.reduce((acumulado, titulo: any) => {
+    return dados.reduce((acumulado, titulo) => {
       if (titulo.estado === "cancelado" || titulo.estado === "quitado") return acumulado;
       const saldo = saldoTitulo(titulo);
       if (titulo.tipo === "receber") acumulado.receber += saldo;
@@ -288,13 +292,13 @@ export default function FinanceiroPage() {
     const hoje = new Date();
     const limite = new Date();
     limite.setDate(limite.getDate() + 30);
-    const emAberto = (titulos.data ?? []).filter((titulo: any) => !["quitado", "cancelado"].includes(titulo.estado));
+    const emAberto = (titulos.data ?? []).filter((titulo) => !["quitado", "cancelado"].includes(titulo.estado));
     return {
-      vencidos: emAberto.filter((titulo: any) => titulo.estado === "vencido"),
-      proximos: emAberto.filter((titulo: any) => {
+      vencidos: emAberto.filter((titulo) => titulo.estado === "vencido"),
+      proximos: emAberto.filter((titulo) => {
         const vencimento = new Date(titulo.dataVencimento);
         return vencimento >= hoje && vencimento <= limite;
-      }).sort((a: any, b: any) => new Date(a.dataVencimento).getTime() - new Date(b.dataVencimento).getTime()),
+      }).sort((a, b) => new Date(a.dataVencimento).getTime() - new Date(b.dataVencimento).getTime()),
     };
   }, [titulos.data]);
 
@@ -302,17 +306,17 @@ export default function FinanceiroPage() {
     if (!filtrosAplicados) return [];
     const tipo = visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? "pagar" : "receber";
     const quitado = visaoFinanceira === "pagas" || visaoFinanceira === "recebidas";
-    return (titulosPesquisados.data ?? []).filter((titulo: any) => {
+    return (titulosPesquisados.data ?? []).filter((titulo) => {
       if (titulo.tipo !== tipo || titulo.estado === "cancelado") return false;
       if (quitado ? titulo.estado !== "quitado" : ["quitado", "cancelado"].includes(titulo.estado)) return false;
       return true;
     });
   }, [titulosPesquisados.data, visaoFinanceira, filtrosAplicados]);
   const tituloLancamentos = opcoesVisaoFinanceira.find((item) => item.id === visaoFinanceira)!;
-  const titulosHoje = useMemo(() => titulosExibidos.filter((titulo: any) => dataChaveFinanceira(titulo.dataVencimento) === hoje()), [titulosExibidos]);
+  const titulosHoje = useMemo(() => titulosExibidos.filter((titulo) => dataChaveFinanceira(titulo.dataVencimento) === hoje()), [titulosExibidos]);
   const totaisPesquisa = useMemo(() => {
     const quitados = visaoFinanceira === "pagas" || visaoFinanceira === "recebidas";
-    return (titulosPesquisados.data ?? []).reduce((acumulado, titulo: any) => {
+    return (titulosPesquisados.data ?? []).reduce((acumulado, titulo) => {
       if (titulo.estado === "cancelado" || (quitados ? titulo.estado !== "quitado" : titulo.estado === "quitado")) return acumulado;
       const valor = quitados ? Number(titulo.valorBaixado || valorTotalTitulo(titulo)) : saldoTitulo(titulo);
       if (titulo.tipo === "receber") acumulado.receber += valor;
@@ -916,7 +920,11 @@ export default function FinanceiroPage() {
             <div className="space-y-3 rounded-lg border border-dashed border-amber-300 bg-amber-50/30 p-3">
               <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-medium text-amber-950">Documentos vinculados</p><p className="mt-0.5 text-xs text-amber-900">Notas fiscais, boletos e imagens do agendamento.</p></div><Label htmlFor="anexar-documentos-edicao" className="cursor-pointer"><span className="inline-flex h-8 items-center rounded-md border border-input bg-background px-3 text-xs font-medium hover:bg-accent">{enviarAnexoFinanceiro.isPending ? "Enviando..." : "Anexar"}</span></Label></div>
               <Input id="anexar-documentos-edicao" className="sr-only" aria-label="Anexar documentos ao agendamento" type="file" accept="application/pdf,image/jpeg,image/png,image/webp" multiple disabled={enviarAnexoFinanceiro.isPending} onChange={(evento) => { void anexarDocumentosAoTitulo(evento.target.files); evento.currentTarget.value = ""; }} />
-              {anexosTituloEditado.isLoading ? <p className="py-2 text-xs text-muted-foreground">Carregando documentos...</p> : anexosTituloEditado.data?.length ? <div className="space-y-1.5">{anexosTituloEditado.data.map((anexo: any) => <div key={anexo.id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate font-medium">{anexo.nomeArquivo}</span><span className="shrink-0 text-muted-foreground">{(Number(anexo.tamanhoBytes) / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2" aria-label={`Visualizar ${anexo.nomeArquivo}`} onClick={() => setAnexoParaVisualizar({ nomeArquivo: anexo.nomeArquivo, url: anexo.url, mimeType: anexo.mimeType })}><Eye className="h-3.5 w-3.5" /></Button><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" disabled={removerAnexoFinanceiro.isPending} onClick={() => removerAnexoFinanceiro.mutate({ id: anexo.id, tituloId: tituloParaEditar.id }, { onSuccess: () => { toast.success("Documento removido"); void anexosTituloEditado.refetch(); }, onError: (erro) => toast.error(erro.message) })}>Remover</Button></div>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-3 text-center text-xs text-muted-foreground">Nenhum documento anexado a este agendamento.</p>}
+              {anexosTituloEditado.isLoading ? <p className="py-2 text-xs text-muted-foreground">Carregando documentos...</p> : anexosTituloEditado.data?.length ? <div className="space-y-1.5">{anexosTituloEditado.data.map((anexo: any) => <div key={anexo.id} className="flex items-center gap-2 rounded-md border bg-background px-2.5 py-2 text-xs"><Paperclip className="h-3.5 w-3.5 shrink-0 text-primary" /><span className="min-w-0 flex-1 truncate font-medium">{anexo.nomeArquivo}</span><span className="shrink-0 text-muted-foreground">{(Number(anexo.tamanhoBytes) / 1024 / 1024).toFixed(1)} MB</span><Button type="button" size="sm" variant="ghost" className="h-7 px-2" aria-label={`Visualizar ${anexo.nomeArquivo}`} onClick={() => setAnexoParaVisualizar({ nomeArquivo: anexo.nomeArquivo, url: anexo.url, mimeType: anexo.mimeType })}><Eye className="h-3.5 w-3.5" /></Button><Button type="button" size="sm" variant="ghost" className="h-7 px-2 text-destructive hover:text-destructive" disabled={removerAnexoFinanceiro.isPending} onClick={() => {
+                const tituloId = tituloParaEditar?.id;
+                if (!tituloId) return;
+                removerAnexoFinanceiro.mutate({ id: anexo.id, tituloId }, { onSuccess: () => { toast.success("Documento removido"); void anexosTituloEditado.refetch(); }, onError: (erro) => toast.error(erro.message) });
+              }}>Remover</Button></div>)}</div> : <p className="rounded-md border border-dashed bg-background/60 px-3 py-3 text-center text-xs text-muted-foreground">Nenhum documento anexado a este agendamento.</p>}
             </div>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarTitulo.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarTitulo.isPending}>{atualizarTitulo.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar alterações</Button></div>
           </div>

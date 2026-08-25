@@ -671,3 +671,7 @@
 - [x] Ajustar a política de cookies conforme a arquitetura de desenvolvimento e produção
 - [x] Cobrir cookies, logout, expiração e continuidade da empresa ativa com regressões
 - [x] Validar segurança da sessão, TypeScript e suíte completa sem alterar regras de negócio
+- [x] Inventariar e classificar ocorrências de any e casts perigosos em backend e frontend
+- [x] Eliminar any desnecessários no backend, priorizando dados financeiros e operações críticas
+- [x] Fortalecer tipos do frontend e pontos compartilhados sem alterar comportamento visual
+- [x] Documentar exceções justificadas, validar TypeScript e executar a suíte completa

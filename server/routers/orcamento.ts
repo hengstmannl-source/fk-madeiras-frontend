@@ -148,7 +148,7 @@ export const orcamentoRouter = router({
 
   list: protectedProcedure
     .input(z.object({
-      estado: z.string().optional(),
+      estado: z.enum(["rascunho", "enviado", "aprovado", "rejeitado"]).optional(),
       clienteId: z.number().optional(),
       categoria: z.enum(["aprovadas", "pagas", "entregues", "concluidas"]).optional(),
     }).optional())

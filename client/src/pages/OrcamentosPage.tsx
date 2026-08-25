@@ -6,22 +6,29 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Plus, FileText, Eye, Trash2, Loader2, Send, CheckCircle2, XCircle, Clock, Copy } from "lucide-react";
+import { Plus, FileText, Eye, Trash2, Loader2, Send, CheckCircle2, XCircle, Clock, Copy, type LucideIcon } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 
-const estadoColors: Record<string, string> = {
+const estadosOrcamento = ["rascunho", "enviado", "aprovado", "rejeitado"] as const;
+type EstadoOrcamento = (typeof estadosOrcamento)[number];
+
+function isEstadoOrcamento(valor: string): valor is EstadoOrcamento {
+  return estadosOrcamento.some((estado) => estado === valor);
+}
+
+const estadoColors: Record<EstadoOrcamento, string> = {
   rascunho: "bg-stone-100 text-stone-600 border-stone-200",
   enviado: "bg-blue-50 text-blue-700 border-blue-200",
   aprovado: "bg-emerald-50 text-emerald-700 border-emerald-200",
   rejeitado: "bg-red-50 text-red-700 border-red-200",
 };
 
-const estadoIcons: Record<string, any> = { rascunho: Clock, enviado: Send, aprovado: CheckCircle2, rejeitado: XCircle };
+const estadoIcons: Record<EstadoOrcamento, LucideIcon> = { rascunho: Clock, enviado: Send, aprovado: CheckCircle2, rejeitado: XCircle };
 
 export default function OrcamentosPage() {
-  const [filterEstado, setFilterEstado] = useState("todos");
+  const [filterEstado, setFilterEstado] = useState<"todos" | EstadoOrcamento>("todos");
   const orcamentos = trpc.orcamento.list.useQuery(filterEstado !== "todos" ? { estado: filterEstado } : undefined);
   const updateEstado = trpc.orcamento.updateEstado.useMutation();
   const remove = trpc.orcamento.delete.useMutation();
@@ -35,8 +42,8 @@ export default function OrcamentosPage() {
     return map;
   }, [clientes.data]);
 
-  const handleEstado = (id: number, estado: string) => {
-    updateEstado.mutate({ id, estado: estado as any }, {
+  const handleEstado = (id: number, estado: EstadoOrcamento) => {
+    updateEstado.mutate({ id, estado }, {
       onSuccess: () => { toast.success(`Estado atualizado para "${estado}"`); utils.orcamento.list.invalidate(); },
       onError: (err) => toast.error(err.message),
     });
@@ -68,7 +75,9 @@ export default function OrcamentosPage() {
       </div>
 
       <div className="flex items-center gap-3">
-        <Select value={filterEstado} onValueChange={setFilterEstado}>
+        <Select value={filterEstado} onValueChange={(valor) => {
+          if (valor === "todos" || isEstadoOrcamento(valor)) setFilterEstado(valor);
+        }}>
           <SelectTrigger className="w-48 bg-white"><SelectValue placeholder="Todos os estados" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>

@@ -222,28 +222,28 @@ export const financeiroRouter = router({
       nomeArquivo: z.string().trim().min(1).max(300),
       formato: FormatoExtratoBancarioSchema,
       conteudo: z.string().min(1, "Selecione um extrato").max(1_000_000, "O arquivo excede o limite de 1 MB"),
-    })).mutation(({ ctx, input }) => db.importarExtratoBancario(input, ctx.user.id)),
+    })).mutation(({ ctx, input }) => db.importarExtratoBancario(input, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     list: protectedProcedure.input(z.object({
       contaFinanceiraId: z.number().int().positive().optional(),
       estado: EstadoMovimentoBancarioSchema.optional(),
-    }).optional()).query(({ input }) => db.listConciliacaoBancaria(input)),
+    }).optional()).query(({ ctx, input }) => db.listConciliacaoBancaria(input, ctx.empresaAtiva!.empresa.id)),
     confirmar: protectedProcedure.input(z.object({
       movimentoId: z.number().int().positive(),
       baixaFinanceiraId: z.number().int().positive(),
-    })).mutation(({ ctx, input }) => db.confirmarConciliacaoBancaria(input, ctx.user.id)),
+    })).mutation(({ ctx, input }) => db.confirmarConciliacaoBancaria(input, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     desfazer: protectedProcedure.input(z.object({ movimentoId: z.number().int().positive() }))
-      .mutation(({ input }) => db.desfazerConciliacaoBancaria(input.movimentoId)),
+      .mutation(({ ctx, input }) => db.desfazerConciliacaoBancaria(input.movimentoId, ctx.empresaAtiva!.empresa.id)),
     criarLancamento: protectedProcedure.input(z.object({
       movimentoId: z.number().int().positive(),
       categoriaId: z.number().int().positive(),
       descricao: z.string().trim().min(2).max(300),
       observacoes: z.string().trim().max(4000).nullable().optional(),
-    })).mutation(({ ctx, input }) => db.criarLancamentoDaConciliacao(input, ctx.user.id)),
+    })).mutation(({ ctx, input }) => db.criarLancamentoDaConciliacao(input, ctx.user.id, ctx.empresaAtiva!.empresa.id)),
     definirEstado: protectedProcedure.input(z.object({
       movimentoId: z.number().int().positive(),
       estado: z.enum(["ignorado", "divergente"]),
       observacoes: z.string().trim().max(4000).nullable().optional(),
-    })).mutation(({ input }) => db.definirEstadoMovimentoBancario(input)),
+    })).mutation(({ ctx, input }) => db.definirEstadoMovimentoBancario(input, ctx.empresaAtiva!.empresa.id)),
   }),
 
   titulos: router({
