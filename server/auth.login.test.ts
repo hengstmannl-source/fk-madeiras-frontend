@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const dbMocks = vi.hoisted(() => ({
   getCredencialPorEmail: vi.fn(),
-  getEmpresaAtivaDoUsuario: vi.fn(),
   limparFalhasAutenticacao: vi.fn(),
   registrarFalhaAutenticacao: vi.fn(),
 }));
@@ -30,7 +29,7 @@ function createPublicContext() {
   const cookies: Array<{ name: string; value: string; options: Record<string, unknown> }> = [];
   const ctx: TrpcContext = {
     user: null,
-    empresaAtiva: null,
+    configuracaoEmpresa: { id: 1, nome: "FK Madeiras", ativa: true },
     req: { protocol: "http", headers: {} } as TrpcContext["req"],
     res: {
       cookie: (name: string, value: string, options: Record<string, unknown>) => {
@@ -46,14 +45,10 @@ describe("auth.entrar", () => {
     vi.clearAllMocks();
   });
 
-  it("cria apenas uma sessão HttpOnly com a empresa ativa resolvida no servidor", async () => {
+  it("cria uma sessão HttpOnly com o perfil operacional direto do utilizador", async () => {
     dbMocks.getCredencialPorEmail.mockResolvedValue({
       credencial: { id: 8, senhaHash: "hash", bloqueadoAte: null, tentativasFalhas: 0 },
-      usuario: { id: 34 },
-    });
-    dbMocks.getEmpresaAtivaDoUsuario.mockResolvedValue({
-      empresa: { id: 9, nome: "Empresa B" },
-      membro: { id: 4, empresaId: 9, usuarioId: 34, papel: "vendas" },
+      usuario: { id: 34, papel: "vendas" },
     });
     authMocks.validarSenha.mockResolvedValue(true);
     const { ctx, cookies } = createPublicContext();
@@ -63,9 +58,8 @@ describe("auth.entrar", () => {
       senha: "SenhaForte2026",
     });
 
-    expect(result).toEqual({ success: true, empresa: { id: 9, nome: "Empresa B" }, papel: "vendas" });
+    expect(result).toEqual({ success: true, empresa: { id: 1, nome: "FK Madeiras", ativa: true }, papel: "vendas" });
     expect(authMocks.normalizarEmail).toHaveBeenCalledWith("VENDAS@FKMADEIRAS.COM");
-    expect(dbMocks.getEmpresaAtivaDoUsuario).toHaveBeenCalledWith(34);
     expect(cookies).toEqual([
       expect.objectContaining({
         name: "fk_sessao_local",
@@ -94,6 +88,5 @@ describe("auth.entrar", () => {
 
     expect(cookies).toHaveLength(0);
     expect(authMocks.criarSessaoLocal).not.toHaveBeenCalled();
-    expect(dbMocks.getEmpresaAtivaDoUsuario).not.toHaveBeenCalled();
   });
 });

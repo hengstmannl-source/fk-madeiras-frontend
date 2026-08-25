@@ -7,8 +7,8 @@ export const users = mysqlTable("users", {
   email: varchar("email", { length: 320 }),
   loginMethod: varchar("loginMethod", { length: 64 }),
   role: mysqlEnum("role", ["user", "admin"]).default("user").notNull(),
-  /** Última empresa selecionada pelo usuário; o vínculo é sempre revalidado no contexto. */
-  empresaAtivaId: int("empresaAtivaId"),
+  /** Perfil operacional direto do sistema interno, sem vínculo de tenant por usuário. */
+  papel: mysqlEnum("papel", ["proprietario", "administrador", "financeiro", "rh", "vendas", "producao", "consulta"]),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),

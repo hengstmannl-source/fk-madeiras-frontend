@@ -43,11 +43,11 @@ describe("intercâmbio de fornecedores", () => {
       },
     };
     const invalido = `${cabecalho}\n;Contato;invalido;;;`;
-    await expect(importarFornecedoresCsv(invalido, 9, 1, { database, fornecedoresExistentes: [] })).resolves.toMatchObject({ importados: 0, erros: [expect.any(String)] });
+    await expect(importarFornecedoresCsv(invalido, 9, { database, fornecedoresExistentes: [] })).resolves.toMatchObject({ importados: 0, erros: [expect.any(String)] });
     expect(transacoes).toBe(0);
 
     const valido = `${cabecalho}\nFornecedor Novo;(11) 99999-0000;novo@fornecedor.com;22.222.222/0001-22;Rua A;Observação`;
-    await expect(importarFornecedoresCsv(valido, 9, 1, { database, fornecedoresExistentes: [] })).resolves.toEqual({ importados: 1, erros: [] });
+    await expect(importarFornecedoresCsv(valido, 9, { database, fornecedoresExistentes: [] })).resolves.toEqual({ importados: 1, erros: [] });
     expect(transacoes).toBe(1);
     expect(lotes).toEqual([expect.arrayContaining([expect.objectContaining({ nome: "Fornecedor Novo", criadoPor: 9, ativo: true })])]);
   });

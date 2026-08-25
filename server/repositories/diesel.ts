@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,9 +25,9 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
+import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
@@ -54,7 +54,8 @@ async function getOrCreateCategoriaPagamentoDiesel(tx: any, userId: number): Pro
   return getInsertedId(resultado as MysqlInsertResult);
 }
 
-export async function getResumoTanqueDiesel(empresaId: number) {
+export async function getResumoTanqueDiesel() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [notasComFornecedor, abastecimentos, titulos] = await Promise.all([
@@ -143,7 +144,8 @@ export async function criarNotaDiesel(data: {
   });
 }
 
-export async function excluirNotaDiesel(id: number, userId: number, empresaId: number) {
+export async function excluirNotaDiesel(id: number, userId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {

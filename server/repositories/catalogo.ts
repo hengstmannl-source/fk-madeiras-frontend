@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,9 +25,9 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
+import { getEmpresaUnica } from "./identidade";
 
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
@@ -41,15 +41,17 @@ type EstadoOrcamento = InferSelectModel<typeof orcamentos>["estado"];
 type AtualizacaoCabecalhoProducao = Partial<typeof romaneiosProducao.$inferInsert>;
 
 // ─── Madeiras ───
-export async function listMadeiras(empresaId: number) {
+export async function listMadeiras() {
   const db = await getDb();
   if (!db) return [];
+  const empresaId = (await getEmpresaUnica()).id;
   return db.select().from(madeiras).where(eq(madeiras.empresaId, empresaId)).orderBy(desc(madeiras.createdAt));
 }
 
-export async function getMadeiraById(id: number, empresaId: number) {
+export async function getMadeiraById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
+  const empresaId = (await getEmpresaUnica()).id;
   const result = await db.select().from(madeiras).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
@@ -61,33 +63,37 @@ export async function createMadeira(data: InsertMadeira) {
   return result;
 }
 
-export async function updateMadeira(id: number, data: Partial<InsertMadeira>, empresaId: number) {
+export async function updateMadeira(id: number, data: Partial<InsertMadeira>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.update(madeiras).set(data).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteMadeira(id: number, empresaId: number) {
+export async function deleteMadeira(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.update(madeiras).set({ ativo: false }).where(and(eq(madeiras.id, id), eq(madeiras.empresaId, empresaId)));
   return { success: true };
 }
 
 // ─── Bitolas ───
-export async function listBitolas(madeiraId: number | undefined, empresaId: number) {
+export async function listBitolas(madeiraId: number | undefined) {
   const db = await getDb();
   if (!db) return [];
+  const empresaId = (await getEmpresaUnica()).id;
   if (madeiraId) {
     return db.select().from(bitolas).where(and(eq(bitolas.madeiraId, madeiraId), eq(bitolas.empresaId, empresaId))).orderBy(desc(bitolas.createdAt));
   }
   return db.select().from(bitolas).where(eq(bitolas.empresaId, empresaId)).orderBy(desc(bitolas.createdAt));
 }
 
-export async function getBitolaById(id: number, empresaId: number) {
+export async function getBitolaById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
+  const empresaId = (await getEmpresaUnica()).id;
   const result = await db.select().from(bitolas).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
@@ -99,44 +105,50 @@ export async function createBitola(data: InsertBitola) {
   return result;
 }
 
-export async function updateBitola(id: number, data: Partial<InsertBitola>, empresaId: number) {
+export async function updateBitola(id: number, data: Partial<InsertBitola>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.update(bitolas).set(data).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteBitola(id: number, empresaId: number) {
+export async function deleteBitola(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.delete(bitolas).where(and(eq(bitolas.id, id), eq(bitolas.empresaId, empresaId)));
   return { success: true };
 }
 
 // ─── Clientes ───
-export async function listClientes(empresaId: number) {
+export async function listClientes() {
   const db = await getDb();
   if (!db) return [];
+  const empresaId = (await getEmpresaUnica()).id;
   return db.select().from(clientes).where(and(eq(clientes.ativo, true), eq(clientes.empresaId, empresaId))).orderBy(desc(clientes.createdAt));
 }
 
-export async function listAllClientes(empresaId: number) {
+export async function listAllClientes() {
   const db = await getDb();
   if (!db) return [];
+  const empresaId = (await getEmpresaUnica()).id;
   return db.select().from(clientes).where(eq(clientes.empresaId, empresaId)).orderBy(desc(clientes.createdAt));
 }
 
-export async function getClienteById(id: number, empresaId: number) {
+export async function getClienteById(id: number) {
   const db = await getDb();
   if (!db) return undefined;
+  const empresaId = (await getEmpresaUnica()).id;
   const result = await db.select().from(clientes).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId))).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-export async function getPerfilCliente(id: number, empresaId: number) {
+export async function getPerfilCliente(id: number) {
   const db = await getDb();
   if (!db) return undefined;
-  const cliente = await getClienteById(id, empresaId);
+  const empresaId = (await getEmpresaUnica()).id;
+  const cliente = await getClienteById(id);
   if (!cliente) return undefined;
 
   const [pedidos, titulos] = await Promise.all([
@@ -173,31 +185,35 @@ export async function createCliente(data: InsertCliente) {
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateCliente(id: number, data: Partial<InsertCliente>, empresaId: number) {
+export async function updateCliente(id: number, data: Partial<InsertCliente>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.update(clientes).set(data).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function deleteCliente(id: number, empresaId: number) {
+export async function deleteCliente(id: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.update(clientes).set({ ativo: false }).where(and(eq(clientes.id, id), eq(clientes.empresaId, empresaId)));
   return { success: true };
 }
 
 // ─── Configuração da Empresa ───
-export async function getEmpresaConfiguracao(empresaId: number) {
+export async function getEmpresaConfiguracao() {
   const db = await getDb();
   if (!db) return undefined;
+  const empresaId = (await getEmpresaUnica()).id;
   const result = await db.select().from(empresaConfiguracoes).where(eq(empresaConfiguracoes.empresaId, empresaId)).limit(1);
   return result[0];
 }
 
-export async function saveEmpresaLogo(empresaId: number, logo: { key: string; url: string; mimeType: string }) {
+export async function saveEmpresaLogo(logo: { key: string; url: string; mimeType: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.insert(empresaConfiguracoes).values({
     id: empresaId,
     empresaId,
@@ -211,14 +227,15 @@ export async function saveEmpresaLogo(empresaId: number, logo: { key: string; ur
       logoMimeType: logo.mimeType,
     },
   });
-  return getEmpresaConfiguracao(empresaId);
+  return getEmpresaConfiguracao();
 }
 
-export async function clearEmpresaLogo(empresaId: number) {
+export async function clearEmpresaLogo() {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   await db.insert(empresaConfiguracoes).values({ id: empresaId, empresaId }).onDuplicateKeyUpdate({
     set: { logoKey: null, logoUrl: null, logoMimeType: null },
   });
-  return getEmpresaConfiguracao(empresaId);
+  return getEmpresaConfiguracao();
 }

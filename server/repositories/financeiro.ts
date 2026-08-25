@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,10 +25,10 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
 import { getInsertedId } from "./catalogo";
+import { getEmpresaUnica } from "./identidade";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
 type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -69,7 +69,8 @@ export type CriarTituloFinanceiroInput = {
   observacoes?: string | null;
 };
 
-export async function listFornecedores(empresaId: number) {
+export async function listFornecedores() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select().from(fornecedores).where(and(eq(fornecedores.ativo, true), eq(fornecedores.empresaId, empresaId))).orderBy(desc(fornecedores.createdAt));
@@ -104,9 +105,9 @@ export async function prepararImportacaoFornecedoresCsv(
 export async function importarFornecedoresCsv(
   conteudo: string,
   userId: number,
-  empresaId: number,
   dependencias?: { database?: any; fornecedoresExistentes?: Array<{ id: number; nome: string; email?: string | null; documento?: string | null }> },
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const preparo = await prepararImportacaoFornecedoresCsv(conteudo, { database: db, empresaId, fornecedoresExistentes: dependencias?.fornecedoresExistentes });
@@ -127,18 +128,21 @@ export async function importarFornecedoresCsv(
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>, empresaId: number) {
+export async function updateFornecedor(id: number, data: Partial<InsertFornecedor>) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(fornecedores).set(data).where(and(eq(fornecedores.id, id), eq(fornecedores.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function archiveFornecedor(id: number, empresaId: number) {
-  return updateFornecedor(id, { ativo: false }, empresaId);
+export async function archiveFornecedor(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
+  return updateFornecedor(id, { ativo: false });
 }
 
-export async function listCategoriasFinanceiras(empresaId: number) {
+export async function listCategoriasFinanceiras() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select().from(categoriasFinanceiras).where(and(eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).orderBy(desc(categoriasFinanceiras.createdAt));
@@ -151,14 +155,16 @@ export async function createCategoriaFinanceira(data: InsertCategoriaFinanceira)
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>, empresaId: number) {
+export async function updateCategoriaFinanceira(id: number, data: Partial<InsertCategoriaFinanceira>) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(categoriasFinanceiras).set(data).where(and(eq(categoriasFinanceiras.id, id), eq(categoriasFinanceiras.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function listContasFinanceiras(empresaId: number) {
+export async function listContasFinanceiras() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).orderBy(desc(contasFinanceiras.createdAt));
@@ -171,7 +177,8 @@ export async function createContaFinanceira(data: InsertContaFinanceira) {
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>, empresaId: number) {
+export async function updateContaFinanceira(id: number, data: Partial<InsertContaFinanceira>) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.update(contasFinanceiras).set(data).where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId)));
@@ -179,7 +186,8 @@ export async function updateContaFinanceira(id: number, data: Partial<InsertCont
 }
 
 /** Exclui uma conta apenas quando não existir dependência financeira, bancária ou programada. */
-export async function excluirContaFinanceira(id: number, empresaId: number) {
+export async function excluirContaFinanceira(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const conta = (await db.select({ id: contasFinanceiras.id }).from(contasFinanceiras)
@@ -200,7 +208,8 @@ export async function excluirContaFinanceira(id: number, empresaId: number) {
   return { success: true };
 }
 
-export async function listCaixasCheque(empresaId: number) {
+export async function listCaixasCheque() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select().from(contasFinanceiras)
@@ -210,8 +219,8 @@ export async function listCaixasCheque(empresaId: number) {
 
 export async function listChequesFinanceiros(
   filters: { contaFinanceiraId?: number; estado?: "disponivel" | "utilizado" | "estornado" | "depositado" },
-  empresaId: number,
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const conditions = [eq(chequesFinanceiros.empresaId, empresaId)];
@@ -253,8 +262,9 @@ export async function listChequesFinanceiros(
 }
 
 /** Histórico auditável de cheques transferidos do Caixa Cheque para contas bancárias. */
-export async function listHistoricoDepositosPorConta(contaFinanceiraId: number | undefined, empresaId: number) {
-  const cheques = await listChequesFinanceiros({ estado: "depositado" }, empresaId);
+export async function listHistoricoDepositosPorConta(contaFinanceiraId: number | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const cheques = await listChequesFinanceiros({ estado: "depositado" });
   return cheques
     .filter((cheque) => !contaFinanceiraId || cheque.contaDestinoId === contaFinanceiraId)
     .sort((a, b) => new Date(b.depositadoEm ?? 0).getTime() - new Date(a.depositadoEm ?? 0).getTime() || b.id - a.id);
@@ -268,7 +278,8 @@ export async function depositarChequeFinanceiro(input: {
   id: number;
   contaDestinoId: number;
   dataDeposito: Date;
-}, empresaId: number) {
+}) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
@@ -301,10 +312,11 @@ export async function depositarChequeFinanceiro(input: {
   return { success: true, chequeId: cheque[0].id, contaDestinoId: contaDestino[0].id };
 }
 
-export async function getResumoCaixaCheque(empresaId: number) {
+export async function getResumoCaixaCheque() {
+  const empresaId = (await getEmpresaUnica()).id;
   const [contas, cheques] = await Promise.all([
-    listCaixasCheque(empresaId),
-    listChequesFinanceiros({}, empresaId),
+    listCaixasCheque(),
+    listChequesFinanceiros({}),
   ]);
   const totalDisponivel = cheques.filter((cheque) => cheque.estado === "disponivel")
     .reduce((total, cheque) => total + decimalParaNumero(cheque.valor), 0);
@@ -332,7 +344,8 @@ export async function getResumoCaixaCheque(empresaId: number) {
   };
 }
 
-export async function getOrCreateCategoriaReceitaVendas(userId: number, empresaId: number): Promise<number> {
+export async function getOrCreateCategoriaReceitaVendas(userId: number): Promise<number> {
+  const empresaId = (await getEmpresaUnica()).id;
 const db = await getDb();
 if (!db) throw new Error("Database not available");
 const existente = await db.select().from(categoriasFinanceiras)
@@ -348,7 +361,8 @@ criadoPor: userId,
   return getInsertedId(result as MysqlInsertResult);
 }
 
-export async function getOrCreateCategoriaCustoMateriaPrima(tx: any, userId: number, empresaId: number): Promise<number> {
+export async function getOrCreateCategoriaCustoMateriaPrima(tx: any, userId: number): Promise<number> {
+  const empresaId = (await getEmpresaUnica()).id;
 const existente = await tx.select().from(categoriasFinanceiras)
     .where(and(eq(categoriasFinanceiras.nome, "Custo de matéria-prima"), eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).limit(1);
   if (existente[0]) return existente[0].id;
@@ -362,7 +376,8 @@ criadoPor: userId,
   return getInsertedId(result as MysqlInsertResult);
 }
 
-export async function getOrCreateContaFinanceiraPadrao(userId: number, empresaId: number): Promise<number> {
+export async function getOrCreateContaFinanceiraPadrao(userId: number): Promise<number> {
+  const empresaId = (await getEmpresaUnica()).id;
 const db = await getDb();
 if (!db) throw new Error("Database not available");
 const existente = await db.select().from(contasFinanceiras)
@@ -414,17 +429,19 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
 
-export async function getTituloFinanceiroById(id: number, empresaId: number) {
+export async function getTituloFinanceiroById(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, id), eq(titulosFinanceiros.empresaId, empresaId))).limit(1);
   return result[0];
 }
 
-export async function listAnexosFinanceiros(tituloId: number, empresaId: number) {
+export async function listAnexosFinanceiros(tituloId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
-  const titulo = await getTituloFinanceiroById(tituloId, empresaId);
+  const titulo = await getTituloFinanceiroById(tituloId);
   if (!titulo) return [];
   return db.select().from(anexosFinanceiros)
     .where(eq(anexosFinanceiros.tituloId, tituloId))
@@ -440,26 +457,26 @@ export async function createAnexoFinanceiro(input: {
   storageKey: string;
   url: string;
   criadoPor: number;
-  empresaId: number;
 }) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  if (!input.empresaId) throw new Error("Empresa ativa não informada");
-  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId);
+  const titulo = await getTituloFinanceiroById(input.tituloId);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
-  const result = await db.insert(anexosFinanceiros).values({ ...input, empresaId: input.empresaId });
-  return { id: getInsertedId(result as MysqlInsertResult), ...input, empresaId: input.empresaId };
+  const result = await db.insert(anexosFinanceiros).values({ ...input, empresaId });
+  return { id: getInsertedId(result as MysqlInsertResult), ...input, empresaId };
 }
 
-export async function removerAnexoFinanceiro(input: { id: number; tituloId: number; empresaId: number }) {
+export async function removerAnexoFinanceiro(input: { id: number; tituloId: number }) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId);
+  const titulo = await getTituloFinanceiroById(input.tituloId);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const anexo = (await db.select().from(anexosFinanceiros)
-    .where(and(eq(anexosFinanceiros.id, input.id), eq(anexosFinanceiros.tituloId, input.tituloId), eq(anexosFinanceiros.empresaId, input.empresaId))).limit(1))[0];
+    .where(and(eq(anexosFinanceiros.id, input.id), eq(anexosFinanceiros.tituloId, input.tituloId), eq(anexosFinanceiros.empresaId, empresaId))).limit(1))[0];
   if (!anexo) throw new Error("Anexo financeiro não encontrado");
-  await db.delete(anexosFinanceiros).where(and(eq(anexosFinanceiros.id, anexo.id), eq(anexosFinanceiros.empresaId, input.empresaId)));
+  await db.delete(anexosFinanceiros).where(and(eq(anexosFinanceiros.id, anexo.id), eq(anexosFinanceiros.empresaId, empresaId)));
   return { success: true, id: anexo.id };
 }
 
@@ -467,27 +484,28 @@ export async function atualizarDadosBoleto(input: {
   tituloId: number;
   codigoBarrasBoleto: string | null;
   linhaDigitavelBoleto: string | null;
-  empresaId: number;
 }) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(input.tituloId, input.empresaId);
+  const titulo = await getTituloFinanceiroById(input.tituloId);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const boletoConfirmadoEm = input.codigoBarrasBoleto || input.linhaDigitavelBoleto ? new Date() : null;
   await db.update(titulosFinanceiros).set({
     codigoBarrasBoleto: input.codigoBarrasBoleto,
     linhaDigitavelBoleto: input.linhaDigitavelBoleto,
     boletoConfirmadoEm,
-  }).where(and(eq(titulosFinanceiros.id, input.tituloId), eq(titulosFinanceiros.empresaId, input.empresaId)));
+  }).where(and(eq(titulosFinanceiros.id, input.tituloId), eq(titulosFinanceiros.empresaId, empresaId)));
   return { ...input, boletoConfirmadoEm };
 }
 
-export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date; empresaId: number }) {
+export async function atualizarAgendamentoFinanceiro(input: { id: number; dataVencimento: Date }) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
 
   return db.transaction(async (tx: any) => {
-    const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, input.id), eq(titulosFinanceiros.empresaId, input.empresaId))).limit(1))[0];
+    const titulo = (await tx.select().from(titulosFinanceiros).where(and(eq(titulosFinanceiros.id, input.id), eq(titulosFinanceiros.empresaId, empresaId))).limit(1))[0];
     if (!titulo) throw new Error("Agendamento financeiro não encontrado");
     if (["quitado", "cancelado"].includes(titulo.estado)) {
       throw new Error("Não é possível alterar o vencimento de um título quitado ou cancelado");
@@ -586,12 +604,13 @@ export function getModeloImportacaoLancamentosCsv() {
   return criarModeloCsvLancamentos();
 }
 
-export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTituloFinanceiro } | undefined, empresaId: number) {
+export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTituloFinanceiro } | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const [titulos, categorias] = await Promise.all([
     listTitulosFinanceiros(filters, { empresaId }),
-    listCategoriasFinanceiras(empresaId),
+    listCategoriasFinanceiras(),
   ]);
   const categoriasPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome]));
   return exportarLancamentosCsv(titulos
@@ -614,13 +633,13 @@ export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTi
 export async function importarLancamentosFinanceirosCsv(
   conteudo: string,
   userId: number,
-  empresaId: number,
   dependencias?: { database?: DatabaseConnection; categorias?: CategoriaFinanceira[]; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const [categorias, titulosExistentes] = await Promise.all([
-    dependencias?.categorias ?? listCategoriasFinanceiras(empresaId),
+    dependencias?.categorias ?? listCategoriasFinanceiras(),
     dependencias?.titulosExistentes ?? db.select({ id: titulosFinanceiros.id, chaveImportacao: titulosFinanceiros.chaveImportacao }).from(titulosFinanceiros).where(eq(titulosFinanceiros.empresaId, empresaId)),
   ]);
   const preparo = prepararImportacaoLancamentos({ conteudo, categorias, titulosExistentes });
@@ -661,7 +680,8 @@ export type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "con
   chequeIdsUtilizados?: number[];
 };
 
-export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empresaId: number) {
+export async function registrarBaixaFinanceira(data: BaixaComChequesInput) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx) => {
@@ -779,10 +799,11 @@ export async function registrarBaixaFinanceira(data: BaixaComChequesInput, empre
   });
 }
 
-export async function listBaixasFinanceiras(tituloId: number, empresaId: number) {
+export async function listBaixasFinanceiras(tituloId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
-  const titulo = await getTituloFinanceiroById(tituloId, empresaId);
+  const titulo = await getTituloFinanceiroById(tituloId);
   if (!titulo) return [];
   return db.select({
     id: baixasFinanceiras.id,
@@ -808,11 +829,12 @@ export async function listBaixasFinanceiras(tituloId: number, empresaId: number)
     .orderBy(desc(baixasFinanceiras.dataBaixa));
 }
 
-export async function conciliarBaixaFinanceira(id: number, conciliada: boolean, empresaId: number) {
+export async function conciliarBaixaFinanceira(id: number, conciliada: boolean) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const baixa = (await db.select({ tituloId: baixasFinanceiras.tituloId }).from(baixasFinanceiras).where(eq(baixasFinanceiras.id, id)).limit(1))[0];
-  if (!baixa || !(await getTituloFinanceiroById(baixa.tituloId, empresaId))) throw new Error("Baixa financeira não encontrada");
+  if (!baixa || !(await getTituloFinanceiroById(baixa.tituloId))) throw new Error("Baixa financeira não encontrada");
   await db.update(baixasFinanceiras).set({ conciliada, conciliadaEm: conciliada ? new Date() : null }).where(eq(baixasFinanceiras.id, id));
   return { success: true };
 }
@@ -837,7 +859,8 @@ export async function prepararImportacaoExtratoBancario(conteudo: string, format
   return prepararImportacaoExtrato(conteudo, formato);
 }
 
-export async function importarExtratoBancario(input: { contaFinanceiraId: number; nomeArquivo: string; formato: "csv" | "ofx"; conteudo: string }, userId: number, empresaId: number) {
+export async function importarExtratoBancario(input: { contaFinanceiraId: number; nomeArquivo: string; formato: "csv" | "ofx"; conteudo: string }, userId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const conta = await db.select().from(contasFinanceiras).where(and(eq(contasFinanceiras.id, input.contaFinanceiraId), eq(contasFinanceiras.ativa, true), eq(contasFinanceiras.empresaId, empresaId))).limit(1);
@@ -877,7 +900,8 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
   return { importados: preparo.linhas.length, erros: [] as string[] };
 }
 
-export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: number; estado?: "pendente" | "conciliado" | "ignorado" | "divergente" } | undefined, empresaId: number) {
+export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: number; estado?: "pendente" | "conciliado" | "ignorado" | "divergente" } | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const condicoes: SQL[] = [eq(movimentosExtratoBancario.empresaId, empresaId)];
@@ -929,7 +953,8 @@ export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: num
   }));
 }
 
-export async function confirmarConciliacaoBancaria(input: { movimentoId: number; baixaFinanceiraId: number }, userId: number, empresaId: number) {
+export async function confirmarConciliacaoBancaria(input: { movimentoId: number; baixaFinanceiraId: number }, userId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
@@ -948,7 +973,8 @@ export async function confirmarConciliacaoBancaria(input: { movimentoId: number;
   return { success: true };
 }
 
-export async function desfazerConciliacaoBancaria(movimentoId: number, empresaId: number) {
+export async function desfazerConciliacaoBancaria(movimentoId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
@@ -960,7 +986,8 @@ export async function desfazerConciliacaoBancaria(movimentoId: number, empresaId
   return { success: true };
 }
 
-export async function criarLancamentoDaConciliacao(input: { movimentoId: number; categoriaId: number; descricao: string; observacoes?: string | null }, userId: number, empresaId: number) {
+export async function criarLancamentoDaConciliacao(input: { movimentoId: number; categoriaId: number; descricao: string; observacoes?: string | null }, userId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
@@ -1006,7 +1033,8 @@ export async function criarLancamentoDaConciliacao(input: { movimentoId: number;
   return { success: true };
 }
 
-export async function definirEstadoMovimentoBancario(input: { movimentoId: number; estado: "ignorado" | "divergente"; observacoes?: string | null }, empresaId: number) {
+export async function definirEstadoMovimentoBancario(input: { movimentoId: number; estado: "ignorado" | "divergente"; observacoes?: string | null }) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
@@ -1016,9 +1044,10 @@ export async function definirEstadoMovimentoBancario(input: { movimentoId: numbe
   return { success: true };
 }
 
-export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFim: Date }, empresaId: number) {
+export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFim: Date }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   const fim = new Date(periodo.dataFim);
   fim.setHours(23, 59, 59, 999);
   const [contas, movimentos] = await Promise.all([
@@ -1050,9 +1079,10 @@ export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFi
   return calcularRelatorioFluxoCaixa({ ...periodo, saldoInicialContas, movimentos });
 }
 
-export async function getPrevisaoSemanalCaixa(semanas = 8, empresaId: number) {
+export async function getPrevisaoSemanalCaixa(semanas = 8) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   const fimHoje = new Date(hoje);
@@ -1103,8 +1133,8 @@ export async function estornarBaixaFinanceira(
   userId: number,
   motivo: string,
   dependencias: { database?: any; buscarBaixa?: (id: number) => Promise<any>; buscarTitulo?: (id: number) => Promise<any>; agora?: Date } | undefined,
-  empresaId: number,
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   const baixa = dependencias?.buscarBaixa
@@ -1116,7 +1146,7 @@ export async function estornarBaixaFinanceira(
 
   const titulo = dependencias?.buscarTitulo
     ? await dependencias.buscarTitulo(baixa.tituloId)
-    : await getTituloFinanceiroById(baixa.tituloId, empresaId);
+    : await getTituloFinanceiroById(baixa.tituloId);
   if (!titulo) throw new Error("Título financeiro não encontrado para a baixa selecionada");
   if (titulo.estado === "cancelado") throw new Error("Não é possível estornar uma baixa de título cancelado");
 
@@ -1177,7 +1207,8 @@ export async function devolverChequeFinanceiro(input: {
   motivo: string;
   dataDevolucao: Date;
   userId: number;
-}, empresaId: number) {
+}) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const cheque = (await db.select().from(chequesFinanceiros)
@@ -1187,7 +1218,7 @@ export async function devolverChequeFinanceiro(input: {
     .where(and(eq(baixasFinanceiras.id, cheque.baixaEntradaId), eq(baixasFinanceiras.empresaId, empresaId))).limit(1))[0];
   if (!baixa) throw new Error("Recebimento de origem do cheque não encontrado");
   validarDevolucaoCheque({ estado: cheque.estado, baixaConciliada: Boolean(baixa.conciliada), motivo: input.motivo });
-  const titulo = await getTituloFinanceiroById(baixa.tituloId, empresaId);
+  const titulo = await getTituloFinanceiroById(baixa.tituloId);
   if (!titulo) throw new Error("Título financeiro de origem do cheque não encontrado");
 
   const valorCheque = decimalParaNumero(cheque.valor);
@@ -1247,11 +1278,11 @@ export async function atualizarTituloFinanceiro(
     juros?: string;
     observacoes?: string | null;
   },
-  empresaId: number,
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(id, empresaId);
+  const titulo = await getTituloFinanceiroById(id);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const baixasConciliadas = await db.select({ id: baixasFinanceiras.id }).from(baixasFinanceiras)
     .where(and(eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.tituloId, id), eq(baixasFinanceiras.conciliada, true), eq(baixasFinanceiras.estornada, false))).limit(1);
@@ -1306,11 +1337,11 @@ export async function atualizarTitulosFinanceirosEmLote(
     contraparteNome?: string | null;
     observacoes?: string | null;
   },
-  empresaId: number,
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const unicos = Array.from(new Set(ids));
   if (!unicos.length) throw new Error("Selecione pelo menos um lançamento");
-  const titulos = await Promise.all(unicos.map((id) => getTituloFinanceiroById(id, empresaId)));
+  const titulos = await Promise.all(unicos.map((id) => getTituloFinanceiroById(id)));
   if (titulos.some((titulo) => !titulo)) throw new Error("Um dos lançamentos selecionados não foi encontrado");
 
   // A atualização individual é reutilizada intencionalmente: ela impede edição de
@@ -1328,20 +1359,21 @@ export async function atualizarTitulosFinanceirosEmLote(
     desconto: titulo.desconto ?? "0",
     juros: titulo.juros ?? "0",
     observacoes: dados.observacoes === undefined ? titulo.observacoes : dados.observacoes,
-  }, empresaId)));
+  })));
   return { success: true, atualizados: unicos.length };
 }
 
-export async function excluirTituloFinanceiro(id: number, userId: number, empresaId: number) {
+export async function excluirTituloFinanceiro(id: number, userId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = await getTituloFinanceiroById(id, empresaId);
+  const titulo = await getTituloFinanceiroById(id);
   if (!titulo) throw new Error("Lançamento financeiro não encontrado");
   const baixas = await db.select().from(baixasFinanceiras)
     .where(and(eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.tituloId, id), eq(baixasFinanceiras.estornada, false)));
   validarExclusaoTituloFinanceiro({ estado: titulo.estado, possuiBaixaConciliada: baixas.some((baixa) => baixa.conciliada) });
   for (const baixa of baixas) {
-    await estornarBaixaFinanceira(baixa.id, userId, "Baixa revertida pela exclusão do lançamento financeiro", undefined, empresaId);
+    await estornarBaixaFinanceira(baixa.id, userId, "Baixa revertida pela exclusão do lançamento financeiro", undefined);
   }
   await db.update(titulosFinanceiros).set({
     estado: "cancelado",
@@ -1351,17 +1383,19 @@ export async function excluirTituloFinanceiro(id: number, userId: number, empres
   return { success: true, baixasEstornadas: baixas.length };
 }
 
-export async function cancelarTituloFinanceiro(id: number, userId: number, dependencias: { database?: any; buscarTitulo?: (id: number) => Promise<any> } | undefined, empresaId: number) {
+export async function cancelarTituloFinanceiro(id: number, userId: number, dependencias: { database?: any; buscarTitulo?: (id: number) => Promise<any> } | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const titulo = dependencias?.buscarTitulo ? await dependencias.buscarTitulo(id) : await getTituloFinanceiroById(id, empresaId);
+  const titulo = dependencias?.buscarTitulo ? await dependencias.buscarTitulo(id) : await getTituloFinanceiroById(id);
   if (!titulo) throw new Error("Título financeiro não encontrado");
   if (!podeCancelarTituloFinanceiro(titulo.valorBaixado)) throw new Error("Títulos com baixas devem ser regularizados por estorno antes do cancelamento");
   await db.update(titulosFinanceiros).set({ estado: "cancelado", canceladoEm: new Date(), canceladoPor: userId }).where(and(eq(titulosFinanceiros.id, id), eq(titulosFinanceiros.empresaId, empresaId)));
   return { success: true };
 }
 
-export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento: Date | undefined, empresaId: number) {
+export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId: number, dataVencimento: Date | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const orcamento = (await db.select().from(orcamentos).where(and(eq(orcamentos.id, orcamentoId), eq(orcamentos.empresaId, empresaId))).limit(1))[0];
@@ -1374,7 +1408,7 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
       ne(titulosFinanceiros.estado, "cancelado"),
     )).limit(1);
   if (existente[0]) return existente[0];
-  const categoriaId = await getOrCreateCategoriaReceitaVendas(userId, orcamento.empresaId);
+  const categoriaId = await getOrCreateCategoriaReceitaVendas(userId);
   const criacao = await createTituloFinanceiro({
     tipo: "receber",
     origem: "orcamento",
@@ -1389,7 +1423,7 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
     criadoPor: userId,
     empresaId: orcamento.empresaId,
   });
-  return getTituloFinanceiroById(criacao.id, empresaId);
+  return getTituloFinanceiroById(criacao.id);
 }
 
 export type ParcelaCondicaoPagamentoVenda = {
@@ -1400,9 +1434,9 @@ export async function configurarCondicaoPagamentoVenda(
   orcamentoId: number,
   parcelasInformadas: ParcelaCondicaoPagamentoVenda[],
   userId: number,
-  empresaId: number,
   dependencias?: { database?: any; obterCategoriaReceita?: (usuarioId: number, empresa: number) => Promise<number> },
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
   if (!parcelasInformadas.length) throw new Error("Informe ao menos uma parcela para a condição de pagamento");
@@ -1545,7 +1579,8 @@ export async function getConfiguracaoFinanceiraByTaskUid(taskUid: string) {
   return result[0];
 }
 
-export async function configurarProcessamentoFinanceiro(taskUid: string, empresaId: number) {
+export async function configurarProcessamentoFinanceiro(taskUid: string) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const existente = await db.select().from(configuracoesFinanceiras).where(eq(configuracoesFinanceiras.empresaId, empresaId)).limit(1);
@@ -1557,7 +1592,8 @@ export async function configurarProcessamentoFinanceiro(taskUid: string, empresa
   return { success: true };
 }
 
-export async function listAlertasFinanceiros(empresaId: number) {
+export async function listAlertasFinanceiros() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const agora = new Date();

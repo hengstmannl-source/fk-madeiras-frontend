@@ -1,8 +1,8 @@
-import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectModel, type SQL } from "drizzle-orm";
+import { eq, and, asc, desc, gte, lte, ne, inArray, isNotNull, or, sql, type InferSelectModel, type SQL } from "drizzle-orm";
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,7 +25,6 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
 import { getInsertedId } from "./catalogo";
@@ -80,6 +79,15 @@ export async function getUserById(id: number) {
   return result[0];
 }
 
+/** Retorna a única empresa operacional, mantida como cadastro global do ERP. */
+export async function getEmpresaUnica() {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const empresasAtivas = await db.select().from(empresas).where(eq(empresas.ativa, true)).limit(2);
+  if (empresasAtivas.length !== 1) throw new Error("CONFIGURACAO_EMPRESA_UNICA_INVALIDA");
+  return empresasAtivas[0];
+}
+
 export async function getCredencialPorEmail(emailNormalizado: string) {
   const db = await getDb();
   if (!db) return undefined;
@@ -90,40 +98,6 @@ export async function getCredencialPorEmail(emailNormalizado: string) {
     .where(eq(credenciaisUsuarios.emailNormalizado, emailNormalizado))
     .limit(1);
   return result[0];
-}
-
-export async function getEmpresaAtivaDoUsuario(usuarioId: number) {
-  const db = await getDb();
-  if (!db) return undefined;
-  const [usuario, empresasDisponiveis] = await Promise.all([
-    getUserById(usuarioId),
-    listarEmpresasDoUsuario(usuarioId),
-  ]);
-  const empresaAtiva = resolverEmpresaAtiva(empresasDisponiveis, usuario?.empresaAtivaId);
-  if (empresaAtiva && usuario?.empresaAtivaId !== empresaAtiva.empresa.id) {
-    await db.update(users).set({ empresaAtivaId: empresaAtiva.empresa.id }).where(eq(users.id, usuarioId));
-  }
-  return empresaAtiva;
-}
-
-export async function listarEmpresasDoUsuario(usuarioId: number) {
-  const db = await getDb();
-  if (!db) return [];
-  return db
-    .select({ membro: empresaMembros, empresa: empresas })
-    .from(empresaMembros)
-    .innerJoin(empresas, eq(empresas.id, empresaMembros.empresaId))
-    .where(and(eq(empresaMembros.usuarioId, usuarioId), eq(empresaMembros.ativo, true), eq(empresas.ativa, true)))
-    .orderBy(asc(empresas.nome));
-}
-
-export async function selecionarEmpresaAtivaDoUsuario(usuarioId: number, empresaId: number) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  const empresasDisponiveis = await listarEmpresasDoUsuario(usuarioId);
-  if (!podeSelecionarEmpresa(empresasDisponiveis, empresaId)) return undefined;
-  await db.update(users).set({ empresaAtivaId: empresaId }).where(eq(users.id, usuarioId));
-  return empresasDisponiveis.find(({ empresa }) => empresa.id === empresaId);
 }
 
 export async function registrarFalhaAutenticacao(credencialId: number, bloqueadoAte: Date | null) {
@@ -141,19 +115,14 @@ export async function limparFalhasAutenticacao(credencialId: number) {
   await db.update(credenciaisUsuarios).set({ tentativasFalhas: 0, bloqueadoAte: null }).where(eq(credenciaisUsuarios.id, credencialId));
 }
 
-export async function listarMembrosEmpresa(empresaId: number) {
+/** Lista os usuários internos com perfil operacional atribuído diretamente. */
+export async function listarUsuariosDoSistema() {
   const db = await getDb();
   if (!db) return [];
-  return db
-    .select({ membro: empresaMembros, usuario: users })
-    .from(empresaMembros)
-    .innerJoin(users, eq(users.id, empresaMembros.usuarioId))
-    .where(eq(empresaMembros.empresaId, empresaId))
-    .orderBy(asc(users.name));
+  return db.select().from(users).where(isNotNull(users.papel)).orderBy(asc(users.name));
 }
 
 export async function criarConviteEmpresa(data: {
-  empresaId: number;
   emailNormalizado: string;
   papel: "administrador" | "financeiro" | "rh" | "vendas" | "producao" | "consulta";
   tokenHash: string;
@@ -162,7 +131,8 @@ export async function criarConviteEmpresa(data: {
 }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const result = await db.insert(convitesEmpresa).values(data);
+  const empresa = await getEmpresaUnica();
+  const result = await db.insert(convitesEmpresa).values({ ...data, empresaId: empresa.id });
   return getInsertedId(result as MysqlInsertResult);
 }
 
@@ -212,7 +182,7 @@ export async function aceitarConviteCriandoUsuario(data: {
       email: convite.emailNormalizado,
       loginMethod: "senha",
       role: "user",
-      empresaAtivaId: convite.empresaId,
+      papel: convite.papel,
       lastSignedIn: new Date(),
     });
     const usuarioId = Number((resultadoUsuario as MysqlInsertResult)[0]?.insertId ?? 0);
@@ -223,65 +193,7 @@ export async function aceitarConviteCriandoUsuario(data: {
       emailNormalizado: convite.emailNormalizado,
       senhaHash: data.senhaHash,
     });
-    await tx.insert(empresaMembros).values({
-      empresaId: convite.empresaId,
-      usuarioId,
-      papel: convite.papel,
-      ativo: true,
-      convidadoPor: convite.convidadoPor,
-    });
     await tx.update(convitesEmpresa).set({ aceitoEm: new Date(), aceitoPor: usuarioId }).where(eq(convitesEmpresa.id, convite.id));
-    return { usuarioId, empresaId: convite.empresaId };
-  });
-}
-
-export async function criarEmpresaComProprietario(data: {
-  nomeEmpresa: string;
-  nomeFantasia?: string;
-  documento?: string;
-  emailEmpresa?: string;
-  telefone?: string;
-  nomeProprietario: string;
-  emailNormalizado: string;
-  senhaHash: string;
-  openId: string;
-}) {
-  const db = await getDb();
-  if (!db) throw new Error("Database not available");
-  return db.transaction(async tx => {
-    const emailExistente = await tx
-      .select({ id: credenciaisUsuarios.id })
-      .from(credenciaisUsuarios)
-      .where(eq(credenciaisUsuarios.emailNormalizado, data.emailNormalizado))
-      .limit(1);
-    if (emailExistente[0]) throw new Error("EMAIL_JA_CADASTRADO");
-
-    const resultadoEmpresa = await tx.insert(empresas).values({
-      nome: data.nomeEmpresa,
-      nomeFantasia: data.nomeFantasia ?? null,
-      documento: data.documento ?? null,
-      email: data.emailEmpresa ?? data.emailNormalizado,
-      telefone: data.telefone ?? null,
-    });
-    const empresaId = Number((resultadoEmpresa as MysqlInsertResult)[0]?.insertId ?? 0);
-    if (!empresaId) throw new Error("FALHA_AO_CRIAR_EMPRESA");
-
-    const resultadoUsuario = await tx.insert(users).values({
-      openId: data.openId,
-      name: data.nomeProprietario,
-      email: data.emailNormalizado,
-      loginMethod: "senha",
-      role: "user",
-      empresaAtivaId: empresaId,
-      lastSignedIn: new Date(),
-    });
-    const usuarioId = Number((resultadoUsuario as MysqlInsertResult)[0]?.insertId ?? 0);
-    if (!usuarioId) throw new Error("FALHA_AO_CRIAR_USUARIO");
-
-    await tx.insert(credenciaisUsuarios).values({ usuarioId, emailNormalizado: data.emailNormalizado, senhaHash: data.senhaHash });
-    await tx.insert(empresaMembros).values({ empresaId, usuarioId, papel: "proprietario", ativo: true });
-    await tx.insert(empresaConfiguracoes).values({ id: empresaId, empresaId });
-    await tx.insert(configuracoesFinanceiras).values({ id: empresaId, empresaId });
-    return { usuarioId, empresaId };
+    return { usuarioId };
   });
 }

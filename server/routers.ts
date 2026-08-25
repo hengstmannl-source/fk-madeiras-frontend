@@ -24,19 +24,9 @@ export const appRouter = router({
     me: publicProcedure.query(opts => opts.ctx.user),
     contexto: protectedProcedure.query(async ({ ctx }) => ({
       usuario: ctx.user,
-      empresa: ctx.empresaAtiva.empresa,
-      membro: ctx.empresaAtiva.membro,
-      empresasDisponiveis: await db.listarEmpresasDoUsuario(ctx.user.id),
+      empresa: ctx.configuracaoEmpresa,
+      papel: ctx.user.papel,
     })),
-    selecionarEmpresa: protectedProcedure
-      .input(z.object({ empresaId: z.number().int().positive() }))
-      .mutation(async ({ ctx, input }) => {
-        const empresaAtiva = await db.selecionarEmpresaAtivaDoUsuario(ctx.user.id, input.empresaId);
-        if (!empresaAtiva) {
-          throw new TRPCError({ code: "FORBIDDEN", message: "Você não possui vínculo ativo com a empresa selecionada." });
-        }
-        return { empresa: empresaAtiva.empresa, membro: empresaAtiva.membro };
-      }),
     entrar: publicProcedure
       .input(z.object({ email: z.string().email(), senha: z.string().min(1).max(200) }))
       .mutation(async ({ ctx, input }) => {
@@ -49,44 +39,11 @@ export const appRouter = router({
           await db.registrarFalhaAutenticacao(acesso.credencial.id, proximaTentativa >= 5 ? new Date(Date.now() + 15 * 60 * 1000) : null);
           throw erroPadrao;
         }
-        const empresaAtiva = await db.getEmpresaAtivaDoUsuario(acesso.usuario.id);
-        if (!empresaAtiva) throw new TRPCError({ code: "FORBIDDEN", message: "O utilizador não possui acesso a uma empresa ativa." });
+        if (!acesso.usuario.papel) throw new TRPCError({ code: "FORBIDDEN", message: "O utilizador não possui um perfil operacional ativo." });
         await db.limparFalhasAutenticacao(acesso.credencial.id);
         const token = criarSessaoLocal(acesso.usuario.id);
         ctx.res.cookie(COOKIE_SESSAO_LOCAL, token, { ...getSessionCookieOptions(ctx.req), maxAge: DURACAO_SESSAO_LOCAL_MS });
-        return { success: true, empresa: empresaAtiva.empresa, papel: empresaAtiva.membro.papel };
-      }),
-    cadastrarEmpresa: publicProcedure
-      .input(z.object({
-        nomeEmpresa: z.string().trim().min(2).max(300),
-        nomeFantasia: z.string().trim().max(300).optional(),
-        documento: z.string().trim().max(30).optional(),
-        telefone: z.string().trim().max(100).optional(),
-        nomeProprietario: z.string().trim().min(2).max(300),
-        email: z.string().email(),
-        senha: z.string().min(8, "A senha deve ter pelo menos 8 caracteres.").max(200).regex(/[A-Z]/, "A senha deve ter letra maiúscula.").regex(/[0-9]/, "A senha deve ter número."),
-      }))
-      .mutation(async ({ ctx, input }) => {
-        const emailNormalizado = normalizarEmail(input.email);
-        try {
-          const criado = await db.criarEmpresaComProprietario({
-            nomeEmpresa: input.nomeEmpresa,
-            nomeFantasia: input.nomeFantasia,
-            documento: input.documento,
-            telefone: input.telefone,
-            nomeProprietario: input.nomeProprietario,
-            emailNormalizado,
-            senhaHash: await gerarHashSenha(input.senha),
-            openId: `local:${randomBytes(24).toString("hex")}`,
-          });
-          ctx.res.cookie(COOKIE_SESSAO_LOCAL, criarSessaoLocal(criado.usuarioId), { ...getSessionCookieOptions(ctx.req), maxAge: DURACAO_SESSAO_LOCAL_MS });
-          return { success: true, empresaId: criado.empresaId };
-        } catch (error) {
-          if (error instanceof Error && error.message === "EMAIL_JA_CADASTRADO") {
-            throw new TRPCError({ code: "CONFLICT", message: "Já existe uma conta com este e-mail." });
-          }
-          throw error;
-        }
+        return { success: true, empresa: ctx.configuracaoEmpresa, papel: acesso.usuario.papel };
       }),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
@@ -96,18 +53,17 @@ export const appRouter = router({
     }),
   }),
   equipe: router({
-    listar: adminProcedure.query(({ ctx }) => db.listarMembrosEmpresa(ctx.empresaAtiva!.empresa.id)),
+    listar: adminProcedure.query(() => db.listarUsuariosDoSistema()),
     criarConvite: adminProcedure
       .input(z.object({ email: z.string().email(), papel: z.enum(["administrador", "financeiro", "rh", "vendas", "producao", "consulta"]) }))
       .mutation(async ({ ctx, input }) => {
-        const papelAtual = ctx.empresaAtiva!.membro.papel;
+        const papelAtual = ctx.user.papel;
         if (papelAtual !== "proprietario" && papelAtual !== "administrador") {
           throw new TRPCError({ code: "FORBIDDEN", message: "Apenas proprietários e administradores podem convidar colaboradores." });
         }
         const token = randomBytes(32).toString("base64url");
         const tokenHash = createHash("sha256").update(token).digest("hex");
         await db.criarConviteEmpresa({
-          empresaId: ctx.empresaAtiva!.empresa.id,
           emailNormalizado: normalizarEmail(input.email),
           papel: input.papel,
           tokenHash,
@@ -123,7 +79,7 @@ export const appRouter = router({
       .query(async ({ input }) => {
         const convite = await db.getConviteValidoPorHash(createHash("sha256").update(input.token).digest("hex"));
         if (!convite) throw new TRPCError({ code: "NOT_FOUND", message: "Este convite é inválido ou expirou." });
-        return { empresa: { nome: convite.empresa.nome, nomeFantasia: convite.empresa.nomeFantasia }, email: convite.convite.emailNormalizado, papel: convite.convite.papel };
+        return { email: convite.convite.emailNormalizado, papel: convite.convite.papel };
       }),
     aceitarConvite: publicProcedure
       .input(z.object({ token: z.string().min(20).max(200), nome: z.string().trim().min(2).max(300), senha: z.string().min(8).max(200).regex(/[A-Z]/).regex(/[0-9]/) }))
@@ -136,7 +92,7 @@ export const appRouter = router({
             openId: `local:${randomBytes(24).toString("hex")}`,
           });
           ctx.res.cookie(COOKIE_SESSAO_LOCAL, criarSessaoLocal(criado.usuarioId), { ...getSessionCookieOptions(ctx.req), maxAge: DURACAO_SESSAO_LOCAL_MS });
-          return { success: true, empresaId: criado.empresaId };
+          return { success: true };
         } catch (error) {
           const message = error instanceof Error ? error.message : "";
           if (message === "CONVITE_INVALIDO") throw new TRPCError({ code: "BAD_REQUEST", message: "Este convite é inválido ou expirou." });

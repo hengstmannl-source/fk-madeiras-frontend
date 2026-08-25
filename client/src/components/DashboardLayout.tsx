@@ -154,9 +154,7 @@ type DashboardLayoutContentProps = {
 
 function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutContentProps) {
   const { user, logout } = useAuth();
-  const utils = trpc.useUtils();
   const contextoQuery = trpc.auth.contexto.useQuery(undefined, { retry: false, staleTime: 0 });
-  const selecionarEmpresaMutation = trpc.auth.selecionarEmpresa.useMutation();
   const [location, setLocation] = useLocation();
   const search = useSearch();
   const { theme, toggleTheme } = useTheme();
@@ -168,20 +166,8 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const isMobile = useIsMobile();
   const navigationPresentation = getNavigationPresentation(isMobile);
   const [gruposExpandidos, setGruposExpandidos] = useState(() => gruposExpandidosIniciais(localStorage.getItem(SIDEBAR_GROUPS_KEY)));
-  const empresaAtiva = contextoQuery.data?.empresa;
-  const nomeEmpresaAtiva = empresaAtiva?.nomeFantasia || empresaAtiva?.nome || "Empresa não selecionada";
-
-  const trocarEmpresa = async (empresaId: number) => {
-    if (empresaId === empresaAtiva?.id || selecionarEmpresaMutation.isPending) return;
-    try {
-      await selecionarEmpresaMutation.mutateAsync({ empresaId });
-      await utils.invalidate();
-      toast.success("Empresa ativa alterada.");
-      window.location.assign("/");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Não foi possível alterar a empresa ativa.");
-    }
-  };
+  const empresa = contextoQuery.data?.empresa;
+  const nomeEmpresa = empresa?.nomeFantasia || empresa?.nome || "FK Madeiras";
 
   useEffect(() => { if (isCollapsed) setIsResizing(false); }, [isCollapsed]);
   useEffect(() => { localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(gruposExpandidos)); }, [gruposExpandidos]);
@@ -228,7 +214,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
                   </div>
                   <div className="flex flex-col min-w-0">
                     <span className="font-bold tracking-tight truncate text-sm text-foreground">FK Madeiras</span>
-                    <span className="text-[10px] text-muted-foreground truncate" title={nomeEmpresaAtiva}>{nomeEmpresaAtiva}</span>
+                    <span className="text-[10px] text-muted-foreground truncate" title={nomeEmpresa}>{nomeEmpresa}</span>
                   </div>
                 </div>
               ) : (
@@ -273,20 +259,8 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuItem disabled className="gap-2 opacity-100">
                   <Building2 className="h-4 w-4" />
-                  <span className="truncate font-medium">{nomeEmpresaAtiva}</span>
+                  <span className="truncate font-medium">{nomeEmpresa}</span>
                 </DropdownMenuItem>
-                {contextoQuery.data?.empresasDisponiveis.map(({ empresa }) => (
-                  <DropdownMenuItem
-                    key={empresa.id}
-                    disabled={empresa.id === empresaAtiva?.id || selecionarEmpresaMutation.isPending}
-                    onSelect={() => void trocarEmpresa(empresa.id)}
-                    className="cursor-pointer"
-                  >
-                    <Building2 className="mr-2 h-4 w-4" />
-                    <span className="truncate">{empresa.nomeFantasia || empresa.nome}</span>
-                    {empresa.id === empresaAtiva?.id && <BadgeCheck className="ml-auto h-4 w-4 text-primary" />}
-                  </DropdownMenuItem>
-                ))}
                 <DropdownMenuItem onClick={logout} className="cursor-pointer text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
                   <span>Terminar Sessão</span>

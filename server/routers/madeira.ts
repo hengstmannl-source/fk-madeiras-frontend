@@ -3,8 +3,8 @@ import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 
 export const madeiraRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.listMadeiras(ctx.empresaAtiva!.empresa.id);
+  list: protectedProcedure.query(async () => {
+    return db.listMadeiras();
   }),
 
   create: protectedProcedure
@@ -15,10 +15,11 @@ export const madeiraRouter = router({
       unidadeMedida: z.string().default("m³"),
     }))
     .mutation(async ({ ctx, input }) => {
+      const empresaId = (await db.getEmpresaUnica()).id;
       const result = await db.createMadeira({
         ...input,
         criadoPor: ctx.user.id,
-        empresaId: ctx.empresaAtiva!.empresa.id,
+        empresaId: ctx.configuracaoEmpresa.id,
       });
       return { success: true, id: Number(result[0].insertId) };
     }),
@@ -31,20 +32,20 @@ export const madeiraRouter = router({
       precoM3: z.string(),
       unidadeMedida: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       await db.updateMadeira(input.id, {
         nome: input.nome,
         descricao: input.descricao,
         precoM3: input.precoM3,
         unidadeMedida: input.unidadeMedida,
-      }, ctx.empresaAtiva!.empresa.id);
+      });
       return { success: true };
     }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      await db.deleteMadeira(input.id, ctx.empresaAtiva!.empresa.id);
+    .mutation(async ({ input }) => {
+      await db.deleteMadeira(input.id);
       return { success: true };
     }),
 });

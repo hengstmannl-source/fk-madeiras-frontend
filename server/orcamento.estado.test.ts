@@ -101,8 +101,8 @@ describe("mudança de estado de orçamento", () => {
     };
     await expect(atribuirNumeroVendaAprovada(150001, db)).resolves.toBe("VEN-000001");
     expect(reservas).toEqual([
-      { empresaId: 77, tipo: "venda", ultimoNumero: 1 },
-      { empresaId: 77, orcamentoId: 150001, numero: "VEN-000001" },
+      { empresaId: 1, tipo: "venda", ultimoNumero: 1 },
+      { empresaId: 1, orcamentoId: 150001, numero: "VEN-000001" },
     ]);
     expect(atualizacoes).toEqual([{ numero: "VEN-000001" }]);
   });
@@ -186,7 +186,7 @@ describe("mudança de estado de orçamento", () => {
       { dataVencimento: new Date("2030-03-31T12:00:00") },
       { dataVencimento: new Date("2030-01-30T12:00:00") },
       { dataVencimento: new Date("2030-03-01T12:00:00") },
-    ], 9, 1, { database, obterCategoriaReceita: async () => 70 });
+    ], 9, { database, obterCategoriaReceita: async () => 70 });
 
     expect(atualizacoes[0]).toMatchObject({ estado: "cancelado", canceladoPor: 9 });
     expect(insercoes[0]).toHaveLength(3);
@@ -212,7 +212,7 @@ describe("mudança de estado de orçamento", () => {
     };
     const database = { transaction: async (executar: (transacao: typeof tx) => unknown) => executar(tx) };
 
-    await expect(configurarCondicaoPagamentoVenda(150001, [{ dataVencimento: new Date("2030-01-30T12:00:00") }], 9, 1, {
+    await expect(configurarCondicaoPagamentoVenda(150001, [{ dataVencimento: new Date("2030-01-30T12:00:00") }], 9, {
       database,
       obterCategoriaReceita: async () => 70,
     })).rejects.toThrow("possui parcelas baixadas");

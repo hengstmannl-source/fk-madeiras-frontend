@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,9 +25,9 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
+import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { getOrCreateCategoriaCustoMateriaPrima } from "./financeiro";
 import { formatarNumeroDocumentoPadronizado, reservarProximoNumeroDocumento } from "./documentos";
@@ -51,7 +51,8 @@ export function ordenarPlaquetasPorEntradaMaisRecente<T extends { createdAt: Dat
   });
 }
 
-export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, empresaId: number) {
+export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   const codigo = normalizarCodigoPlaqueta(codigoInformado);
   if (!db || !codigo) return null;
@@ -71,7 +72,8 @@ export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string, em
   return candidatas.find(item => item.estado === "disponivel") ?? null;
 }
 
-export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}, empresaId: number) {
+export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return { itens: [], total: 0, totalDisponiveis: 0, totalVolumeDisponivel: 0, volumeMedioPorTora: 0, essenciasDisponiveis: [], alertaVariacaoAtipica: false, essenciasAtipicas: [], variacoesAtipicas: [], proximoDeslocamento: null };
   const brutas = ordenarPlaquetasPorEntradaMaisRecente(await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id)));
@@ -127,7 +129,8 @@ export async function listPlaquetas(parametros: { busca?: string; estado?: "disp
   return { itens, total: filtradas.length, totalDisponiveis: disponiveis.length, totalVolumeDisponivel, volumeMedioPorTora: Number(volumeMedioPorTora.toFixed(3)), essenciasDisponiveis, alertaVariacaoAtipica, essenciasAtipicas, variacoesAtipicas, proximoDeslocamento };
 }
 
-export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number, empresaId: number) {
+export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ essencia: string; assinatura: string }>, confirmadoPor: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const registros = variacoes
@@ -147,7 +150,8 @@ export async function confirmarVariacoesAtipicasPlaquetas(variacoes: Array<{ ess
   return { confirmadas: registros.length };
 }
 
-export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}, empresaId: number) {
+export async function getRelatorioExcecoesPlaquetas(parametros: { busca?: string; situacao?: "todas" | "duplicada" | "sem_plaqueta"; somenteDisponiveis?: boolean } = {}) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return { resumo: { duplicadas: 0, semPlaqueta: 0, pendentesConferencia: 0, disponiveis: 0 }, itens: [] };
   const brutas = await db.select().from(plaquetas).where(eq(plaquetas.empresaId, empresaId)).orderBy(desc(plaquetas.createdAt), desc(plaquetas.id));
@@ -192,7 +196,8 @@ export function prepararTorasSerragemTerceirosCsv(conteudo: string) {
   return validarCsvTorasSerragemTerceiros(conteudo);
 }
 
-export async function prepararTorasProducaoCsv(conteudo: string, empresaId: number) {
+export async function prepararTorasProducaoCsv(conteudo: string) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const estoque = await db.select({
@@ -207,7 +212,8 @@ export async function prepararTorasProducaoCsv(conteudo: string, empresaId: numb
   return prepararImportacaoTorasProducao({ conteudo, plaquetas: estoque });
 }
 
-export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}, empresaId: number) {
+export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dataFinal?: Date; origem?: string } = {}) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const origem = filtros.origem?.trim().toLocaleLowerCase("pt-BR");
@@ -220,7 +226,8 @@ export async function listRomaneiosCargaToras(filtros: { dataInicial?: Date; dat
   return origem ? resultado.filter((item) => (item.origem ?? "").toLocaleLowerCase("pt-BR").includes(origem)) : resultado;
 }
 
-export async function getRomaneioCargaComPlaquetas(id: number, empresaId: number) {
+export async function getRomaneioCargaComPlaquetas(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return undefined;
   const carga = await db.select().from(romaneiosCargaToras).where(and(eq(romaneiosCargaToras.id, id), eq(romaneiosCargaToras.empresaId, empresaId))).limit(1);
@@ -239,8 +246,8 @@ export function getModeloImportacaoPlaquetasCargaCsv() {
 export async function importarPlaquetasCargaCsv(
   input: { conteudo: string; dataCarga: Date; dataVencimento: Date; origem?: string | null; fornecedorId?: number | null; responsavel?: string | null; observacoes?: string | null; fretePorMetroCubico: string },
   criadoPor: number,
-  empresaId: number,
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const codigosExistentes = await db.select({ codigo: plaquetas.codigo }).from(plaquetas).where(eq(plaquetas.empresaId, empresaId));
@@ -269,7 +276,8 @@ function gerarCodigoInternoPlaqueta() {
   return `INT-${crypto.randomUUID().replaceAll("-", "").slice(0, 20).toUpperCase()}`;
 }
 
-export async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado: string | null | undefined, empresaId: number): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
+export async function prepararIdentificacaoPlaqueta(tx: any, codigoInformado: string | null | undefined): Promise<{ codigo: string; codigoFisico: string | null; situacaoIdentificacao: SituacaoIdentificacaoPlaqueta }> {
+  const empresaId = (await getEmpresaUnica()).id;
   const codigoFisico = normalizarCodigoPlaqueta(codigoInformado ?? "") || null;
   if (!codigoFisico) {
     return { codigo: `SEM-PLQ-${gerarCodigoInternoPlaqueta().slice(4)}`, codigoFisico: null, situacaoIdentificacao: "sem_plaqueta" };
@@ -346,7 +354,7 @@ export async function criarRomaneioCargaToras(data: {
       empresaId: data.empresaId,
     });
     const id = getInsertedId(insercao as MysqlInsertResult);
-    const sequencia = await reservarProximoNumeroDocumento(tx, data.empresaId, "romaneio_entrada");
+    const sequencia = await reservarProximoNumeroDocumento(tx, "romaneio_entrada");
     const numero = formatarNumeroDocumentoPadronizado("romaneio_entrada", sequencia);
     await tx.update(romaneiosCargaToras).set({ numero }).where(eq(romaneiosCargaToras.id, id));
     await sincronizarTituloMateriaPrimaCarga(tx, {
@@ -362,7 +370,7 @@ export async function criarRomaneioCargaToras(data: {
       empresaId: data.empresaId,
     });
     for (const plaqueta of plaquetasPreparadas) {
-      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico, data.empresaId);
+      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico);
       const insercaoPlaqueta = await tx.insert(plaquetas).values({
         ...identificacao,
         madeiraNome: plaqueta.madeiraNome,
@@ -415,7 +423,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
     for (const plaqueta of existentes) await tx.delete(plaquetas).where(eq(plaquetas.id, plaqueta.id));
 
     for (const plaqueta of plaquetasPreparadas) {
-      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico, carga.empresaId);
+      const identificacao = await prepararIdentificacaoPlaqueta(tx, plaqueta.codigoFisico);
       const valores = {
         ...identificacao,
         madeiraNome: plaqueta.madeiraNome,
@@ -465,7 +473,7 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
     ? (await tx.select().from(fornecedores).where(and(eq(fornecedores.id, data.fornecedorId), eq(fornecedores.empresaId, data.empresaId))).limit(1))[0]
     : null;
   if (data.fornecedorId && !fornecedor) throw new Error("Fornecedor não encontrado para a conta a pagar da carga");
-  const categoriaId = await getOrCreateCategoriaCustoMateriaPrima(tx, data.criadoPor, data.empresaId);
+  const categoriaId = await getOrCreateCategoriaCustoMateriaPrima(tx, data.criadoPor);
   const valorOriginal = data.valorTotal.toFixed(2);
   const observacoes = ["Lançamento automático vinculado ao romaneio de carga.", data.observacoes?.trim()].filter(Boolean).join("\n");
   const valores = {
@@ -562,7 +570,7 @@ export async function createPlaqueta(data: {
   }
   return db.transaction(async (tx: any) => {
     const empresaId = data.empresaId;
-    const identificacao = await prepararIdentificacaoPlaqueta(tx, data.codigo, empresaId);
+    const identificacao = await prepararIdentificacaoPlaqueta(tx, data.codigo);
     const result = await tx.insert(plaquetas).values({
       empresaId,
       ...identificacao,
@@ -585,7 +593,8 @@ export async function createPlaqueta(data: {
   });
 }
 
-export async function listRomaneiosProducao(empresaId: number) {
+export async function listRomaneiosProducao() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const [romaneios, totaisToras, totaisPecas] = await Promise.all([
@@ -638,13 +647,15 @@ export async function listRomaneiosProducao(empresaId: number) {
   });
 }
 
-export async function listItensRomaneioProducao(romaneioId: number, empresaId: number) {
+export async function listItensRomaneioProducao(romaneioId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select().from(itensRomaneioProducao).where(and(eq(itensRomaneioProducao.romaneioId, romaneioId), eq(itensRomaneioProducao.empresaId, empresaId))).orderBy(itensRomaneioProducao.id);
 }
 
-export async function getRomaneioProducaoComItens(romaneioId: number, empresaId: number) {
+export async function getRomaneioProducaoComItens(romaneioId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return null;
   const romaneio = (await db.select({
@@ -668,7 +679,7 @@ export async function getRomaneioProducaoComItens(romaneioId: number, empresaId:
   }).from(romaneiosProducao).leftJoin(plaquetas, and(eq(romaneiosProducao.plaquetaId, plaquetas.id), eq(plaquetas.empresaId, empresaId))).where(and(eq(romaneiosProducao.id, romaneioId), eq(romaneiosProducao.empresaId, empresaId))).limit(1))[0];
   if (!romaneio) return null;
   const [itens, toras, aproveitamentos] = await Promise.all([
-    listItensRomaneioProducao(romaneioId, empresaId),
+    listItensRomaneioProducao(romaneioId),
     db.select({
       id: itensRomaneioToras.id,
       plaquetaId: itensRomaneioToras.plaquetaId,

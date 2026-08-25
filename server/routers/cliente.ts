@@ -16,8 +16,8 @@ const LinhaImportacaoSchema = z.object({
 });
 type LinhaImportacao = z.infer<typeof LinhaImportacaoSchema>;
 
-async function validarImportacao(empresaId: number, linhas: LinhaImportacao[]) {
-  const existentes = await db.listAllClientes(empresaId);
+async function validarImportacao(linhas: LinhaImportacao[]) {
+  const existentes = await db.listAllClientes();
   const nomes = new Set(existentes.map(cliente => chaveTexto(cliente.nome)).filter(Boolean));
   const contactos = new Set(existentes.map(cliente => chaveDocumento(cliente.contacto)).filter(Boolean));
   const emails = new Set(existentes.map(cliente => chaveTexto(cliente.email)).filter(Boolean));
@@ -47,16 +47,16 @@ async function validarImportacao(empresaId: number, linhas: LinhaImportacao[]) {
 }
 
 export const clienteRouter = router({
-  list: protectedProcedure.query(async ({ ctx }) => {
-    return db.listClientes(ctx.empresaAtiva!.empresa.id);
+  list: protectedProcedure.query(async () => {
+    return db.listClientes();
   }),
-  listAll: protectedProcedure.query(async ({ ctx }) => {
-    return db.listAllClientes(ctx.empresaAtiva!.empresa.id);
+  listAll: protectedProcedure.query(async () => {
+    return db.listAllClientes();
   }),
   perfil: protectedProcedure
     .input(z.object({ id: z.number().int().positive() }))
-    .query(async ({ ctx, input }) => {
-      const perfil = await db.getPerfilCliente(input.id, ctx.empresaAtiva!.empresa.id);
+    .query(async ({ input }) => {
+      const perfil = await db.getPerfilCliente(input.id);
       if (!perfil) throw new TRPCError({ code: "NOT_FOUND", message: "Cliente não encontrado" });
       return perfil;
     }),
@@ -71,14 +71,15 @@ export const clienteRouter = router({
       observacoes: z.string().optional(),
     }))
     .mutation(async ({ ctx, input }) => {
-      const created = await db.createCliente({ ...input, criadoPor: ctx.user.id, empresaId: ctx.empresaAtiva!.empresa.id });
+      const empresaId = (await db.getEmpresaUnica()).id;
+      const created = await db.createCliente({ ...input, criadoPor: ctx.user.id, empresaId });
       return { success: true, id: created.id || null };
     }),
 
   previsualizarImportacao: protectedProcedure
     .input(z.object({ linhas: z.array(LinhaImportacaoSchema).min(1).max(1000) }))
-    .mutation(async ({ ctx, input }) => {
-      const resultado = await validarImportacao(ctx.empresaAtiva!.empresa.id, input.linhas);
+    .mutation(async ({ input }) => {
+      const resultado = await validarImportacao(input.linhas);
       return {
         linhas: resultado.linhas,
         resumo: { total: resultado.linhas.length, aptas: resultado.aptas.length, recusadas: resultado.linhas.length - resultado.aptas.length },
@@ -88,8 +89,8 @@ export const clienteRouter = router({
   importar: protectedProcedure
     .input(z.object({ linhas: z.array(LinhaImportacaoSchema).min(1).max(1000) }))
     .mutation(async ({ ctx, input }) => {
-      const empresaId = ctx.empresaAtiva!.empresa.id;
-      const resultado = await validarImportacao(empresaId, input.linhas);
+      const empresaId = (await db.getEmpresaUnica()).id;
+      const resultado = await validarImportacao(input.linhas);
       for (const linha of resultado.aptas) {
         await db.createCliente({
           empresaId, criadoPor: ctx.user.id, nome: linha.nome.trim(), contacto: linha.contacto?.trim() || undefined,
@@ -114,18 +115,18 @@ export const clienteRouter = router({
       nif: z.string().optional(),
       observacoes: z.string().optional(),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       await db.updateCliente(input.id, {
         nome: input.nome, contacto: input.contacto,
         email: input.email, morada: input.morada, nif: input.nif, observacoes: input.observacoes,
-      }, ctx.empresaAtiva!.empresa.id);
+      });
       return { success: true };
     }),
 
   delete: protectedProcedure
     .input(z.object({ id: z.number() }))
-    .mutation(async ({ ctx, input }) => {
-      await db.deleteCliente(input.id, ctx.empresaAtiva!.empresa.id);
+    .mutation(async ({ input }) => {
+      await db.deleteCliente(input.id);
       return { success: true };
     }),
 });

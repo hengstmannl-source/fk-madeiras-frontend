@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,9 +25,9 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
+import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { prepararIdentificacaoPlaqueta } from "./estoque";
 
@@ -68,7 +68,7 @@ export async function confirmarRomaneioProducao(data: {
         if (!Number.isFinite(volumeInicial) || volumeInicial <= 0 || !entrada.tora.madeiraNome.trim()) {
           throw new Error("Informe essência e volume válidos para a nova plaqueta");
         }
-        const identificacao = await prepararIdentificacaoPlaqueta(tx, entrada.novaPlaqueta.codigo, data.empresaId);
+        const identificacao = await prepararIdentificacaoPlaqueta(tx, entrada.novaPlaqueta.codigo);
         const insercaoPlaqueta = await tx.insert(plaquetas).values({
           empresaId: data.empresaId,
           ...identificacao,
@@ -287,7 +287,8 @@ export async function criarSerragemTerceiros(data: {
   });
 }
 
-export async function listSerragensTerceiros(empresaId: number) {
+export async function listSerragensTerceiros() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select({
@@ -298,7 +299,8 @@ export async function listSerragensTerceiros(empresaId: number) {
     .where(eq(serragensTerceiros.empresaId, empresaId)).orderBy(desc(serragensTerceiros.dataProducao), desc(serragensTerceiros.id));
 }
 
-export async function getDetalheSerragemTerceiros(id: number, empresaId: number) {
+export async function getDetalheSerragemTerceiros(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const servico = (await db.select({
@@ -512,7 +514,8 @@ export async function atualizarRomaneioProducao(id: number, data: {
   });
 }
 
-export async function excluirRomaneioProducao(id: number, empresaId: number) {
+export async function excluirRomaneioProducao(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx) => {
@@ -575,14 +578,16 @@ export async function excluirRomaneioProducao(id: number, empresaId: number) {
   });
 }
 
-export async function getResumoEstoqueSerrado(empresaId: number) {
+export async function getResumoEstoqueSerrado() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const lotes = await db.select().from(lotesPecasSerradas).where(eq(lotesPecasSerradas.empresaId, empresaId));
   return agruparEstoquePecas(lotes.filter((lote) => lote.estado !== "cancelado"));
 }
 
-export async function getRelatorioInventarioSerrado(dataInicial: Date | undefined, dataFinal: Date | undefined, empresaId: number) {
+export async function getRelatorioInventarioSerrado(dataInicial: Date | undefined, dataFinal: Date | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return { linhas: [], resumo: { itensAnalisados: 0, itensEmRutura: 0, itensCriticos: 0, pecasEmDeficit: 0, saidasNoPeriodo: 0 }, periodo: { dataInicial: new Date(), dataFinal: new Date(), dias: 1 } };
   const fim = dataFinal ? new Date(dataFinal) : new Date();
@@ -605,7 +610,8 @@ export async function getRelatorioInventarioSerrado(dataInicial: Date | undefine
   };
 }
 
-export async function listAjustesEstoqueSerrado(empresaId: number) {
+export async function listAjustesEstoqueSerrado() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const [movimentos, lotes, utilizadores] = await Promise.all([

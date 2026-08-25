@@ -1,6 +1,6 @@
 import type { CreateExpressContextOptions } from "@trpc/server/adapters/express";
-import type { Empresa, EmpresaMembro, User } from "../../drizzle/schema";
-import { getEmpresaAtivaDoUsuario, getUserById } from "../db";
+import type { Empresa, User } from "../../drizzle/schema";
+import { getEmpresaUnica, getUserById } from "../db";
 import { COOKIE_SESSAO_LOCAL, lerSessaoLocal } from "../autenticacao-local";
 import { sdk } from "./sdk";
 
@@ -8,7 +8,7 @@ export type TrpcContext = {
   req: CreateExpressContextOptions["req"];
   res: CreateExpressContextOptions["res"];
   user: User | null;
-  empresaAtiva: { empresa: Empresa; membro: EmpresaMembro } | null;
+  configuracaoEmpresa: Empresa;
 };
 
 function lerCookie(cabecalhoCookie: string | undefined, nome: string) {
@@ -34,12 +34,12 @@ export async function createContext(
     user = null;
   }
 
-  const empresaAtiva = user ? (await getEmpresaAtivaDoUsuario(user.id)) ?? null : null;
+  const configuracaoEmpresa = await getEmpresaUnica();
 
   return {
     req: opts.req,
     res: opts.res,
     user,
-    empresaAtiva,
+    configuracaoEmpresa,
   };
 }

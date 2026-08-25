@@ -15,7 +15,7 @@ vi.mock("../db", () => ({
 import * as db from "../db";
 import { financeiroRouter } from "./financeiro";
 
-const ctxEmpresaDois = {
+const ctxSistema = {
   user: {
     id: 7,
     openId: "teste-financeiro",
@@ -23,17 +23,15 @@ const ctxEmpresaDois = {
     email: "teste@exemplo.com",
     loginMethod: "manus",
     role: "user",
+    papel: "financeiro",
     createdAt: new Date(),
     updatedAt: new Date(),
     lastSignedIn: new Date(),
   },
-  empresaAtiva: {
-    empresa: { id: 2, nome: "Empresa Isolada" },
-    membro: { id: 2, empresaId: 2, usuarioId: 7, papel: "financeiro", ativo: true },
-  },
+  configuracaoEmpresa: { id: 1, nome: "FK Madeiras", ativa: true },
 } as unknown as TrpcContext;
 
-describe("financeiro.conciliacao - isolamento empresarial", () => {
+describe("financeiro.conciliacao - empresa única", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(db.importarExtratoBancario).mockResolvedValue({ importados: 1, erros: [] });
@@ -46,8 +44,8 @@ describe("financeiro.conciliacao - isolamento empresarial", () => {
     vi.mocked(db.getPrevisaoSemanalCaixa).mockResolvedValue([]);
   });
 
-  it("propaga exclusivamente a empresa ativa para todas as operações de conciliação", async () => {
-    const caller = financeiroRouter.createCaller(ctxEmpresaDois);
+  it("usa a configuração empresarial global nas operações de conciliação", async () => {
+    const caller = financeiroRouter.createCaller(ctxSistema);
 
     await caller.conciliacao.importar({
       contaFinanceiraId: 12,
@@ -61,16 +59,16 @@ describe("financeiro.conciliacao - isolamento empresarial", () => {
     await caller.conciliacao.criarLancamento({ movimentoId: 21, categoriaId: 5, descricao: "Ajuste de extrato" });
     await caller.conciliacao.definirEstado({ movimentoId: 21, estado: "ignorado", observacoes: "Duplicado" });
 
-    expect(db.importarExtratoBancario).toHaveBeenCalledWith(expect.objectContaining({ contaFinanceiraId: 12 }), 7, 2);
-    expect(db.listConciliacaoBancaria).toHaveBeenCalledWith({ estado: "pendente" }, 2);
-    expect(db.confirmarConciliacaoBancaria).toHaveBeenCalledWith({ movimentoId: 21, baixaFinanceiraId: 34 }, 7, 2);
-    expect(db.desfazerConciliacaoBancaria).toHaveBeenCalledWith(21, 2);
-    expect(db.criarLancamentoDaConciliacao).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, categoriaId: 5 }), 7, 2);
-    expect(db.definirEstadoMovimentoBancario).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, estado: "ignorado" }), 2);
+    expect(db.importarExtratoBancario).toHaveBeenCalledWith(expect.objectContaining({ contaFinanceiraId: 12 }), 7);
+    expect(db.listConciliacaoBancaria).toHaveBeenCalledWith({ estado: "pendente" });
+    expect(db.confirmarConciliacaoBancaria).toHaveBeenCalledWith({ movimentoId: 21, baixaFinanceiraId: 34 }, 7);
+    expect(db.desfazerConciliacaoBancaria).toHaveBeenCalledWith(21);
+    expect(db.criarLancamentoDaConciliacao).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, categoriaId: 5 }), 7);
+    expect(db.definirEstadoMovimentoBancario).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, estado: "ignorado" }));
   });
 
-  it("usa somente a empresa ativa nos relatórios de fluxo e previsão", async () => {
-    const caller = financeiroRouter.createCaller(ctxEmpresaDois);
+  it("não recebe empresa escolhida pelo utilizador nos relatórios de fluxo e previsão", async () => {
+    const caller = financeiroRouter.createCaller(ctxSistema);
 
     await caller.relatorios.fluxoCaixa({ dataInicio: "2026-08-01", dataFim: "2026-08-31" });
     await caller.relatorios.previsaoSemanal({ semanas: 4 });
@@ -78,7 +76,7 @@ describe("financeiro.conciliacao - isolamento empresarial", () => {
     expect(db.getRelatorioFluxoCaixa).toHaveBeenCalledWith({
       dataInicio: expect.any(Date),
       dataFim: expect.any(Date),
-    }, 2);
-    expect(db.getPrevisaoSemanalCaixa).toHaveBeenCalledWith(4, 2);
+    });
+    expect(db.getPrevisaoSemanalCaixa).toHaveBeenCalledWith(4);
   });
 });

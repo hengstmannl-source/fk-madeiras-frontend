@@ -92,7 +92,7 @@ async function planosDosAdiantamentos(db: Awaited<ReturnType<typeof bancoObrigat
 export const folhaParcelada = {
   recalcular: rhProcedure.input(z.object({ folhaId: idSchema })).mutation(async ({ ctx, input }) => {
     const db = await bancoObrigatorio();
-    const empresaId = ctx.empresaAtiva!.empresa.id;
+    const empresaId = ctx.configuracaoEmpresa.id;
     const folha = await db.select().from(folhasPagamentoRh).where(and(eq(folhasPagamentoRh.id, input.folhaId), eq(folhasPagamentoRh.empresaId, empresaId))).limit(1);
     if (!folha[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Folha não encontrada." });
     if (folha[0].estado !== "aberta") throw new TRPCError({ code: "BAD_REQUEST", message: "Reabra a folha antes de recalcular." });
@@ -114,7 +114,7 @@ export const folhaParcelada = {
     return { success: true };
   }),
   fechar: rhProcedure.input(z.object({ folhaId: idSchema, dataVencimento: dataSchema })).mutation(async ({ ctx, input }) => {
-    const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id;
+    const db = await bancoObrigatorio(); const empresaId = ctx.configuracaoEmpresa.id;
     const folha = await db.select().from(folhasPagamentoRh).where(and(eq(folhasPagamentoRh.id, input.folhaId), eq(folhasPagamentoRh.empresaId, empresaId))).limit(1);
     if (!folha[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Folha não encontrada." });
     if (folha[0].estado === "fechada") return { success: true, jaFechada: true };
@@ -154,7 +154,7 @@ export const folhaParcelada = {
     return { success: true, jaFechada: false };
   }),
   reabrir: rhProcedure.input(z.object({ folhaId: idSchema, motivo: z.string().trim().min(5).max(2000) })).mutation(async ({ ctx, input }) => {
-    const db = await bancoObrigatorio(); const empresaId = ctx.empresaAtiva!.empresa.id;
+    const db = await bancoObrigatorio(); const empresaId = ctx.configuracaoEmpresa.id;
     const folha = await db.select().from(folhasPagamentoRh).where(and(eq(folhasPagamentoRh.id, input.folhaId), eq(folhasPagamentoRh.empresaId, empresaId))).limit(1);
     if (!folha[0]) throw new TRPCError({ code: "NOT_FOUND", message: "Folha não encontrada." });
     if (folha[0].estado !== "fechada") throw new TRPCError({ code: "BAD_REQUEST", message: "A folha já está aberta." });

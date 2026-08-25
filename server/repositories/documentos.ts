@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,9 +25,9 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
+import { getEmpresaUnica } from "./identidade";
 
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
@@ -52,7 +52,8 @@ export function formatarNumeroDocumentoPadronizado(tipo: TipoDocumentoPadronizad
  * Reserva um número monotónico dentro da transação. O upsert mantém a linha do
  * contador bloqueada pelo banco até o fim da transação, evitando números duplicados.
  */
-export async function reservarProximoNumeroDocumento(tx: any, empresaId: number, tipo: TipoDocumentoPadronizado) {
+export async function reservarProximoNumeroDocumento(tx: any, tipo: TipoDocumentoPadronizado) {
+  const empresaId = (await getEmpresaUnica()).id;
   await tx.insert(sequenciasDocumentos).values({ empresaId, tipo, ultimoNumero: 1 }).onDuplicateKeyUpdate({
     set: { ultimoNumero: sql`${sequenciasDocumentos.ultimoNumero} + 1` },
   });

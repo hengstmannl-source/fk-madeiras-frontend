@@ -694,3 +694,11 @@
 - [x] Encaminhar empresa ativa do router financeiro e filtrar todas as consultas relacionadas
 - [x] Criar regressões cross-tenant para fluxo de caixa, previsão e tentativa de manipulação de tenant
 - [x] Validar TypeScript, testes financeiros, autenticação, suíte integral e build sem alterar regras financeiras
+- [x] Mapear integralmente as dependências de empresa, empresaMembros, empresaAtiva e empresaId antes da migração single-tenant
+- [x] Inventariar empresas, vínculos e registros dependentes no banco para preservar dados reais e definir a empresa operacional única
+- [x] Definir estratégia de schema e migration reversível que remova a dependência operacional multiempresa sem apagar dados automaticamente
+- [x] Simplificar contexto, autorização tRPC, routers e repositories para autenticação e permissões baseadas diretamente no usuário
+- [x] Remover seletor, troca e gestão de múltiplas empresas da interface preservando nome e identidade da empresa existente
+- [x] Atualizar testes de sessão, permissões, produção, vendas, estoque e financeiro para o modelo single-tenant
+- [x] Validar migration, TypeScript, suíte, build e fluxos principais antes da publicação
+- [x] Avaliar perfis diretos ausentes e preservar a negação de acesso dos usuários sem vínculo empresarial ativo, sem elevar permissões automaticamente

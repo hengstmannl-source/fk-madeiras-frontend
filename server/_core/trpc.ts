@@ -50,12 +50,12 @@ const requireUser = t.middleware(async opts => {
     throw new TRPCError({ code: "UNAUTHORIZED", message: UNAUTHED_ERR_MSG });
   }
 
-  if (!ctx.empresaAtiva) {
-    throw new TRPCError({ code: "FORBIDDEN", message: "O seu acesso não está associado a uma empresa ativa." });
+  if (!ctx.user.papel) {
+    throw new TRPCError({ code: "FORBIDDEN", message: "O seu utilizador não possui um perfil operacional ativo." });
   }
 
   const bloqueioPorPerfil = mensagemDeBloqueioPorPerfil({
-    papel: ctx.empresaAtiva.membro.papel,
+    papel: ctx.user.papel,
     papelPlataforma: ctx.user.role,
     caminho: opts.path,
     tipo: opts.type,
@@ -66,7 +66,7 @@ const requireUser = t.middleware(async opts => {
     ctx: {
       ...ctx,
       user: ctx.user,
-      empresaAtiva: ctx.empresaAtiva,
+      configuracaoEmpresa: ctx.configuracaoEmpresa,
     },
   });
 });
@@ -77,9 +77,9 @@ export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
     const { ctx, next } = opts;
 
-    const papel = ctx.empresaAtiva?.membro.papel;
+    const papel = ctx.user?.papel;
     const podeAdministrarEmpresa = papel === "proprietario" || papel === "administrador";
-    if (!ctx.user || (!podeAdministrarEmpresa && ctx.user.role !== 'admin')) {
+    if (!ctx.user || !podeAdministrarEmpresa) {
       throw new TRPCError({ code: "FORBIDDEN", message: NOT_ADMIN_ERR_MSG });
     }
 
@@ -87,7 +87,7 @@ export const adminProcedure = t.procedure.use(
       ctx: {
         ...ctx,
         user: ctx.user,
-        empresaAtiva: ctx.empresaAtiva,
+      configuracaoEmpresa: ctx.configuracaoEmpresa,
       },
     });
   }),

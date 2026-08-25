@@ -13,7 +13,7 @@ export function isValidLogoImage(buffer: Buffer, mimeType: "image/png" | "image/
 }
 
 export const empresaRouter = router({
-  get: protectedProcedure.query(async ({ ctx }) => db.getEmpresaConfiguracao(ctx.empresaAtiva!.empresa.id)),
+  get: protectedProcedure.query(async () => db.getEmpresaConfiguracao()),
 
   uploadLogo: protectedProcedure
     .input(z.object({
@@ -21,16 +21,16 @@ export const empresaRouter = router({
       mimeType: z.enum(["image/png", "image/jpeg"]),
       base64: z.string().min(1).max(MAX_LOGO_BASE64_LENGTH),
     }))
-    .mutation(async ({ ctx, input }) => {
+    .mutation(async ({ input }) => {
       const image = Buffer.from(input.base64, "base64");
       if (!image.length || image.length > MAX_LOGO_BYTES || !isValidLogoImage(image, input.mimeType)) {
         throw new Error("Envie uma imagem PNG ou JPG válida de até 2 MB");
       }
 
       const extension = input.mimeType === "image/png" ? "png" : "jpg";
-      const empresaId = ctx.empresaAtiva!.empresa.id;
+      const empresaId = (await db.getEmpresaUnica()).id;
       const upload = await storagePut(`empresa/${empresaId}/logotipo-${Date.now()}.${extension}`, image, input.mimeType);
-      const configuracao = await db.saveEmpresaLogo(empresaId, {
+      const configuracao = await db.saveEmpresaLogo({
         key: upload.key,
         url: upload.url,
         mimeType: input.mimeType,
@@ -39,8 +39,8 @@ export const empresaRouter = router({
       return { success: true, configuracao };
     }),
 
-  removeLogo: protectedProcedure.mutation(async ({ ctx }) => {
-    const configuracao = await db.clearEmpresaLogo(ctx.empresaAtiva!.empresa.id);
+  removeLogo: protectedProcedure.mutation(async () => {
+    const configuracao = await db.clearEmpresaLogo();
     return { success: true, configuracao };
   }),
 });

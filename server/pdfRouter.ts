@@ -1,5 +1,5 @@
 import { PDFDocument, rgb, StandardFonts } from "pdf-lib";
-import { getEmpresaAtivaDoUsuario, getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioCargaComPlaquetas, getRomaneioProducaoComItens, getUserById, listClientes } from "./db";
+import { getEmpresaUnica, getEmpresaConfiguracao, getOrcamentoWithItems, getRomaneioCargaComPlaquetas, getRomaneioProducaoComItens, getUserById, listClientes } from "./db";
 import { COOKIE_SESSAO_LOCAL, lerSessaoLocal } from "./autenticacao-local";
 import { storageGetSignedUrl } from "./storage";
 import { sdk } from "./_core/sdk";
@@ -120,8 +120,7 @@ async function getEmpresaPdfAtiva(req: any, res: any): Promise<number | null> {
     const sessao = lerSessaoLocal(req.headers?.cookie?.split(";").map((parte: string) => parte.trim()).find((parte: string) => parte.startsWith(`${COOKIE_SESSAO_LOCAL}=`))?.slice(COOKIE_SESSAO_LOCAL.length + 1));
     if (sessao) user = (await getUserById(sessao.usuarioId)) ?? null;
     if (!user) user = await sdk.authenticateRequest(req);
-    const empresaAtiva = user ? await getEmpresaAtivaDoUsuario(user.id) : null;
-    if (empresaAtiva) return empresaAtiva.empresa.id;
+    if (user) return (await getEmpresaUnica()).id;
   } catch {
     // A mesma resposta é usada para sessão ausente ou inválida.
   }
@@ -139,7 +138,7 @@ function responderPdf(req: any, res: any, bytes: Uint8Array, nomeArquivo: string
 }
 
 async function loadCompanyLogo(pdfDoc: PDFDocument, empresaId: number) {
-  const configuracao = await getEmpresaConfiguracao(empresaId);
+  const configuracao = await getEmpresaConfiguracao();
   if (!configuracao?.logoKey || !configuracao.logoMimeType) return undefined;
 
   try {
@@ -250,10 +249,10 @@ export async function registerPdfRoutes(app: any) {
       const id = parseInt(req.params.id);
       if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
-      const data = await getOrcamentoWithItems(id, empresaId);
+      const data = await getOrcamentoWithItems(id);
       if (!data) return res.status(404).json({ error: "Orçamento não encontrado" });
 
-      const clientes = await listClientes(empresaId);
+      const clientes = await listClientes();
       const cliente = clientes.find((item: any) => item.id === data.orcamento.clienteId);
       const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -566,11 +565,11 @@ export async function registerPdfRoutes(app: any) {
       const id = parseInt(req.params.id);
       if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
 
-      const data = await getOrcamentoWithItems(id, empresaId);
-      if (!data) return res.status(404).json({ error: "Venda não encontrada" });
+      const data = await getOrcamentoWithItems(id);
+      if (!data) return res.status(404).json({ error: "Orçamento não encontrado" });
       if (!data.orcamento.pago || !data.orcamento.pagoEm) return res.status(400).json({ error: "O recibo só está disponível para vendas quitadas" });
 
-      const clientes = await listClientes(empresaId);
+      const clientes = await listClientes();
       const cliente = clientes.find((item: any) => item.id === data.orcamento.clienteId);
       const pdfDoc = await PDFDocument.create();
       const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
@@ -631,7 +630,7 @@ export async function registerPdfRoutes(app: any) {
       if (!empresaId) return;
       const id = parseInt(req.params.id);
       if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
-      const data = await getRomaneioProducaoComItens(id, empresaId);
+      const data = await getRomaneioProducaoComItens(id);
       if (!data) return res.status(404).json({ error: "Romaneio não encontrado" });
 
       const torasParaResumo = data.toras.length
@@ -851,7 +850,7 @@ export async function registerPdfRoutes(app: any) {
       if (!empresaId) return;
       const id = parseInt(req.params.id);
       if (Number.isNaN(id)) return res.status(400).json({ error: "ID inválido" });
-      const data = await getRomaneioCargaComPlaquetas(id, empresaId);
+      const data = await getRomaneioCargaComPlaquetas(id);
       if (!data) return res.status(404).json({ error: "Romaneio de carga não encontrado" });
 
       const volumeCarga = Number(data.carga.volumeTotal ?? 0);

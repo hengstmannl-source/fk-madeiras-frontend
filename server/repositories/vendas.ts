@@ -2,7 +2,7 @@ import { eq, and, asc, desc, gte, lte, ne, inArray, or, sql, type InferSelectMod
 import {
   InsertUser, users, madeiras, bitolas, clientes,
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
-  empresas, empresaMembros, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
+  empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
@@ -25,9 +25,9 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
-import { podeSelecionarEmpresa, resolverEmpresaAtiva } from "../empresaAtiva.logic";
 
 import { getDb } from "./core";
+import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { criarTituloReceberDeOrcamento, getOrCreateContaFinanceiraPadrao, registrarBaixaFinanceira } from "./financeiro";
 import { normalizarFreteCarga } from "./estoque";
@@ -44,7 +44,8 @@ type EstadoOrcamento = InferSelectModel<typeof orcamentos>["estado"];
 type AtualizacaoCabecalhoProducao = Partial<typeof romaneiosProducao.$inferInsert>;
 
 // ─── Orçamentos ───
-export async function listModelosMedidaVenda(empresaId: number) {
+export async function listModelosMedidaVenda() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   return db.select().from(modelosMedidaVenda).where(eq(modelosMedidaVenda.empresaId, empresaId)).orderBy(asc(modelosMedidaVenda.nome));
@@ -57,7 +58,8 @@ export async function createModeloMedidaVenda(data: InsertModeloMedidaVenda) {
   return Number(resultado[0].insertId);
 }
 
-export async function deleteModeloMedidaVenda(id: number, userId: number, empresaId: number) {
+export async function deleteModeloMedidaVenda(id: number, userId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   await db.delete(modelosMedidaVenda).where(and(eq(modelosMedidaVenda.id, id), eq(modelosMedidaVenda.criadoPor, userId), eq(modelosMedidaVenda.empresaId, empresaId)));
@@ -72,7 +74,8 @@ export type ComponenteComercialInput = {
   quantidade: number;
 };
 
-export async function listProdutosComerciais(empresaId: number, incluirInativos = false) {
+export async function listProdutosComerciais(incluirInativos = false) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const condicao = incluirInativos
@@ -113,8 +116,8 @@ export async function updateProdutoComercial(
   id: number,
   data: Partial<InsertProdutoComercial>,
   componentes: ComponenteComercialInput[] | undefined,
-  empresaId: number,
 ) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const existente = await db.select({ id: produtosComerciais.id }).from(produtosComerciais)
@@ -257,7 +260,8 @@ export function classificarCategoriaOperacionalVenda(pago: boolean, entregue: bo
   return "aprovadas";
 }
 
-export async function listOrcamentos(filters: { estado?: EstadoOrcamento; clienteId?: number; categoria?: CategoriaOperacionalVenda } | undefined, empresaId: number) {
+export async function listOrcamentos(filters: { estado?: EstadoOrcamento; clienteId?: number; categoria?: CategoriaOperacionalVenda } | undefined) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
   const conditions = [];
@@ -296,10 +300,11 @@ export async function listOrcamentos(filters: { estado?: EstadoOrcamento; client
   });
 }
 
-export async function getCondicaoPagamentoVenda(orcamentoId: number, empresaId: number) {
+export async function getCondicaoPagamentoVenda(orcamentoId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return undefined;
-  const venda = await getOrcamentoById(orcamentoId, empresaId);
+  const venda = await getOrcamentoById(orcamentoId);
   if (!venda) return undefined;
   const parcelas = await db.select({
     id: titulosFinanceiros.id,
@@ -323,7 +328,8 @@ export async function getCondicaoPagamentoVenda(orcamentoId: number, empresaId: 
   };
 }
 
-export async function getResumoFilasVendas(empresaId: number): Promise<Record<CategoriaOperacionalVenda, number>> {
+export async function getResumoFilasVendas(): Promise<Record<CategoriaOperacionalVenda, number>> {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   const resumo: Record<CategoriaOperacionalVenda, number> = { aprovadas: 0, pagas: 0, entregues: 0, concluidas: 0 };
   if (!db) return resumo;
@@ -335,7 +341,8 @@ export async function getResumoFilasVendas(empresaId: number): Promise<Record<Ca
 }
 
 /** Retorna vendas aprovadas com todos os abatimentos comerciais já consolidados. */
-export async function getRelatorioMargemVendas(empresaId: number) {
+export async function getRelatorioMargemVendas() {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return [];
 
@@ -381,7 +388,8 @@ export async function getRelatorioMargemVendas(empresaId: number) {
   });
 }
 
-export async function getOrcamentoWithItems(id: number, empresaId: number) {
+export async function getOrcamentoWithItems(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return undefined;
   const orc = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
@@ -406,7 +414,8 @@ export function podeAlterarOrcamentoPago(pago: boolean, confirmacaoDupla: boolea
   return !pago || confirmacaoDupla;
 }
 
-export async function getOrcamentoById(id: number, empresaId: number) {
+export async function getOrcamentoById(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) return undefined;
   const result = await db.select().from(orcamentos).where(and(eq(orcamentos.id, id), eq(orcamentos.empresaId, empresaId))).limit(1);
@@ -550,14 +559,15 @@ export async function deleteOrcamento(id: number, confirmacaoDupla = false, user
 export async function atribuirNumeroVendaAprovada(orcamentoId: number, database?: any) {
   const db = database ?? await getDb();
   if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
   const venda = await db.select().from(orcamentos).where(eq(orcamentos.id, orcamentoId)).limit(1);
   if (!venda[0]) throw new Error("Venda não encontrada");
   if (venda[0].numero) return venda[0].numero;
 
-  const sequencia = await reservarProximoNumeroDocumento(db, venda[0].empresaId, "venda");
+  const sequencia = await reservarProximoNumeroDocumento(db, "venda");
   const numero = formatarNumeroDocumentoPadronizado("venda", sequencia);
   await db.insert(sequenciasVendas).values({
-    empresaId: venda[0].empresaId,
+    empresaId,
     orcamentoId,
     numero,
   });
@@ -590,15 +600,16 @@ export async function updateOrcamentoEstado(
   }
   if (novoEstado === "aprovado" && userId) {
     if (dependencias?.criarTituloReceber) await dependencias.criarTituloReceber(id, userId);
-    else await criarTituloReceberDeOrcamento(id, userId, undefined, orcamento.empresaId);
+    else await criarTituloReceberDeOrcamento(id, userId, undefined);
   }
   return { success: true };
 }
 
-export async function registrarPagamentoOrcamento(id: number, userId: number, formaPagamento: string, pagoEm: Date, empresaId: number) {
+export async function registrarPagamentoOrcamento(id: number, userId: number, formaPagamento: string, pagoEm: Date) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const orcamento = await getOrcamentoById(id, empresaId);
+  const orcamento = await getOrcamentoById(id);
   if (!orcamento) throw new Error("Orçamento não encontrado");
   if (orcamento.estado !== "aprovado") throw new Error("Apenas orçamentos aprovados podem ser marcados como pagos");
   if (orcamento.pago) throw new Error("Este orçamento já foi registrado como pago");
@@ -614,9 +625,9 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
     throw new Error("Esta venda possui condição parcelada. Registre o recebimento de cada parcela no módulo Financeiro.");
   }
 
-  const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm, empresaId);
+  const titulo = await criarTituloReceberDeOrcamento(id, userId, pagoEm);
   if (titulo) {
-    const contaFinanceiraId = await getOrCreateContaFinanceiraPadrao(userId, orcamento.empresaId);
+    const contaFinanceiraId = await getOrCreateContaFinanceiraPadrao(userId);
     await registrarBaixaFinanceira({
       tituloId: titulo.id,
       contaFinanceiraId,
@@ -624,7 +635,7 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
       dataBaixa: pagoEm,
       formaPagamento,
       criadoPor: userId,
-    }, empresaId);
+    });
   }
   await db.update(orcamentos).set({ pago: true, pagoEm, formaPagamento, pagoPor: userId }).where(eq(orcamentos.id, id));
   await db.insert(historicoAlteracoes).values({
@@ -637,10 +648,11 @@ export async function registrarPagamentoOrcamento(id: number, userId: number, fo
   return { success: true, pagoEm, formaPagamento };
 }
 
-export async function duplicateOrcamento(id: number, empresaId: number) {
+export async function duplicateOrcamento(id: number) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const data = await getOrcamentoWithItems(id, empresaId);
+  const data = await getOrcamentoWithItems(id);
   if (!data) throw new Error("Orçamento não encontrado");
   const { orcamento, itens } = data;
   const novoOrc: InsertOrcamento = {
