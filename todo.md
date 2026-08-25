@@ -689,3 +689,8 @@
 - [x] Migrar implementações por domínio preservando APIs, transações e empresa ativa
 - [x] Reduzir server/db.ts à conexão e às reexportações de compatibilidade necessárias
 - [x] Validar imports, TypeScript, testes por domínio e suíte completa sem mudanças de negócio
+- [x] Mapear consultas e relacionamentos empresariais do fluxo de caixa e da previsão semanal
+- [x] Definir o escopo correto de configuracoesFinanceiras antes de alterar o acesso
+- [x] Encaminhar empresa ativa do router financeiro e filtrar todas as consultas relacionadas
+- [x] Criar regressões cross-tenant para fluxo de caixa, previsão e tentativa de manipulação de tenant
+- [x] Validar TypeScript, testes financeiros, autenticação, suíte integral e build sem alterar regras financeiras

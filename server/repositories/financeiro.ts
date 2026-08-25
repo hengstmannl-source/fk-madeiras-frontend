@@ -1016,13 +1016,14 @@ export async function definirEstadoMovimentoBancario(input: { movimentoId: numbe
   return { success: true };
 }
 
-export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFim: Date }) {
+export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFim: Date }, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const fim = new Date(periodo.dataFim);
   fim.setHours(23, 59, 59, 999);
   const [contas, movimentos] = await Promise.all([
-    db.select({ saldoInicial: contasFinanceiras.saldoInicial }).from(contasFinanceiras),
+    db.select({ saldoInicial: contasFinanceiras.saldoInicial }).from(contasFinanceiras)
+      .where(eq(contasFinanceiras.empresaId, empresaId)),
     db.select({
       id: baixasFinanceiras.id,
       tituloId: baixasFinanceiras.tituloId,
@@ -1037,14 +1038,19 @@ export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFi
     }).from(baixasFinanceiras)
       .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
       .leftJoin(contasFinanceiras, eq(baixasFinanceiras.contaFinanceiraId, contasFinanceiras.id))
-      .where(and(eq(baixasFinanceiras.estornada, false), lte(baixasFinanceiras.dataBaixa, fim)))
+      .where(and(
+        eq(baixasFinanceiras.empresaId, empresaId),
+        eq(titulosFinanceiros.empresaId, empresaId),
+        eq(baixasFinanceiras.estornada, false),
+        lte(baixasFinanceiras.dataBaixa, fim),
+      ))
       .orderBy(asc(baixasFinanceiras.dataBaixa), asc(baixasFinanceiras.id)),
   ]);
   const saldoInicialContas = contas.reduce((total, conta) => total + decimalParaNumero(conta.saldoInicial), 0);
   return calcularRelatorioFluxoCaixa({ ...periodo, saldoInicialContas, movimentos });
 }
 
-export async function getPrevisaoSemanalCaixa(semanas = 8) {
+export async function getPrevisaoSemanalCaixa(semanas = 8, empresaId: number) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const hoje = new Date();
@@ -1052,14 +1058,20 @@ export async function getPrevisaoSemanalCaixa(semanas = 8) {
   const fimHoje = new Date(hoje);
   fimHoje.setHours(23, 59, 59, 999);
   const [contas, baixasRealizadas, titulos] = await Promise.all([
-    db.select({ saldoInicial: contasFinanceiras.saldoInicial }).from(contasFinanceiras),
+    db.select({ saldoInicial: contasFinanceiras.saldoInicial }).from(contasFinanceiras)
+      .where(eq(contasFinanceiras.empresaId, empresaId)),
     db.select({
       tipo: titulosFinanceiros.tipo,
       valor: baixasFinanceiras.valor,
       dataBaixa: baixasFinanceiras.dataBaixa,
     }).from(baixasFinanceiras)
       .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
-      .where(and(eq(baixasFinanceiras.estornada, false), lte(baixasFinanceiras.dataBaixa, fimHoje))),
+      .where(and(
+        eq(baixasFinanceiras.empresaId, empresaId),
+        eq(titulosFinanceiros.empresaId, empresaId),
+        eq(baixasFinanceiras.estornada, false),
+        lte(baixasFinanceiras.dataBaixa, fimHoje),
+      )),
     db.select({
       tipo: titulosFinanceiros.tipo,
       valorOriginal: titulosFinanceiros.valorOriginal,
@@ -1069,7 +1081,10 @@ export async function getPrevisaoSemanalCaixa(semanas = 8) {
       dataVencimento: titulosFinanceiros.dataVencimento,
       estado: titulosFinanceiros.estado,
     }).from(titulosFinanceiros)
-      .where(inArray(titulosFinanceiros.estado, ["aberto", "parcial", "vencido"])),
+      .where(and(
+        eq(titulosFinanceiros.empresaId, empresaId),
+        inArray(titulosFinanceiros.estado, ["aberto", "parcial", "vencido"]),
+      )),
   ]);
   const saldoDasContas = contas.reduce((total, conta) => total + decimalParaNumero(conta.saldoInicial), 0);
   const saldoRealizado = baixasRealizadas.reduce((total, baixa) => (
@@ -1687,6 +1702,6 @@ export async function processarRecorrenciasFinanceiras(agora = new Date(), datab
   }
 
   const alertas = await processarAlertasFinanceiros(agora, db);
-  await db.update(configuracoesFinanceiras).set({ ultimoProcessamentoEm: agora }).where(eq(configuracoesFinanceiras.id, 1));
+  await db.update(configuracoesFinanceiras).set({ ultimoProcessamentoEm: agora });
   return { titulosGerados, recorrenciasAnalisadas: recorrencias.length, ...alertas };
 }

@@ -8,6 +8,8 @@ vi.mock("../db", () => ({
   desfazerConciliacaoBancaria: vi.fn(),
   criarLancamentoDaConciliacao: vi.fn(),
   definirEstadoMovimentoBancario: vi.fn(),
+  getRelatorioFluxoCaixa: vi.fn(),
+  getPrevisaoSemanalCaixa: vi.fn(),
 }));
 
 import * as db from "../db";
@@ -40,6 +42,8 @@ describe("financeiro.conciliacao - isolamento empresarial", () => {
     vi.mocked(db.desfazerConciliacaoBancaria).mockResolvedValue({ success: true });
     vi.mocked(db.criarLancamentoDaConciliacao).mockResolvedValue({ success: true });
     vi.mocked(db.definirEstadoMovimentoBancario).mockResolvedValue({ success: true });
+    vi.mocked(db.getRelatorioFluxoCaixa).mockResolvedValue({ saldoInicial: 0, entradas: 0, saidas: 0, saldoFinal: 0, movimentacoes: [] });
+    vi.mocked(db.getPrevisaoSemanalCaixa).mockResolvedValue([]);
   });
 
   it("propaga exclusivamente a empresa ativa para todas as operações de conciliação", async () => {
@@ -63,5 +67,18 @@ describe("financeiro.conciliacao - isolamento empresarial", () => {
     expect(db.desfazerConciliacaoBancaria).toHaveBeenCalledWith(21, 2);
     expect(db.criarLancamentoDaConciliacao).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, categoriaId: 5 }), 7, 2);
     expect(db.definirEstadoMovimentoBancario).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, estado: "ignorado" }), 2);
+  });
+
+  it("usa somente a empresa ativa nos relatórios de fluxo e previsão", async () => {
+    const caller = financeiroRouter.createCaller(ctxEmpresaDois);
+
+    await caller.relatorios.fluxoCaixa({ dataInicio: "2026-08-01", dataFim: "2026-08-31" });
+    await caller.relatorios.previsaoSemanal({ semanas: 4 });
+
+    expect(db.getRelatorioFluxoCaixa).toHaveBeenCalledWith({
+      dataInicio: expect.any(Date),
+      dataFim: expect.any(Date),
+    }, 2);
+    expect(db.getPrevisaoSemanalCaixa).toHaveBeenCalledWith(4, 2);
   });
 });
