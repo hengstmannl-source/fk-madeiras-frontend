@@ -715,3 +715,11 @@
 - [x] Validar idempotência de vendas parceladas, romaneios e sincronizações sem duplicar títulos ou alterar baixas existentes
 - [x] Adicionar regressões que comprovem o núcleo financeiro como único ponto de persistência automática
 - [x] Executar auditoria global, TypeScript, suíte e build antes de publicar a centralização definitiva
+- [x] Auditar a experiência atual do RH e manter documentadas as estruturas legadas que serão preservadas fora da navegação principal
+- [x] Reorganizar o RH como Funcionários, Adiantamentos e Fechamento, removendo folha, encargos e fichas genéricas da experiência principal
+- [x] Permitir criar funcionários pela nova tela e vinculá-los imediatamente aos adiantamentos da competência selecionada
+- [x] Calcular salário informado, total de adiantamentos ativos e saldo mensal por funcionário sem encargos, impostos ou parcelamento novo
+- [x] Permitir editar ou cancelar adiantamentos antes do fechamento, bloquear excessos por padrão e preservar todo o histórico existente
+- [x] Criar a visão de fechamento e a ação explícita de envio de saldos ao Financeiro pelo motor central, sem duplicar baixas ou conciliação
+- [x] Cobrir os fluxos simplificados de funcionário, adiantamento, competência, excesso, cancelamento e fechamento com regressões
+- [x] Validar TypeScript, suíte, build e experiência de RH simplificada antes da publicação
