@@ -667,3 +667,7 @@
 - [x] Permitir informar vencimentos por dias ou por datas específicas para cada parcela
 - [x] Abrir o formulário de condição de pagamento ao clicar no cliente em Vendas Aprovadas
 - [x] Cobrir parcelamento, vencimentos e atualização da listagem com testes e validação visual
+- [x] Auditar o fluxo de sessão, cookies, autenticação, contexto e chamadas autenticadas
+- [x] Ajustar a política de cookies conforme a arquitetura de desenvolvimento e produção
+- [x] Cobrir cookies, logout, expiração e continuidade da empresa ativa com regressões
+- [x] Validar segurança da sessão, TypeScript e suíte completa sem alterar regras de negócio
