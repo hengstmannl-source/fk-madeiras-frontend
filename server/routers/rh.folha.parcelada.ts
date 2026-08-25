@@ -18,6 +18,7 @@ import {
 import { getDb } from "../db";
 import { protectedProcedure } from "../_core/trpc";
 import { calcularFolhaColaboradorRh, competenciaRh, type EventoCalculoFolhaRh } from "../rh.logic";
+import { garantirTituloFinanceiroAutomatico } from "../repositories/financeiro";
 
 const rhProcedure = protectedProcedure;
 const idSchema = z.number().int().positive();
@@ -126,18 +127,42 @@ export const folhaParcelada = {
       if (item.tituloFinanceiroId) continue;
       const colaborador = colaboradores.find((registro) => registro.id === item.colaboradorId);
       const chave = `RH-FOLHA-${folha[0].id}-${item.id}`;
-      const existente = await db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.chaveImportacao, chave)).limit(1);
-      const tituloId = existente[0]?.id ?? Number((await db.insert(titulosFinanceiros).values({ empresaId, tipo: "pagar", origem: "folha_pagamento", chaveImportacao: chave, descricao: `Salário ${competenciaFormatada} — ${colaborador?.nome ?? "Colaborador"}`, contraparteNome: colaborador?.nome ?? null, categoriaId, valorOriginal: item.salarioLiquido, dataEmissao: new Date(), dataVencimento: dataLocal(input.dataVencimento), competencia: folha[0].competencia, criadoPor: ctx.user.id }))[0].insertId);
-      if (existente[0]?.estado === "cancelado") await db.update(titulosFinanceiros).set({ estado: "aberto", canceladoEm: null, canceladoPor: null, valorOriginal: item.salarioLiquido, dataVencimento: dataLocal(input.dataVencimento) }).where(eq(titulosFinanceiros.id, tituloId));
-      await db.update(itensFolhaPagamentoRh).set({ tituloFinanceiroId: tituloId }).where(eq(itensFolhaPagamentoRh.id, item.id));
+      const titulo = await garantirTituloFinanceiroAutomatico({
+        tipo: "pagar",
+        origem: "folha_pagamento",
+        chaveIdempotencia: chave,
+        descricao: `Salário ${competenciaFormatada} — ${colaborador?.nome ?? "Colaborador"}`,
+        contraparteNome: colaborador?.nome ?? null,
+        categoriaId,
+        valorOriginal: item.salarioLiquido,
+        dataEmissao: new Date(),
+        dataVencimento: dataLocal(input.dataVencimento),
+        competencia: folha[0].competencia,
+        criadoPor: ctx.user.id,
+        database: db,
+      });
+      if (titulo.titulo?.estado === "cancelado") await db.update(titulosFinanceiros).set({ estado: "aberto", canceladoEm: null, canceladoPor: null, valorOriginal: item.salarioLiquido, dataVencimento: dataLocal(input.dataVencimento) }).where(eq(titulosFinanceiros.id, titulo.id));
+      await db.update(itensFolhaPagamentoRh).set({ tituloFinanceiroId: titulo.id }).where(eq(itensFolhaPagamentoRh.id, item.id));
     }
     const valorEncargos = itens.reduce((soma, item) => soma + numero(item.fgts) + numero(item.inss) + numero(item.irrf), 0);
     let tituloEncargosId: number | null = null;
     if (valorEncargos > 0) {
       const chave = `RH-ENCARGOS-${folha[0].id}`;
-      const existente = await db.select().from(titulosFinanceiros).where(eq(titulosFinanceiros.chaveImportacao, chave)).limit(1);
-      tituloEncargosId = existente[0]?.id ?? Number((await db.insert(titulosFinanceiros).values({ empresaId, tipo: "pagar", origem: "folha_pagamento", chaveImportacao: chave, descricao: `Encargos da folha ${competenciaFormatada} — FGTS, INSS e IRRF`, categoriaId, valorOriginal: decimal(valorEncargos), dataEmissao: new Date(), dataVencimento: dataLocal(input.dataVencimento), competencia: folha[0].competencia, criadoPor: ctx.user.id }))[0].insertId);
-      if (existente[0]?.estado === "cancelado") await db.update(titulosFinanceiros).set({ estado: "aberto", canceladoEm: null, canceladoPor: null, valorOriginal: decimal(valorEncargos), dataVencimento: dataLocal(input.dataVencimento) }).where(eq(titulosFinanceiros.id, tituloEncargosId));
+      const titulo = await garantirTituloFinanceiroAutomatico({
+        tipo: "pagar",
+        origem: "folha_pagamento",
+        chaveIdempotencia: chave,
+        descricao: `Encargos da folha ${competenciaFormatada} — FGTS, INSS e IRRF`,
+        categoriaId,
+        valorOriginal: decimal(valorEncargos),
+        dataEmissao: new Date(),
+        dataVencimento: dataLocal(input.dataVencimento),
+        competencia: folha[0].competencia,
+        criadoPor: ctx.user.id,
+        database: db,
+      });
+      tituloEncargosId = titulo.id;
+      if (titulo.titulo?.estado === "cancelado") await db.update(titulosFinanceiros).set({ estado: "aberto", canceladoEm: null, canceladoPor: null, valorOriginal: decimal(valorEncargos), dataVencimento: dataLocal(input.dataVencimento) }).where(eq(titulosFinanceiros.id, titulo.id));
     }
     const adiantamentos = await db.select().from(adiantamentosRh).where(and(eq(adiantamentosRh.empresaId, empresaId), eq(adiantamentosRh.estado, "aberto")));
     const planos = await planosDosAdiantamentos(db, empresaId, adiantamentos.map((adiantamento) => adiantamento.id));

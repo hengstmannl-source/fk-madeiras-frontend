@@ -29,7 +29,7 @@ import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
 import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
-import { getOrCreateCategoriaCustoMateriaPrima } from "./financeiro";
+import { garantirTituloFinanceiroAutomatico, getOrCreateCategoriaCustoMateriaPrima } from "./financeiro";
 import { formatarNumeroDocumentoPadronizado, reservarProximoNumeroDocumento } from "./documentos";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
@@ -498,24 +498,12 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
     await tx.update(romaneiosCargaToras).set({ tituloFinanceiroId: existente.id }).where(eq(romaneiosCargaToras.id, data.romaneioId));
     return { id: existente.id, atualizado: true };
   }
-  const resultado = await tx.insert(titulosFinanceiros).values({
+  const { id: tituloFinanceiroId } = await garantirTituloFinanceiroAutomatico({
     ...valores,
-    chaveImportacao: null,
-    clienteId: null,
-    orcamentoId: null,
-    recorrenciaId: null,
-    grupoParcelamento: null,
-    numeroParcela: null,
-    totalParcelas: null,
-    desconto: "0",
-    juros: "0",
-    valorBaixado: "0",
-    canceladoEm: null,
-    canceladoPor: null,
+    chaveIdempotencia: `FIN-ROMANEIO-CARGA-${data.romaneioId}`,
     criadoPor: data.criadoPor,
-    empresaId: data.empresaId,
+    database: tx,
   });
-  const tituloFinanceiroId = getInsertedId(resultado as MysqlInsertResult);
   await tx.update(romaneiosCargaToras).set({ tituloFinanceiroId }).where(eq(romaneiosCargaToras.id, data.romaneioId));
   return { id: tituloFinanceiroId, atualizado: false };
 }

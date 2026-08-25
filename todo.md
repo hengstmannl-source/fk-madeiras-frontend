@@ -702,3 +702,10 @@
 - [x] Atualizar testes de sessão, permissões, produção, vendas, estoque e financeiro para o modelo single-tenant
 - [x] Validar migration, TypeScript, suíte, build e fluxos principais antes da publicação
 - [x] Avaliar perfis diretos ausentes e preservar a negação de acesso dos usuários sem vínculo empresarial ativo, sem elevar permissões automaticamente
+- [x] Mapear todas as criações e sincronizações atuais de títulos financeiros, suas origens e chamadas duplicadas
+- [x] Criar o motor financeiro central tipado para títulos automáticos com validação, origem, parcelas e idempotência
+- [x] Inventariar duplicidades existentes e aplicar uma proteção de banco compatível antes de depender de idempotência na aplicação
+- [x] Migrar os fluxos de orçamento, romaneio de entrada, diesel, folha, serragem e recorrências para o motor central sem alterar cálculos de negócio
+- [x] Remover criações diretas duplicadas de títulos em routers e módulos operacionais preservando edições e sincronizações permitidas
+- [x] Criar regressões de idempotência, parcelamento e origem para os títulos financeiros automáticos
+- [x] Validar TypeScript, testes, build e fluxos financeiros antes de publicar a primeira etapa

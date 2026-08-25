@@ -42,7 +42,7 @@ type AtualizacaoCabecalhoProducao = Partial<typeof romaneiosProducao.$inferInser
 
 // ─── Financeiro ───
 export type TipoTituloFinanceiro = "receber" | "pagar";
-export type OrigemTituloFinanceiro = "orcamento" | "romaneio_carga" | "manual" | "recorrencia";
+export type OrigemTituloFinanceiro = "orcamento" | "romaneio_carga" | "nota_diesel" | "serragem_terceiros" | "folha_pagamento" | "manual" | "recorrencia";
 
 export type CriarTituloFinanceiroInput = {
   tipo: TipoTituloFinanceiro;
@@ -55,7 +55,8 @@ export type CriarTituloFinanceiroInput = {
   dataVencimento: Date;
   competencia?: Date | null;
   criadoPor: number;
-  empresaId: number;
+  /** @deprecated O escopo é obtido da configuração empresarial única. */
+  empresaId?: number;
   clienteId?: number | null;
   fornecedorId?: number | null;
   contraparteNome?: string | null;
@@ -67,6 +68,15 @@ export type CriarTituloFinanceiroInput = {
   desconto?: string;
   juros?: string;
   observacoes?: string | null;
+};
+
+export type GarantirTituloAutomaticoInput = Omit<CriarTituloFinanceiroInput, "empresaId" | "chaveImportacao"> & {
+  origem: Exclude<OrigemTituloFinanceiro, "manual">;
+  chaveIdempotencia: string;
+  romaneioCargaId?: number | null;
+  notaDieselId?: number | null;
+  serragemTerceirosId?: number | null;
+  database?: DatabaseConnection | any;
 };
 
 export async function listFornecedores() {
@@ -395,6 +405,7 @@ criadoPor: userId,
 }
 
 export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) {
+  const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (!input.descricao.trim()) throw new Error("Informe uma descrição para o lançamento");
@@ -423,10 +434,78 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
     estado: calcularEstadoTitulo({ valorOriginal: input.valorOriginal, dataVencimento: input.dataVencimento }),
     observacoes: input.observacoes ?? null,
     criadoPor: input.criadoPor,
-    empresaId: input.empresaId,
+    empresaId,
   };
   const result = await db.insert(titulosFinanceiros).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
+}
+
+/**
+ * Garante um título originado por um evento de negócio. A chave é única no banco,
+ * portanto tentativas repetidas — inclusive concorrentes — devolvem o mesmo título.
+ * O helper não altera títulos existentes, preservando baixas, conciliações e edições
+ * financeiras já realizadas.
+ */
+export async function garantirTituloFinanceiroAutomatico(input: GarantirTituloAutomaticoInput) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = input.database ?? await getDb();
+  if (!db) throw new Error("Database not available");
+  const chaveImportacao = input.chaveIdempotencia.trim();
+  if (!chaveImportacao) throw new Error("Informe a chave de idempotência do título automático");
+  if (!input.descricao.trim()) throw new Error("Informe uma descrição para o lançamento");
+  if (decimalParaNumero(input.valorOriginal) <= 0) throw new Error("O valor do título deve ser maior que zero");
+
+  const existente = (await db.select().from(titulosFinanceiros)
+    .where(eq(titulosFinanceiros.chaveImportacao, chaveImportacao)).limit(1))[0];
+  if (existente) {
+    if (existente.origem !== input.origem) {
+      throw new Error("A chave de idempotência já está associada a outra origem financeira");
+    }
+    return { id: existente.id, criado: false, titulo: existente };
+  }
+
+  const data: InsertTituloFinanceiro = {
+    empresaId,
+    tipo: input.tipo,
+    origem: input.origem,
+    chaveImportacao,
+    descricao: input.descricao.trim(),
+    clienteId: input.clienteId ?? null,
+    fornecedorId: input.fornecedorId ?? null,
+    contraparteNome: input.contraparteNome ?? null,
+    orcamentoId: input.orcamentoId ?? null,
+    romaneioCargaId: input.romaneioCargaId ?? null,
+    notaDieselId: input.notaDieselId ?? null,
+    serragemTerceirosId: input.serragemTerceirosId ?? null,
+    categoriaId: input.categoriaId,
+    recorrenciaId: input.recorrenciaId ?? null,
+    grupoParcelamento: input.grupoParcelamento ?? null,
+    numeroParcela: input.numeroParcela ?? null,
+    totalParcelas: input.totalParcelas ?? null,
+    valorOriginal: input.valorOriginal,
+    desconto: input.desconto ?? "0",
+    juros: input.juros ?? "0",
+    valorBaixado: "0",
+    dataEmissao: input.dataEmissao,
+    dataVencimento: input.dataVencimento,
+    competencia: input.competencia ?? null,
+    estado: calcularEstadoTitulo({ valorOriginal: input.valorOriginal, dataVencimento: input.dataVencimento }),
+    observacoes: input.observacoes ?? null,
+    criadoPor: input.criadoPor,
+  };
+
+  try {
+    const result = await db.insert(titulosFinanceiros).values(data);
+    const id = getInsertedId(result as MysqlInsertResult);
+    const titulo = (await db.select().from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.id, id), eq(titulosFinanceiros.empresaId, empresaId))).limit(1))[0];
+    return { id, criado: true, titulo };
+  } catch (error) {
+    const concorrente = (await db.select().from(titulosFinanceiros)
+      .where(eq(titulosFinanceiros.chaveImportacao, chaveImportacao)).limit(1))[0];
+    if (concorrente?.origem === input.origem) return { id: concorrente.id, criado: false, titulo: concorrente };
+    throw error;
+  }
 }
 
 export async function getTituloFinanceiroById(id: number) {
@@ -1409,9 +1488,10 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
     )).limit(1);
   if (existente[0]) return existente[0];
   const categoriaId = await getOrCreateCategoriaReceitaVendas(userId);
-  const criacao = await createTituloFinanceiro({
+  const criacao = await garantirTituloFinanceiroAutomatico({
     tipo: "receber",
     origem: "orcamento",
+    chaveIdempotencia: `FIN-ORCAMENTO-${orcamentoId}-PARCELA-1`,
     descricao: `Venda ${orcamento.numero}`,
     clienteId: orcamento.clienteId,
     orcamentoId,
@@ -1421,7 +1501,6 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
     dataVencimento: orcamento.dataVencimento ?? dataVencimento ?? new Date(),
     competencia: orcamento.competencia,
     criadoPor: userId,
-    empresaId: orcamento.empresaId,
   });
   return getTituloFinanceiroById(criacao.id);
 }
@@ -1477,9 +1556,9 @@ export async function configurarCondicaoPagamentoVenda(
 
     const valoresParcelas = calcularParcelas(orcamento.total, parcelas.length);
     const grupoParcelamento = `VND-${orcamentoId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const novasParcelas: InsertTituloFinanceiro[] = parcelas.map((parcela, indice) => ({
-      tipo: "receber",
-      origem: "orcamento",
+    const novasParcelas = parcelas.map((parcela, indice) => ({
+      tipo: "receber" as const,
+      origem: "orcamento" as const,
       descricao: `Venda ${orcamento.numero ?? orcamentoId} · Parcela ${indice + 1}/${parcelas.length}`,
       clienteId: orcamento.clienteId,
       fornecedorId: null,
@@ -1500,9 +1579,12 @@ export async function configurarCondicaoPagamentoVenda(
       estado: calcularEstadoTitulo({ valorOriginal: valoresParcelas[indice], dataVencimento: parcela.dataVencimento }),
       observacoes: `Condição de pagamento da venda ${orcamento.numero ?? orcamentoId}`,
       criadoPor: userId,
-      empresaId,
     }));
-    await tx.insert(titulosFinanceiros).values(novasParcelas);
+    await Promise.all(novasParcelas.map((parcela, indice) => garantirTituloFinanceiroAutomatico({
+      ...parcela,
+      chaveIdempotencia: `FIN-ORCAMENTO-${orcamentoId}-${grupoParcelamento}-PARCELA-${indice + 1}`,
+      database: tx,
+    })));
     const parcelasCriadas = await tx.select({
       id: titulosFinanceiros.id,
       numeroParcela: titulosFinanceiros.numeroParcela,
@@ -1706,29 +1788,25 @@ export async function processarRecorrenciasFinanceiras(agora = new Date(), datab
     let vencimento = new Date(recorrencia.proximoVencimento);
     const fim = recorrencia.dataFim ? new Date(recorrencia.dataFim) : null;
     while (vencimento <= agora && (!fim || vencimento <= fim)) {
-      const existentes = await db.select().from(titulosFinanceiros).where(and(
-        eq(titulosFinanceiros.recorrenciaId, recorrencia.id),
-        eq(titulosFinanceiros.dataVencimento, vencimento),
-      )).limit(1);
-      if (!existentes[0]) {
-        await createTituloFinanceiro({
-          tipo: recorrencia.tipo,
-          origem: "recorrencia",
-          descricao: recorrencia.descricao,
-          clienteId: recorrencia.clienteId,
-          fornecedorId: recorrencia.fornecedorId,
-          contraparteNome: recorrencia.contraparteNome,
-          categoriaId: recorrencia.categoriaId,
-          recorrenciaId: recorrencia.id,
-          valorOriginal: recorrencia.valor,
-          dataEmissao: vencimento,
-          dataVencimento: vencimento,
-          observacoes: recorrencia.observacoes,
-          criadoPor: recorrencia.criadoPor,
-          empresaId: recorrencia.empresaId,
-        });
-        titulosGerados += 1;
-      }
+      const chaveIdempotencia = `FIN-RECORRENCIA-${recorrencia.id}-${vencimento.toISOString().slice(0, 10)}`;
+      const resultado = await garantirTituloFinanceiroAutomatico({
+        tipo: recorrencia.tipo,
+        origem: "recorrencia",
+        chaveIdempotencia,
+        descricao: recorrencia.descricao,
+        clienteId: recorrencia.clienteId,
+        fornecedorId: recorrencia.fornecedorId,
+        contraparteNome: recorrencia.contraparteNome,
+        categoriaId: recorrencia.categoriaId,
+        recorrenciaId: recorrencia.id,
+        valorOriginal: recorrencia.valor,
+        dataEmissao: vencimento,
+        dataVencimento: vencimento,
+        observacoes: recorrencia.observacoes,
+        criadoPor: recorrencia.criadoPor,
+        database: db,
+      });
+      if (resultado.criado) titulosGerados += 1;
       vencimento = proximoVencimento(vencimento, recorrencia.frequencia);
     }
     if (vencimento.getTime() !== new Date(recorrencia.proximoVencimento).getTime()) {

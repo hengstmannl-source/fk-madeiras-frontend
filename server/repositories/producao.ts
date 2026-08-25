@@ -30,6 +30,7 @@ import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { prepararIdentificacaoPlaqueta } from "./estoque";
+import { garantirTituloFinanceiroAutomatico } from "./financeiro";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
 type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -276,14 +277,16 @@ export async function criarSerragemTerceiros(data: {
       await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: item.quantidade, motivo: `Serragem de terceiros ${numero} — propriedade de ${cliente.nome}`, criadoPor: data.criadoPor });
     }
     const categoriaId = await getOrCreateCategoriaReceitaSerragem(tx, data.empresaId, data.criadoPor);
-    const titulo = await tx.insert(titulosFinanceiros).values({
-      empresaId: data.empresaId, tipo: "receber", origem: "serragem_terceiros", chaveImportacao: null, descricao: `Serviço de serragem — ${numero}`,
-      clienteId: data.clienteId, fornecedorId: null, contraparteNome: cliente.nome, orcamentoId: null, romaneioCargaId: null, notaDieselId: null, serragemTerceirosId: serragemId,
-      categoriaId, recorrenciaId: null, grupoParcelamento: null, numeroParcela: null, totalParcelas: null, valorOriginal: valorServico.toFixed(2), desconto: "0", juros: "0", valorBaixado: "0",
-      dataEmissao: data.dataProducao, dataVencimento: data.dataVencimento, competencia: data.dataProducao, estado: calcularEstadoTitulo({ valorOriginal: valorServico.toFixed(2), dataVencimento: data.dataVencimento }),
-      observacoes: "Cobrança referente exclusivamente ao serviço de serragem; as peças permanecem de propriedade do cliente.", canceladoEm: null, canceladoPor: null, criadoPor: data.criadoPor,
+    const { id: tituloFinanceiroId } = await garantirTituloFinanceiroAutomatico({
+      tipo: "receber", origem: "serragem_terceiros", chaveIdempotencia: `FIN-SERRAGEM-TERCEIROS-${serragemId}`,
+      descricao: `Serviço de serragem — ${numero}`,
+      clienteId: data.clienteId, contraparteNome: cliente.nome, serragemTerceirosId: serragemId,
+      categoriaId, valorOriginal: valorServico.toFixed(2),
+      dataEmissao: data.dataProducao, dataVencimento: data.dataVencimento, competencia: data.dataProducao,
+      observacoes: "Cobrança referente exclusivamente ao serviço de serragem; as peças permanecem de propriedade do cliente.", criadoPor: data.criadoPor,
+      database: tx,
     });
-    return { id: serragemId, numero, tituloFinanceiroId: getInsertedId(titulo as MysqlInsertResult), ...calculo };
+    return { id: serragemId, numero, tituloFinanceiroId, ...calculo };
   });
 }
 

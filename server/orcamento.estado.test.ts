@@ -173,6 +173,7 @@ describe("mudança de estado de orçamento", () => {
             selecao += 1;
             if (selecao === 1) return { limit: async () => [{ id: 150001, estado: "aprovado", pago: false, total: "1000.00", numero: "VND-000123", clienteId: 11, competencia: new Date("2030-01-01T12:00:00") }] };
             if (selecao === 2) return [{ id: 101, estado: "aberto", valorBaixado: "0" }];
+            if (selecao <= 8) return { limit: async () => [] };
             return { orderBy: async () => parcelasCriadas };
           },
         }),
@@ -189,9 +190,10 @@ describe("mudança de estado de orçamento", () => {
     ], 9, { database, obterCategoriaReceita: async () => 70 });
 
     expect(atualizacoes[0]).toMatchObject({ estado: "cancelado", canceladoPor: 9 });
-    expect(insercoes[0]).toHaveLength(3);
-    expect(insercoes[0].map((parcela: any) => parcela.valorOriginal)).toEqual(["333.34", "333.33", "333.33"]);
-    expect(insercoes[0].map((parcela: any) => [parcela.numeroParcela, parcela.totalParcelas])).toEqual([[1, 3], [2, 3], [3, 3]]);
+    const insercoesParcelas = insercoes.filter((titulo) => titulo.numeroParcela != null);
+    expect(insercoesParcelas).toHaveLength(3);
+    expect(insercoesParcelas.map((parcela: any) => parcela.valorOriginal)).toEqual(["333.34", "333.33", "333.33"]);
+    expect(insercoesParcelas.map((parcela: any) => [parcela.numeroParcela, parcela.totalParcelas])).toEqual([[1, 3], [2, 3], [3, 3]]);
     expect(resultado.parcelas.map((parcela) => parcela.id)).toEqual([201, 202, 203]);
   });
 

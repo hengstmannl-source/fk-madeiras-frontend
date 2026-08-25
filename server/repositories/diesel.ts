@@ -29,6 +29,7 @@ import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
 import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
+import { garantirTituloFinanceiroAutomatico } from "./financeiro";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
 type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -110,37 +111,24 @@ export async function criarNotaDiesel(data: {
     });
     const notaDieselId = getInsertedId(notaResultado as MysqlInsertResult);
     const categoriaId = await getOrCreateCategoriaPagamentoDiesel(tx, data.criadoPor);
-    const tituloResultado = await tx.insert(titulosFinanceiros).values({
-      empresaId: data.empresaId,
+    const { id: tituloFinanceiroId } = await garantirTituloFinanceiroAutomatico({
       tipo: "pagar",
       origem: "nota_diesel",
-      chaveImportacao: null,
+      chaveIdempotencia: `FIN-NOTA-DIESEL-${notaDieselId}`,
       descricao: `Pagamento de diesel${data.numeroNota?.trim() ? ` — Nota ${data.numeroNota.trim()}` : ""}`,
-      clienteId: null,
       fornecedorId: data.fornecedorId,
       contraparteNome: fornecedor.nome,
-      orcamentoId: null,
-      romaneioCargaId: null,
       notaDieselId,
       categoriaId,
-      recorrenciaId: null,
-      grupoParcelamento: null,
-      numeroParcela: null,
-      totalParcelas: null,
       valorOriginal: valorTotal.toFixed(2),
-      desconto: "0",
-      juros: "0",
-      valorBaixado: "0",
       dataEmissao: data.dataNota,
       dataVencimento: data.dataVencimento,
       competencia: data.dataNota,
-      estado: calcularEstadoTitulo({ valorOriginal: valorTotal.toFixed(2), dataVencimento: data.dataVencimento }),
       observacoes: ["Lembrete financeiro vinculado à nota de diesel.", data.observacoes?.trim()].filter(Boolean).join("\n") || null,
-      canceladoEm: null,
-      canceladoPor: null,
       criadoPor: data.criadoPor,
+      database: tx,
     });
-    return { id: notaDieselId, tituloFinanceiroId: getInsertedId(tituloResultado as MysqlInsertResult) };
+    return { id: notaDieselId, tituloFinanceiroId };
   });
 }
 
