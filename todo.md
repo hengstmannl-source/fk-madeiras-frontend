@@ -774,3 +774,5 @@
 - [x] Construir resumos, listas priorizadas, aging e detalhe do título com trilha de baixas e auditoria
 - [x] Cobrir totais, filtros, aging, parcialidade, cancelamentos, prioridade, ordenação e acesso com regressões
 - [x] Validar dados, TypeScript, suíte, build, auditoria e interface da Etapa 5 antes de publicar
+- [x] Reorganizar o cabeçalho do Fluxo de Caixa para alinhar título, filtros e atalhos de período
+- [x] Validar visualmente em desktop e mobile, testar e publicar o ajuste do cabeçalho do Fluxo de Caixa
