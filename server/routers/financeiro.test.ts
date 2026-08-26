@@ -54,3 +54,33 @@ describe("contrato do Caixa Cheque", () => {
     expect(() => ContaSchema.parse({ nome: "Conta inválida", tipo: "credito" })).toThrow();
   });
 });
+
+describe("contrato de edição cadastral de contas bancárias", () => {
+  const contaBancaria = {
+    nome: "Banco Principal",
+    tipo: "banco" as const,
+    saldoInicial: "1250,00",
+    banco: "Banco do Brasil",
+    agencia: "1234-5",
+    numeroConta: "98765-4",
+    dataInicio: "2026-01-02",
+    observacoes: "Conta operacional",
+  };
+
+  it("aceita dados cadastrais bancários editáveis", () => {
+    expect(ContaSchema.parse(contaBancaria)).toMatchObject({
+      banco: "Banco do Brasil",
+      agencia: "1234-5",
+      numeroConta: "98765-4",
+      dataInicio: "2026-01-02",
+    });
+  });
+
+  it("descarta campos financeiros imutáveis da edição cadastral", () => {
+    const entradaInsegura = { ...contaBancaria, saldoAtual: "9999,99", valorBaixado: "80,00" };
+    const resultado = ContaSchema.parse(entradaInsegura);
+    expect(resultado).not.toHaveProperty("saldoAtual");
+    expect(resultado).not.toHaveProperty("valorBaixado");
+    expect(resultado.saldoInicial).toBe("1250,00");
+  });
+});

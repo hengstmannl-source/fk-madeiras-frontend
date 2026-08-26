@@ -730,3 +730,8 @@
 - [x] Assegurar que estorno apenas reverta baixas válidas e recalcule título, saldo e estado de forma idempotente
 - [x] Criar regressões para baixa total, parcial, múltiplas baixas, estorno, juros, descontos, cancelado, vencido e excesso de saldo
 - [x] Auditar dados e validações concorrentes antes de qualquer nova constraint e validar TypeScript, suíte e build antes de publicar
+- [x] Auditar campos, vínculos e bloqueios atuais das contas bancárias para preservar saldos, baixas e conciliações
+- [x] Permitir editar nome, banco, agência, conta e data de início da conta bancária pelo Financeiro
+- [x] Validar dados cadastrais e manter o histórico financeiro imutável durante a edição da conta
+- [x] Cobrir edição de conta bancária e preservação de movimentações com testes de regressão
+- [x] Validar TypeScript, suíte, build e interface da edição de contas bancárias antes de publicar

@@ -66,6 +66,17 @@ const valorInicialRecorrencia = () => ({
   observacoes: "",
 });
 
+const valorInicialConta = () => ({
+  nome: "",
+  tipo: "caixa" as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro",
+  banco: "",
+  agencia: "",
+  numeroConta: "",
+  dataInicio: "",
+  saldoInicial: "0",
+  observacoes: "",
+});
+
 const estadoLabels: Record<string, string> = {
   aberto: "Aberto", parcial: "Parcial", quitado: "Quitado", vencido: "Vencido", cancelado: "Cancelado",
 };
@@ -140,6 +151,7 @@ export default function FinanceiroPage() {
   const [fornecedorEditando, setFornecedorEditando] = useState<FornecedorFinanceiro | null>(null);
   const [categoriaAberta, setCategoriaAberta] = useState(false);
   const [contaAberta, setContaAberta] = useState(false);
+  const [contaEditando, setContaEditando] = useState<ContaFinanceira | null>(null);
   const [clienteAberto, setClienteAberto] = useState(false);
   const [contextoCriacao, setContextoCriacao] = useState<{ entidade: EntidadeContextual; destino: DestinoContextual } | null>(null);
   const [indiceChequeCliente, setIndiceChequeCliente] = useState<number | null>(null);
@@ -192,7 +204,7 @@ export default function FinanceiroPage() {
   const [chequesSelecionados, setChequesSelecionados] = useState<number[]>([]);
   const [fornecedor, setFornecedor] = useState({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" });
   const [categoria, setCategoria] = useState({ nome: "", tipo: "ambos" as "receita" | "despesa" | "ambos" });
-  const [conta, setConta] = useState({ nome: "", tipo: "caixa" as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro", saldoInicial: "0", observacoes: "" });
+  const [conta, setConta] = useState(valorInicialConta);
   const [cliente, setCliente] = useState({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" });
   const [recorrencia, setRecorrencia] = useState(valorInicialRecorrencia);
   const tipoConsulta = new URLSearchParams(search).get("tipo");
@@ -254,6 +266,7 @@ export default function FinanceiroPage() {
   const atualizarFornecedor = trpc.financeiro.fornecedores.update.useMutation();
   const criarCategoria = trpc.financeiro.categorias.create.useMutation();
   const criarConta = trpc.financeiro.contas.create.useMutation();
+  const atualizarConta = trpc.financeiro.contas.update.useMutation();
   const excluirConta = trpc.financeiro.contas.delete.useMutation();
   const criarCliente = trpc.cliente.create.useMutation();
   const criarRecorrencia = trpc.financeiro.recorrencias.create.useMutation();
@@ -397,7 +410,7 @@ export default function FinanceiroPage() {
     setContextoCriacao({ entidade, destino });
     if (entidade === "fornecedor") { setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); setFornecedorAberto(true); }
     if (entidade === "categoria") { setCategoria({ nome: "", tipo: destino === "lancamento" ? (lancamento.tipo === "receber" ? "receita" : "despesa") : (recorrencia.tipo === "receber" ? "receita" : "despesa") }); setCategoriaAberta(true); }
-    if (entidade === "conta") { setConta({ nome: "", tipo: "caixa", saldoInicial: "0", observacoes: "" }); setContaAberta(true); }
+    if (entidade === "conta") { setContaEditando(null); setConta(valorInicialConta()); setContaAberta(true); }
     if (entidade === "cliente") { setCliente({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" }); setClienteAberto(true); }
   };
 
@@ -743,10 +756,56 @@ export default function FinanceiroPage() {
     onError: (erro) => toast.error(erro.message),
   });
 
-  const salvarConta = () => criarConta.mutate({ ...conta, observacoes: conta.observacoes || null }, {
-    onSuccess: (criada) => { toast.success("Conta financeira cadastrada"); utils.financeiro.contas.list.invalidate(); selecionarEntidadeCriada("conta", criada.id); setContaAberta(false); setConta({ nome: "", tipo: "caixa", saldoInicial: "0", observacoes: "" }); },
-    onError: (erro) => toast.error(erro.message),
+  const dadosConta = () => ({
+    ...conta,
+    banco: conta.banco.trim() || null,
+    agencia: conta.agencia.trim() || null,
+    numeroConta: conta.numeroConta.trim() || null,
+    dataInicio: conta.dataInicio || null,
+    observacoes: conta.observacoes || null,
   });
+
+  const fecharDialogoConta = () => {
+    setContaAberta(false);
+    setContaEditando(null);
+    setConta(valorInicialConta());
+  };
+
+  const abrirNovaConta = () => {
+    setContaEditando(null);
+    setConta(valorInicialConta());
+    setContaAberta(true);
+  };
+
+  const abrirEdicaoConta = (item: ContaFinanceira) => {
+    setContaEditando(item);
+    setConta({
+      nome: item.nome ?? "",
+      tipo: item.tipo,
+      banco: item.banco ?? "",
+      agencia: item.agencia ?? "",
+      numeroConta: item.numeroConta ?? "",
+      dataInicio: dataChaveFinanceira(item.dataInicio),
+      saldoInicial: String(item.saldoInicial ?? "0"),
+      observacoes: item.observacoes ?? "",
+    });
+    setContaAberta(true);
+  };
+
+  const salvarConta = () => {
+    const dados = dadosConta();
+    if (contaEditando) {
+      atualizarConta.mutate({ id: contaEditando.id, ...dados }, {
+        onSuccess: () => { toast.success("Dados da conta atualizados"); utils.financeiro.contas.list.invalidate(); fecharDialogoConta(); },
+        onError: (erro) => toast.error(erro.message),
+      });
+      return;
+    }
+    criarConta.mutate(dados, {
+      onSuccess: (criada) => { toast.success("Conta financeira cadastrada"); utils.financeiro.contas.list.invalidate(); selecionarEntidadeCriada("conta", criada.id); fecharDialogoConta(); },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
 
   const salvarCliente = () => criarCliente.mutate({ ...cliente, contacto: cliente.contacto || undefined, email: cliente.email || undefined, morada: cliente.morada || undefined, nif: cliente.nif || undefined, observacoes: cliente.observacoes || undefined }, {
     onSuccess: (criado) => { toast.success("Cliente cadastrado"); utils.cliente.list.invalidate(); selecionarEntidadeCriada("cliente", criado.id!); setClienteAberto(false); setCliente({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" }); },
@@ -854,7 +913,7 @@ export default function FinanceiroPage() {
 
       {aba === "fornecedores" && <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><Building2 className="h-5 w-5" /></div><div><h2 className="font-semibold">Fornecedores</h2><p className="mt-0.5 text-xs text-muted-foreground">Cadastre, importe e mantenha atualizados os fornecedores utilizados em contas a pagar.</p></div></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={() => setImportacaoFornecedoresAberta(true)}><Upload className="mr-1.5 h-3.5 w-3.5" />Importar planilha</Button><Button size="sm" onClick={() => { setFornecedorEditando(null); setFornecedor({ nome: "", contacto: "", email: "", documento: "", endereco: "", observacoes: "" }); setFornecedorAberto(true); }}><Plus className="mr-1.5 h-3.5 w-3.5" />Novo fornecedor</Button></div></div>{fornecedores.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Fornecedor</TableHead><TableHead>Contato</TableHead><TableHead>E-mail</TableHead><TableHead>Documento</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{fornecedores.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.nome}</TableCell><TableCell>{item.contacto || "—"}</TableCell><TableCell>{item.email || "—"}</TableCell><TableCell>{item.documento || "—"}</TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" onClick={() => abrirEdicaoFornecedor(item)}><Pencil className="mr-1.5 h-3.5 w-3.5" />Editar</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EstadoVazio icon={<Building2 className="h-8 w-8" />} texto="Nenhum fornecedor cadastrado" acao={() => { setFornecedorEditando(null); setFornecedorAberto(true); }} labelAcao="Novo fornecedor" />}</section>}
       {aba === "categorias" && <CadastroTabela titulo="Categorias financeiras" descricao="Classifique receitas e despesas para os relatórios financeiros." icone={<Tags className="h-5 w-5" />} botao="Nova categoria" aoCriar={() => setCategoriaAberta(true)} colunas={["Categoria", "Aplicação"]} linhas={(categorias.data ?? []).map((item: any) => [item.nome, item.tipo === "ambos" ? "Receita e despesa" : item.tipo === "receita" ? "Receita" : "Despesa"])} vazio="Nenhuma categoria cadastrada" />}
-      {aba === "contas" && <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><Landmark className="h-5 w-5" /></div><div><h2 className="font-semibold">Contas financeiras</h2><p className="mt-0.5 text-xs text-muted-foreground">Defina onde os valores entram e saem: caixa, bancos e carteiras.</p></div></div><Button size="sm" onClick={() => setContaAberta(true)}><Plus className="mr-1.5 h-3.5 w-3.5" />Nova conta</Button></div>{contas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Conta</TableHead><TableHead>Tipo</TableHead><TableHead className="text-right">Saldo inicial</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{contas.data.map((item: any) => <TableRow key={item.id}><TableCell className="font-medium">{item.nome}</TableCell><TableCell className="capitalize">{item.tipo.replace("_", " ")}</TableCell><TableCell className="text-right">{formatCurrency(item.saldoInicial)}</TableCell><TableCell className="text-right"><Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setContaParaExcluir(item)}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Excluir</Button></TableCell></TableRow>)}</TableBody></Table></div> : <EstadoVazio icon={<Landmark className="h-8 w-8" />} texto="Nenhuma conta financeira cadastrada" acao={() => setContaAberta(true)} labelAcao="Nova conta" />}</section>}
+      {aba === "contas" && <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm"><div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-3"><div className="rounded-lg bg-primary/10 p-2 text-primary"><Landmark className="h-5 w-5" /></div><div><h2 className="font-semibold">Contas financeiras</h2><p className="mt-0.5 text-xs text-muted-foreground">Defina onde os valores entram e saem: caixa, bancos e carteiras.</p></div></div><Button size="sm" onClick={abrirNovaConta}><Plus className="mr-1.5 h-3.5 w-3.5" />Nova conta</Button></div>{contas.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Conta</TableHead><TableHead>Tipo</TableHead><TableHead>Dados bancários</TableHead><TableHead className="text-right">Saldo inicial</TableHead><TableHead className="text-right">Ações</TableHead></TableRow></TableHeader><TableBody>{contas.data.map((item: any) => <TableRow key={item.id}><TableCell><p className="font-medium">{item.nome}</p>{item.dataInicio && <p className="mt-0.5 text-xs text-muted-foreground">Desde {formatarDataFinanceira(item.dataInicio)}</p>}</TableCell><TableCell className="capitalize">{item.tipo.replace("_", " ")}</TableCell><TableCell className="text-sm text-muted-foreground">{item.banco || item.agencia || item.numeroConta ? <><p>{item.banco || "Banco não informado"}</p><p className="text-xs">{[item.agencia && `Ag. ${item.agencia}`, item.numeroConta && `C/C ${item.numeroConta}`].filter(Boolean).join(" · ")}</p></> : "—"}</TableCell><TableCell className="text-right">{formatCurrency(item.saldoInicial)}</TableCell><TableCell className="text-right"><div className="flex justify-end gap-1"><Button size="sm" variant="ghost" onClick={() => abrirEdicaoConta(item)}><Pencil className="mr-1.5 h-3.5 w-3.5" />Editar</Button><Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => setContaParaExcluir(item)}><Trash2 className="mr-1.5 h-3.5 w-3.5" />Excluir</Button></div></TableCell></TableRow>)}</TableBody></Table></div> : <EstadoVazio icon={<Landmark className="h-8 w-8" />} texto="Nenhuma conta financeira cadastrada" acao={abrirNovaConta} labelAcao="Nova conta" />}</section>}
 
       <Dialog open={importacaoAberta} onOpenChange={(aberto) => { setImportacaoAberta(aberto); if (!aberto) { setArquivoImportacao(null); setErrosImportacao([]); } }}><DialogContent className="max-w-xl"><DialogHeader><DialogTitle>Importar lançamentos financeiros</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Importação segura por CSV</p><p className="mt-1 text-sky-900">Use o modelo disponibilizado. O sistema valida todo o arquivo antes de gravar: se houver alguma linha inválida ou referência duplicada, nenhum lançamento será criado.</p></div><div className="space-y-2"><Label htmlFor="arquivo-importacao">Arquivo CSV *</Label><Input id="arquivo-importacao" aria-label="Arquivo CSV para importação" type="file" accept=".csv,text/csv" onChange={(evento) => { setArquivoImportacao(evento.target.files?.[0] ?? null); setErrosImportacao([]); }} /><p className="text-xs text-muted-foreground">Limite de 1.000 lançamentos e 1 MB por arquivo.</p></div>{arquivoImportacao && <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="truncate">{arquivoImportacao.name}</span></div>}{errosImportacao.length > 0 && <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><p className="font-medium">O arquivo não foi importado:</p>{errosImportacao.map((erro, indice) => <p key={`${erro}-${indice}`} className="text-xs">• {erro}</p>)}</div>}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><Button variant="ghost" onClick={baixarModeloImportacao} disabled={modeloImportacao.isFetching}><Download className="mr-1.5 h-4 w-4" />Baixar modelo</Button><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setImportacaoAberta(false)} disabled={importarLancamentos.isPending}>Cancelar</Button><Button onClick={importarArquivo} disabled={!arquivoImportacao || importarLancamentos.isPending}>{importarLancamentos.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Importar arquivo</Button></div></div></div></DialogContent></Dialog>
       <Dialog open={importacaoFornecedoresAberta} onOpenChange={(aberto) => { setImportacaoFornecedoresAberta(aberto); if (!aberto) limparImportacaoFornecedores(); }}><DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto"><DialogHeader><DialogTitle>Importar fornecedores por planilha</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Importação segura com pré-visualização</p><p className="mt-1 text-sky-900">Use o modelo CSV. Todos os dados e duplicidades são validados antes da confirmação.</p></div><div className="space-y-2"><Label htmlFor="arquivo-fornecedores">Arquivo CSV *</Label><Input id="arquivo-fornecedores" aria-label="Arquivo CSV de fornecedores" type="file" accept=".csv,text/csv" onChange={(evento) => selecionarArquivoFornecedores(evento.target.files?.[0] ?? null)} /><p className="text-xs text-muted-foreground">Limite de 1.000 fornecedores e 1 MB por arquivo.</p></div>{arquivoFornecedores && <div className="flex items-center gap-2 rounded-md bg-muted/60 px-3 py-2 text-sm"><FileSpreadsheet className="h-4 w-4 text-primary" /><span className="truncate">{arquivoFornecedores.name}</span>{prepararImportacaoFornecedores.isPending && <Loader2 className="ml-auto h-4 w-4 animate-spin" />}</div>}{preparoFornecedores?.erros.length ? <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900"><p className="font-medium">Corrija a planilha antes de importar:</p>{preparoFornecedores.erros.map((erro, indice) => <p key={`${erro}-${indice}`} className="text-xs">• {erro}</p>)}</div> : null}{preparoFornecedores && !preparoFornecedores.erros.length ? <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3"><p className="text-sm font-medium text-emerald-900">{preparoFornecedores.linhas.length} fornecedor(es) prontos para importar</p><div className="mt-2 max-h-40 overflow-y-auto rounded border bg-background"><Table><TableHeader><TableRow><TableHead>Nome</TableHead><TableHead>Contacto</TableHead><TableHead>E-mail</TableHead><TableHead>Documento</TableHead></TableRow></TableHeader><TableBody>{preparoFornecedores.linhas.slice(0, 20).map((linha) => <TableRow key={linha.numeroLinha}><TableCell className="font-medium">{linha.nome}</TableCell><TableCell>{linha.contacto || "—"}</TableCell><TableCell>{linha.email || "—"}</TableCell><TableCell>{linha.documento || "—"}</TableCell></TableRow>)}</TableBody></Table></div>{preparoFornecedores.linhas.length > 20 && <p className="mt-2 text-xs text-muted-foreground">A pré-visualização mostra os primeiros 20 fornecedores.</p>}</div> : null}<div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-between"><Button variant="ghost" onClick={baixarModeloFornecedores} disabled={modeloFornecedores.isFetching}><Download className="mr-1.5 h-4 w-4" />Baixar modelo</Button><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setImportacaoFornecedoresAberta(false)} disabled={importarFornecedores.isPending}>Cancelar</Button><Button onClick={confirmarImportacaoFornecedores} disabled={!preparoFornecedores?.linhas.length || Boolean(preparoFornecedores.erros.length) || importarFornecedores.isPending || prepararImportacaoFornecedores.isPending}>{importarFornecedores.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Confirmar importação</Button></div></div></div></DialogContent></Dialog>
@@ -965,7 +1024,7 @@ export default function FinanceiroPage() {
 
       <Dialog open={categoriaAberta} onOpenChange={setCategoriaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Nova categoria financeira</DialogTitle></DialogHeader><div className="space-y-4"><Campo label="Nome *" value={categoria.nome} onChange={(valor) => setCategoria({ ...categoria, nome: valor })} /><CampoSelect label="Aplicação" value={categoria.tipo} onValueChange={(valor) => setCategoria({ ...categoria, tipo: valor as "receita" | "despesa" | "ambos" })} opcoes={[["receita", "Somente receita"], ["despesa", "Somente despesa"], ["ambos", "Receita e despesa"]]} /><Button className="w-full" onClick={salvarCategoria} disabled={criarCategoria.isPending}>Salvar categoria</Button></div></DialogContent></Dialog>
 
-      <Dialog open={contaAberta} onOpenChange={setContaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Nova conta financeira</DialogTitle></DialogHeader><div className="space-y-4"><Campo label="Nome *" value={conta.nome} onChange={(valor) => setConta({ ...conta, nome: valor })} /><CampoSelect label="Tipo" value={conta.tipo} onValueChange={(valor) => setConta({ ...conta, tipo: valor as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro" })} opcoes={[["caixa", "Caixa"], ["caixa_cheque", "Caixa Cheque"], ["banco", "Banco"], ["carteira", "Carteira"], ["outro", "Outro"]]} /><Campo label="Saldo inicial (R$)" value={conta.saldoInicial} onChange={(valor) => setConta({ ...conta, saldoInicial: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={conta.observacoes} onChange={(e) => setConta({ ...conta, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarConta} disabled={criarConta.isPending}>Salvar conta</Button></div></DialogContent></Dialog>
+      <Dialog open={contaAberta} onOpenChange={(aberto) => { if (!aberto) fecharDialogoConta(); else setContaAberta(true); }}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{contaEditando ? "Editar conta financeira" : "Nova conta financeira"}</DialogTitle></DialogHeader><div className="space-y-4">{contaEditando && <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Edição cadastral segura</p><p className="mt-1 text-xs text-sky-900">Nome, dados bancários e data de início podem ser corrigidos sem alterar saldos, baixas, conciliação ou histórico.</p></div>}<Campo label="Nome *" value={conta.nome} onChange={(valor) => setConta({ ...conta, nome: valor })} />{contaEditando ? <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/45 p-3 text-sm"><div><p className="text-xs text-muted-foreground">Tipo</p><p className="mt-0.5 font-medium capitalize">{conta.tipo.replace("_", " ")}</p></div><div><p className="text-xs text-muted-foreground">Saldo inicial preservado</p><p className="mt-0.5 font-medium">{formatCurrency(conta.saldoInicial)}</p></div></div> : <><CampoSelect label="Tipo" value={conta.tipo} onValueChange={(valor) => setConta({ ...conta, tipo: valor as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro" })} opcoes={[["caixa", "Caixa"], ["caixa_cheque", "Caixa Cheque"], ["banco", "Banco"], ["carteira", "Carteira"], ["outro", "Outro"]]} /><Campo label="Saldo inicial (R$)" value={conta.saldoInicial} onChange={(valor) => setConta({ ...conta, saldoInicial: valor })} /></>}{conta.tipo === "banco" && <div className="space-y-3 rounded-lg border bg-muted/20 p-3"><div><p className="text-sm font-medium">Dados bancários</p><p className="mt-0.5 text-xs text-muted-foreground">Informações cadastrais da conta; não alteram movimentações já registradas.</p></div><Campo label="Banco" value={conta.banco} onChange={(valor) => setConta({ ...conta, banco: valor })} /><div className="grid grid-cols-2 gap-3"><Campo label="Agência" value={conta.agencia} onChange={(valor) => setConta({ ...conta, agencia: valor })} /><Campo label="Conta corrente" value={conta.numeroConta} onChange={(valor) => setConta({ ...conta, numeroConta: valor })} /></div></div>}<Campo label="Data de início" type="date" value={conta.dataInicio} onChange={(valor) => setConta({ ...conta, dataInicio: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={conta.observacoes} onChange={(e) => setConta({ ...conta, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarConta} disabled={criarConta.isPending || atualizarConta.isPending}>{(criarConta.isPending || atualizarConta.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{contaEditando ? "Salvar alterações" : "Salvar conta"}</Button></div></DialogContent></Dialog>
 
       <Dialog open={recorrenciaAberta} onOpenChange={setRecorrenciaAberta}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">

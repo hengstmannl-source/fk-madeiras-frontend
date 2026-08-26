@@ -95,6 +95,10 @@ const CategoriaSchema = z.object({
 export const ContaSchema = z.object({
   nome: z.string().trim().min(2).max(150),
   tipo: z.enum(["caixa", "caixa_cheque", "banco", "carteira", "outro"]).default("caixa"),
+  banco: z.string().trim().max(150).nullable().optional(),
+  agencia: z.string().trim().max(40).nullable().optional(),
+  numeroConta: z.string().trim().max(60).nullable().optional(),
+  dataInicio: DataFinanceiraSchema.nullable().optional(),
   saldoInicial: z.string().regex(/^-?\d+(?:[.,]\d{1,2})?$/).default("0"),
   observacoes: z.string().max(4000).nullable().optional(),
 });
@@ -148,12 +152,20 @@ export const financeiroRouter = router({
   contas: router({
     list: protectedProcedure.query(({ ctx }) => db.listContasFinanceiras()),
     create: protectedProcedure.input(ContaSchema).mutation(({ ctx, input }) => (
-      db.createContaFinanceira({ ...input, saldoInicial: input.saldoInicial.replace(",", "."), criadoPor: ctx.user.id, ativa: true, empresaId: ctx.configuracaoEmpresa.id })
+      db.createContaFinanceira({
+        ...input,
+        dataInicio: input.dataInicio ? dataLocal(input.dataInicio) : null,
+        saldoInicial: input.saldoInicial.replace(",", "."),
+        criadoPor: ctx.user.id,
+        ativa: true,
+        empresaId: ctx.configuracaoEmpresa.id,
+      })
     )),
     update: protectedProcedure.input(ContaSchema.partial().extend({ id: z.number().int().positive() })).mutation(({ ctx, input }) => {
-      const { id, saldoInicial, ...dados } = input;
+      const { id, saldoInicial, dataInicio, ...dados } = input;
       return db.updateContaFinanceira(id, {
         ...dados,
+        ...(dataInicio !== undefined ? { dataInicio: dataInicio ? dataLocal(dataInicio) : null } : {}),
         ...(saldoInicial !== undefined ? { saldoInicial: saldoInicial.replace(",", ".") } : {}),
       });
     }),
