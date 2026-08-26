@@ -213,3 +213,39 @@
     grid-column: auto;
   }
 }
+
+/* No fluxo de caixa, as tabelas compactas de quatro colunas devem ocupar o
+   painel disponível. A descrição e a conta quebram linha quando necessário,
+   evitando a rolagem horizontal sem ocultar os valores. */
+@media (min-width: 1024px) {
+  [data-slot="table-container"]:has(> [data-slot="table"] > [data-slot="table-header"] > tr > th:nth-child(4):last-child) {
+    overflow-x: clip;
+  }
+
+  [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(4):last-child) {
+    table-layout: fixed;
+  }
+
+  [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(4):last-child) :is(th, td) {
+    min-width: 0;
+  }
+
+  [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(4):last-child) :is(th, td):nth-child(1) {
+    width: 5.5rem;
+  }
+
+  [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(4):last-child) :is(th, td):nth-child(3) {
+    width: 8.5rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(4):last-child) :is(th, td):nth-child(4) {
+    width: 7.25rem;
+  }
+
+  [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(4):last-child) td:nth-child(2) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}

@@ -761,3 +761,5 @@
 - [x] Construir visão executiva, fluxo diário acumulado e detalhamento separado entre realizado e previsto
 - [x] Cobrir saldo inicial, parcialidade, cancelamentos, transferências, conta individual, consolidado e projeções com regressões
 - [x] Validar dados, TypeScript, suíte, build, auditoria e interface da Etapa 3 antes de publicar
+- [x] Ajustar o painel de movimentações do fluxo para eliminar rolagem horizontal e preservar a legibilidade dos dados
+- [x] Validar visualmente, testar e publicar o ajuste pontual do painel
