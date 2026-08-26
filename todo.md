@@ -776,3 +776,8 @@
 - [x] Validar dados, TypeScript, suíte, build, auditoria e interface da Etapa 5 antes de publicar
 - [x] Reorganizar o cabeçalho do Fluxo de Caixa para alinhar título, filtros e atalhos de período
 - [x] Validar visualmente em desktop e mobile, testar e publicar o ajuste do cabeçalho do Fluxo de Caixa
+- [x] Auditar a implementação publicada da Etapa 5 contra a especificação reenviada e documentar lacunas comprovadas
+- [x] Corrigir somente as lacunas confirmadas, validar e publicar a revisão da Etapa 5
+- [x] Completar os indicadores operacionais com Total a vencer, Próximos 30 dias e percentual vencido, todos com drill-down
+- [x] Tornar a concentração por cliente ou fornecedor rastreável e distinguir prioridades de atraso por faixa de aging
+- [x] Ampliar as regressões da Etapa 5 para fronteiras de aging, parcelamento, baixa, estorno, conciliação e origem

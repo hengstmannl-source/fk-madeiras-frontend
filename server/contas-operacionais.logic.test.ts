@@ -44,7 +44,8 @@ describe("contas operacionais", () => {
 
     expect(quitado.prioridade).toBe("encerrado");
     expect(cancelado.faixaAging).toBe("encerrado");
-    expect(resumo.saldoAberto).toBe(100);
+    expect(resumo.quantidade).toBe(0);
+    expect(resumo.saldoAberto).toBe(0);
     expect(resumo.vencido).toBe(0);
   });
 
@@ -52,6 +53,18 @@ describe("contas operacionais", () => {
     expect(classificarPrioridadeContaOperacional({
       estado: "aberto", saldoAberto: 10, dataVencimento: new Date(2026, 7, 10, 12), agora,
     })).toBe("vencido");
+    expect(classificarPrioridadeContaOperacional({
+      estado: "aberto", saldoAberto: 10, dataVencimento: new Date(2026, 7, 3, 12), agora,
+    })).toBe("vencido_8_30");
+    expect(classificarPrioridadeContaOperacional({
+      estado: "aberto", saldoAberto: 10, dataVencimento: new Date(2026, 6, 11, 12), agora,
+    })).toBe("vencido_31_60");
+    expect(classificarPrioridadeContaOperacional({
+      estado: "aberto", saldoAberto: 10, dataVencimento: new Date(2026, 5, 11, 12), agora,
+    })).toBe("vencido_61_90");
+    expect(classificarPrioridadeContaOperacional({
+      estado: "aberto", saldoAberto: 10, dataVencimento: new Date(2026, 4, 1, 12), agora,
+    })).toBe("vencido_mais_90");
     expect(classificarPrioridadeContaOperacional({
       estado: "aberto", saldoAberto: 10, dataVencimento: agora, agora,
     })).toBe("vence_hoje");
@@ -72,5 +85,14 @@ describe("contas operacionais", () => {
     const vencido = calcularContaOperacional(tituloBase({ id: 1, dataVencimento: new Date(2026, 7, 1, 12) }), agora);
 
     expect(ordenarContasOperacionais([normal, hoje, vencido]).map((conta) => conta.id)).toEqual([1, 2, 3]);
+  });
+
+  it("compõe a vencer, curto prazo e percentual vencido a partir do mesmo saldo residual", () => {
+    const atrasado = calcularContaOperacional(tituloBase({ id: 1, dataVencimento: new Date(2026, 7, 1, 12), valorOriginal: "100.00" }), agora);
+    const curtoPrazo = calcularContaOperacional(tituloBase({ id: 2, dataVencimento: new Date(2026, 7, 18, 12), valorOriginal: "150.00" }), agora);
+    const maisAdiante = calcularContaOperacional(tituloBase({ id: 3, dataVencimento: new Date(2026, 8, 20, 12), valorOriginal: "250.00" }), agora);
+    const resumo = resumirContasOperacionais([atrasado, curtoPrazo, maisAdiante]);
+
+    expect(resumo).toMatchObject({ saldoAberto: 500, vencido: 100, aVencer: 400, proximosSeteDias: 150, proximosTrintaDias: 150, percentualVencido: 20 });
   });
 });

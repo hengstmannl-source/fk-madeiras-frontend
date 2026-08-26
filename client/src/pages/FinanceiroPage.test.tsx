@@ -6,7 +6,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   search: "",
+  ultimaConsultaOperacional: undefined as Record<string, unknown> | undefined,
   titulos: [] as Array<Record<string, unknown>>,
+  clientes: [] as Array<Record<string, unknown>>,
   categorias: [] as Array<Record<string, unknown>>,
   baixas: [] as Array<Record<string, unknown>>,
   anexos: [] as Array<Record<string, unknown>>,
@@ -81,7 +83,7 @@ vi.mock("@/lib/trpc", () => {
           intercambios: { modeloLancamentosCsv: invalidar, exportarLancamentosCsv: invalidar },
         },
       }),
-      cliente: { list: queryVazia, create: mutationInerte },
+      cliente: { list: { useQuery: () => ({ data: state.clientes, isLoading: false }) }, create: mutationInerte },
       financeiro: {
         titulos: {
           list: { useQuery: (filtros?: { descricao?: string; clienteId?: number; categoriaId?: number; dataInicio?: Date; dataFim?: Date }) => ({
@@ -152,21 +154,25 @@ vi.mock("@/lib/trpc", () => {
           },
         },
         contasOperacionais: { list: { useQuery: (filtros?: Record<string, unknown>) => {
+          state.ultimaConsultaOperacional = filtros;
           const itens = state.contasOperacionais.itens.filter((titulo) => {
             if (filtros?.tipo && titulo.tipo !== filtros.tipo) return false;
-            if (filtros?.situacao === "vencido" && titulo.prioridade !== "vencido") return false;
+            if (filtros?.situacao === "vencido" && !["vencido", "vencido_8_30", "vencido_31_60", "vencido_61_90", "vencido_mais_90"].includes(String(titulo.prioridade))) return false;
             if (filtros?.situacao === "vence_hoje" && titulo.prioridade !== "vence_hoje") return false;
             if (filtros?.situacao === "proximos_7_dias" && titulo.prioridade !== "vence_em_breve") return false;
+            if (filtros?.situacao === "proximos_30_dias" && !(Number(titulo.diasParaVencimento) >= 1 && Number(titulo.diasParaVencimento) <= 30)) return false;
             if (filtros?.situacao === "a_vencer" && !["vence_hoje", "vence_em_breve", "normal"].includes(String(titulo.prioridade))) return false;
             if (filtros?.aging && titulo.faixaAging !== filtros.aging) return false;
             if (filtros?.estado && titulo.estado !== filtros.estado) return false;
             if (filtros?.origem && titulo.origem !== filtros.origem) return false;
+            if (filtros?.clienteId && Number(titulo.clienteId) !== Number(filtros.clienteId)) return false;
+            if (filtros?.fornecedorId && Number(titulo.fornecedorId) !== Number(filtros.fornecedorId)) return false;
             if (filtros?.descricao && !`${titulo.descricao ?? ""} ${titulo.contraparte ?? ""}`.toLocaleLowerCase("pt-BR").includes(String(filtros.descricao).toLocaleLowerCase("pt-BR"))) return false;
             return true;
           });
           const aging = { a_vencer: 0, vence_hoje: 0, "1_7": 0, "8_30": 0, "31_60": 0, "61_90": 0, mais_90: 0, encerrado: 0 } as Record<string, number>;
           itens.forEach((titulo) => { aging[String(titulo.faixaAging)] += Number(titulo.saldoAberto); });
-          const resumo = { quantidade: itens.length, saldoAberto: itens.reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), vencido: itens.filter((titulo) => titulo.prioridade === "vencido").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), venceHoje: itens.filter((titulo) => titulo.prioridade === "vence_hoje").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), proximosSeteDias: itens.filter((titulo) => titulo.prioridade === "vence_em_breve").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), aging };
+          const resumo = { quantidade: itens.length, saldoAberto: itens.reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), vencido: itens.filter((titulo) => Number(titulo.diasParaVencimento) < 0).reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), aVencer: itens.filter((titulo) => Number(titulo.diasParaVencimento) > 0).reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), venceHoje: itens.filter((titulo) => titulo.prioridade === "vence_hoje").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), proximosSeteDias: itens.filter((titulo) => titulo.prioridade === "vence_em_breve").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), proximosTrintaDias: itens.filter((titulo) => Number(titulo.diasParaVencimento) >= 1 && Number(titulo.diasParaVencimento) <= 30).reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), percentualVencido: 0, aging };
           return { data: { ...state.contasOperacionais, itens, resumo }, isLoading: false, isFetching: false };
         } } },
         categorias: { list: { useQuery: () => ({ data: state.categorias, isLoading: false }) }, create: mutationInerte },
@@ -199,11 +205,22 @@ vi.mock("@/lib/trpc", () => {
 
 import FinanceiroPage, { abaFinanceiraDaUrl } from "./FinanceiroPage";
 
+if (!HTMLElement.prototype.hasPointerCapture) {
+  HTMLElement.prototype.hasPointerCapture = () => false;
+  HTMLElement.prototype.setPointerCapture = () => undefined;
+  HTMLElement.prototype.releasePointerCapture = () => undefined;
+}
+
+if (!HTMLElement.prototype.scrollIntoView) {
+  HTMLElement.prototype.scrollIntoView = () => undefined;
+}
+
 describe("FinanceiroPage — cancelamento manual", () => {
   afterEach(() => cleanup());
 
   beforeEach(() => {
     state.search = "";
+    state.ultimaConsultaOperacional = undefined;
     state.cancelar.mockReset();
     state.atualizarLote.mockReset();
     state.atualizarAgendamento.mockReset();
@@ -220,6 +237,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
       tamanhoBytes: 1024,
       url: "https://documentos.exemplo/boleto-agosto.pdf",
     }];
+    state.clientes = [{ id: 7, nome: "Cliente operacional" }, { id: 8, nome: "Outro cliente" }];
     state.categorias = [{ id: 1, nome: "Receitas de vendas", tipo: "receita" }];
     state.baixas = [{
       id: 40,
@@ -375,7 +393,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(tela.getByText("Gestão de títulos")).toBeInTheDocument();
     expect(tela.getAllByText("Contas a receber").length).toBeGreaterThan(1);
     expect(tela.queryByText("Títulos vencidos")).not.toBeInTheDocument();
-    expect(tela.queryByText("Próximos 30 dias")).not.toBeInTheDocument();
+    expect(tela.queryByRole("heading", { name: "Próximos 30 dias" })).not.toBeInTheDocument();
   });
 
   it("abre os históricos financeiros diretamente pelos novos atalhos laterais", () => {
@@ -603,7 +621,10 @@ describe("FinanceiroPage — cancelamento manual", () => {
     render(<FinanceiroPage />);
 
     expect(screen.getByText("Aging por vencimento")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /vencido/i })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /vencido/i }).some((botao) => botao.textContent?.startsWith("Vencido"))).toBe(true);
+    expect(screen.getByRole("button", { name: /total a vencer/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /próximos 30 dias/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /% vencido/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /atraso 8–30/i })).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /atraso 8–30/i }));
@@ -611,6 +632,18 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(tabela).toBeDefined();
     expect(within(tabela!).queryByText("Fornecedor parcial")).not.toBeInTheDocument();
     expect(within(tabela!).getByText("Frete vencido")).toBeInTheDocument();
+  });
+
+  it("filtra a fila de recebimentos pelo cliente selecionado", async () => {
+    state.contasOperacionais.itens.push({ id: 94, tipo: "receber", estado: "aberto", descricao: "Venda de outro cliente", origem: "manual", competencia: null, categoriaId: 1, categoriaNome: "Receitas de vendas", clienteId: 8, fornecedorId: null, contraparte: "Outro cliente", numeroParcela: 1, totalParcelas: 1, valorOriginal: "350.00", desconto: "0.00", juros: "0.00", valorDevido: 350, valorBaixado: 0, saldoAberto: 350, dataVencimento: "2026-09-12T00:00:00.000Z", diasParaVencimento: 17, prioridade: "normal", faixaAging: "a_vencer", temBaixaConciliada: false, baixas: [] });
+    state.contasOperacionais.top5Contrapartes = [{ contraparte: "Cliente operacional", clienteId: 7, fornecedorId: null, saldoAberto: 540, quantidade: 1, vencido: 0 }];
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas a receber" }).at(-1)!);
+    await user.click(screen.getByRole("button", { name: /Cliente operacional/i }));
+
+    await waitFor(() => expect(state.ultimaConsultaOperacional?.clienteId).toBe(7));
   });
 
   it("apresenta saldo residual, baixas e ações do detalhe para um título parcial", async () => {

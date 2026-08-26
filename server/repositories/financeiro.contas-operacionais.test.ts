@@ -111,7 +111,7 @@ describe("getContasOperacionais", () => {
     ]));
 
     expect(resultado.itens.map((item) => item.id)).toEqual([1]);
-    expect(resultado.agrupamentos).toEqual([{ contraparte: "Cliente A", quantidade: 1, saldoAberto: 100, vencido: 0 }]);
+    expect(resultado.agrupamentos).toEqual([{ contraparte: "Cliente A", clienteId: 1, fornecedorId: null, quantidade: 1, saldoAberto: 100, vencido: 0 }]);
     expect(resultado.top5Contrapartes).toEqual(resultado.agrupamentos);
   });
 });

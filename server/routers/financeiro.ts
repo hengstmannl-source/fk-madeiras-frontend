@@ -260,7 +260,7 @@ export const financeiroRouter = router({
     list: protectedProcedure.input(z.object({
       tipo: TipoTituloSchema,
       estado: z.enum(["aberto", "parcial"]).optional(),
-      situacao: z.enum(["vencido", "vence_hoje", "proximos_7_dias", "a_vencer"]).optional(),
+      situacao: z.enum(["vencido", "vence_hoje", "proximos_7_dias", "proximos_30_dias", "a_vencer"]).optional(),
       aging: z.enum(["a_vencer", "vence_hoje", "1_7", "8_30", "31_60", "61_90", "mais_90"]).optional(),
       clienteId: z.number().int().positive().optional(),
       fornecedorId: z.number().int().positive().optional(),

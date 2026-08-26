@@ -978,7 +978,7 @@ export async function listTitulosFinanceiros(
 export type FiltrosContasOperacionais = {
   tipo: "receber" | "pagar";
   estado?: "aberto" | "parcial";
-  situacao?: "vencido" | "vence_hoje" | "proximos_7_dias" | "a_vencer";
+  situacao?: "vencido" | "vence_hoje" | "proximos_7_dias" | "proximos_30_dias" | "a_vencer";
   aging?: "a_vencer" | "vence_hoje" | "1_7" | "8_30" | "31_60" | "61_90" | "mais_90";
   clienteId?: number;
   fornecedorId?: number;
@@ -1014,10 +1014,11 @@ function situacaoOperacionalCorresponde(
   situacao: FiltrosContasOperacionais["situacao"],
 ) {
   if (!situacao) return true;
-  if (situacao === "vencido") return conta.prioridade === "vencido";
+  if (situacao === "vencido") return conta.diasParaVencimento < 0;
   if (situacao === "vence_hoje") return conta.prioridade === "vence_hoje";
   if (situacao === "proximos_7_dias") return conta.prioridade === "vence_em_breve";
-  return conta.prioridade === "normal";
+  if (situacao === "proximos_30_dias") return conta.diasParaVencimento >= 1 && conta.diasParaVencimento <= 30;
+  return conta.diasParaVencimento > 0;
 }
 
 /**
@@ -1147,13 +1148,13 @@ export async function getContasOperacionais(
           : ordenarContasOperacionais(itens);
   const agrupamentos = Array.from(itens.reduce((mapa, item) => {
     const chave = item.tipo === "receber" ? `cliente:${item.clienteId ?? item.contraparte}` : `fornecedor:${item.fornecedorId ?? item.contraparte}`;
-    const existente = mapa.get(chave) ?? { contraparte: item.contraparte, quantidade: 0, saldoAberto: 0, vencido: 0 };
+    const existente = mapa.get(chave) ?? { contraparte: item.contraparte, clienteId: item.clienteId, fornecedorId: item.fornecedorId, quantidade: 0, saldoAberto: 0, vencido: 0 };
     existente.quantidade += 1;
     existente.saldoAberto += item.saldoAberto;
-    if (item.prioridade === "vencido") existente.vencido += item.saldoAberto;
+    if (item.diasParaVencimento < 0) existente.vencido += item.saldoAberto;
     mapa.set(chave, existente);
     return mapa;
-  }, new Map<string, { contraparte: string; quantidade: number; saldoAberto: number; vencido: number }>()).values())
+  }, new Map<string, { contraparte: string; clienteId: number | null; fornecedorId: number | null; quantidade: number; saldoAberto: number; vencido: number }>()).values())
     .sort((a, b) => b.saldoAberto - a.saldoAberto || a.contraparte.localeCompare(b.contraparte, "pt-BR"));
 
   return {

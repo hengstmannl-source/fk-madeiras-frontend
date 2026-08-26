@@ -2,7 +2,7 @@ import { decimalParaNumero, saldoAbertoTitulo } from "./financeiro.logic";
 
 export type TipoContaOperacional = "receber" | "pagar";
 export type EstadoContaOperacional = "aberto" | "parcial" | "quitado" | "vencido" | "cancelado";
-export type PrioridadeContaOperacional = "vencido" | "vence_hoje" | "vence_em_breve" | "normal" | "encerrado";
+export type PrioridadeContaOperacional = "vencido_mais_90" | "vencido_61_90" | "vencido_31_60" | "vencido_8_30" | "vencido" | "vence_hoje" | "vence_em_breve" | "normal" | "encerrado";
 export type FaixaAgingContaOperacional = "a_vencer" | "vence_hoje" | "1_7" | "8_30" | "31_60" | "61_90" | "mais_90" | "encerrado";
 
 export type TituloContaOperacional = {
@@ -42,6 +42,10 @@ export function classificarPrioridadeContaOperacional(input: {
 }): PrioridadeContaOperacional {
   if (input.estado === "cancelado" || input.estado === "quitado" || decimalParaNumero(input.saldoAberto) <= 0.005) return "encerrado";
   const dias = calcularDiasParaVencimento(input.dataVencimento, input.agora);
+  if (dias <= -91) return "vencido_mais_90";
+  if (dias <= -61) return "vencido_61_90";
+  if (dias <= -31) return "vencido_31_60";
+  if (dias <= -8) return "vencido_8_30";
   if (dias < 0) return "vencido";
   if (dias === 0) return "vence_hoje";
   return dias <= (input.diasAntecedencia ?? 7) ? "vence_em_breve" : "normal";
@@ -87,11 +91,15 @@ export function calcularContaOperacional(titulo: TituloContaOperacional, agora =
 }
 
 const ordemPrioridade: Record<PrioridadeContaOperacional, number> = {
-  vencido: 0,
-  vence_hoje: 1,
-  vence_em_breve: 2,
-  normal: 3,
-  encerrado: 4,
+  vencido_mais_90: 0,
+  vencido_61_90: 1,
+  vencido_31_60: 2,
+  vencido_8_30: 3,
+  vencido: 4,
+  vence_hoje: 5,
+  vence_em_breve: 6,
+  normal: 7,
+  encerrado: 8,
 };
 
 /** Ordena filas operacionais por urgência, vencimento e identificador estável. */
@@ -121,12 +129,18 @@ export function resumirAgingContasOperacionais(contas: ContaOperacionalCalculada
 }
 
 export function resumirContasOperacionais(contas: ContaOperacionalCalculada[]) {
+  const contasAbertas = contas.filter((conta) => conta.estado !== "quitado" && conta.estado !== "cancelado" && conta.saldoAberto > 0.005);
+  const saldoAberto = contasAbertas.reduce((total, conta) => total + conta.saldoAberto, 0);
+  const vencido = contasAbertas.filter((conta) => conta.diasParaVencimento < 0).reduce((total, conta) => total + conta.saldoAberto, 0);
   return {
-    quantidade: contas.length,
-    saldoAberto: contas.reduce((total, conta) => total + conta.saldoAberto, 0),
-    vencido: contas.filter((conta) => conta.prioridade === "vencido").reduce((total, conta) => total + conta.saldoAberto, 0),
-    venceHoje: contas.filter((conta) => conta.prioridade === "vence_hoje").reduce((total, conta) => total + conta.saldoAberto, 0),
-    proximosSeteDias: contas.filter((conta) => conta.prioridade === "vence_em_breve").reduce((total, conta) => total + conta.saldoAberto, 0),
-    aging: resumirAgingContasOperacionais(contas),
+    quantidade: contasAbertas.length,
+    saldoAberto,
+    aVencer: contasAbertas.filter((conta) => conta.diasParaVencimento > 0).reduce((total, conta) => total + conta.saldoAberto, 0),
+    vencido,
+    venceHoje: contasAbertas.filter((conta) => conta.prioridade === "vence_hoje").reduce((total, conta) => total + conta.saldoAberto, 0),
+    proximosSeteDias: contasAbertas.filter((conta) => conta.prioridade === "vence_em_breve").reduce((total, conta) => total + conta.saldoAberto, 0),
+    proximosTrintaDias: contasAbertas.filter((conta) => conta.diasParaVencimento >= 1 && conta.diasParaVencimento <= 30).reduce((total, conta) => total + conta.saldoAberto, 0),
+    percentualVencido: saldoAberto > 0 ? (vencido / saldoAberto) * 100 : 0,
+    aging: resumirAgingContasOperacionais(contasAbertas),
   };
 }
