@@ -45,6 +45,13 @@ const state = vi.hoisted(() => ({
     itensRealizados: [], itensPrevistos: [], itensTransferencias: [],
     porCategoria: [{ nome: "Vendas", entradas: 140, saidas: 0, saldo: 140, quantidade: 2 }],
   },
+  contasOperacionais: {
+    itens: [] as Array<Record<string, unknown>>,
+    resumo: { quantidade: 0, saldoAberto: 0, vencido: 0, venceHoje: 0, proximosSeteDias: 0, aging: { a_vencer: 0, vence_hoje: 0, "1_7": 0, "8_30": 0, "31_60": 0, "61_90": 0, mais_90: 0, encerrado: 0 } },
+    agrupamentos: [] as Array<Record<string, unknown>>,
+    top5Contrapartes: [] as Array<Record<string, unknown>>,
+    convencaoContaFinanceira: "O filtro por conta retorna somente títulos que já possuem baixa válida nessa conta; títulos em aberto não recebem conta prevista.",
+  },
 }));
 
 vi.mock("wouter", () => ({ useSearch: () => state.search }));
@@ -61,6 +68,7 @@ vi.mock("@/lib/trpc", () => {
       useUtils: () => ({
         financeiro: {
           titulos: { list: invalidar, baixas: invalidar },
+          contasOperacionais: { list: invalidar },
           categorias: { list: invalidar },
           fornecedores: { list: invalidar, modeloCsv: invalidar },
           contas: { list: invalidar },
@@ -143,6 +151,24 @@ vi.mock("@/lib/trpc", () => {
             }),
           },
         },
+        contasOperacionais: { list: { useQuery: (filtros?: Record<string, unknown>) => {
+          const itens = state.contasOperacionais.itens.filter((titulo) => {
+            if (filtros?.tipo && titulo.tipo !== filtros.tipo) return false;
+            if (filtros?.situacao === "vencido" && titulo.prioridade !== "vencido") return false;
+            if (filtros?.situacao === "vence_hoje" && titulo.prioridade !== "vence_hoje") return false;
+            if (filtros?.situacao === "proximos_7_dias" && titulo.prioridade !== "vence_em_breve") return false;
+            if (filtros?.situacao === "a_vencer" && !["vence_hoje", "vence_em_breve", "normal"].includes(String(titulo.prioridade))) return false;
+            if (filtros?.aging && titulo.faixaAging !== filtros.aging) return false;
+            if (filtros?.estado && titulo.estado !== filtros.estado) return false;
+            if (filtros?.origem && titulo.origem !== filtros.origem) return false;
+            if (filtros?.descricao && !`${titulo.descricao ?? ""} ${titulo.contraparte ?? ""}`.toLocaleLowerCase("pt-BR").includes(String(filtros.descricao).toLocaleLowerCase("pt-BR"))) return false;
+            return true;
+          });
+          const aging = { a_vencer: 0, vence_hoje: 0, "1_7": 0, "8_30": 0, "31_60": 0, "61_90": 0, mais_90: 0, encerrado: 0 } as Record<string, number>;
+          itens.forEach((titulo) => { aging[String(titulo.faixaAging)] += Number(titulo.saldoAberto); });
+          const resumo = { quantidade: itens.length, saldoAberto: itens.reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), vencido: itens.filter((titulo) => titulo.prioridade === "vencido").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), venceHoje: itens.filter((titulo) => titulo.prioridade === "vence_hoje").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), proximosSeteDias: itens.filter((titulo) => titulo.prioridade === "vence_em_breve").reduce((total, titulo) => total + Number(titulo.saldoAberto), 0), aging };
+          return { data: { ...state.contasOperacionais, itens, resumo }, isLoading: false, isFetching: false };
+        } } },
         categorias: { list: { useQuery: () => ({ data: state.categorias, isLoading: false }) }, create: mutationInerte },
         fornecedores: { list: queryVazia, create: mutationInerte, update: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
         anexos: {
@@ -256,6 +282,17 @@ describe("FinanceiroPage — cancelamento manual", () => {
         linhaDigitavelBoleto: "00190500954014481606906809350314337370000000100",
       },
     ];
+    state.contasOperacionais = {
+      itens: [
+        { id: 13, tipo: "pagar", estado: "parcial", descricao: "Carga de toras RC-001", origem: "romaneio_carga", competencia: "2026-08-01T00:00:00.000Z", categoriaId: 1, categoriaNome: "Receitas de vendas", clienteId: null, fornecedorId: 9, contraparte: "Fornecedor parcial", numeroParcela: 1, totalParcelas: 2, valorOriginal: "1200.00", desconto: "0.00", juros: "0.00", valorDevido: 1200, valorBaixado: 950, saldoAberto: 250, dataVencimento: "2026-08-26T00:00:00.000Z", diasParaVencimento: 0, prioridade: "vence_hoje", faixaAging: "vence_hoje", temBaixaConciliada: false, baixas: [{ id: 40, valor: "950.00", dataBaixa: "2026-08-20T00:00:00.000Z", contaNome: "Caixa geral", conciliada: false, estornada: false }] },
+        { id: 91, tipo: "pagar", estado: "aberto", descricao: "Frete vencido", origem: "manual", competencia: null, categoriaId: 1, categoriaNome: "Receitas de vendas", clienteId: null, fornecedorId: 12, contraparte: "Fornecedor atrasado", numeroParcela: null, totalParcelas: null, valorOriginal: "700.00", desconto: "0.00", juros: "0.00", valorDevido: 700, valorBaixado: 0, saldoAberto: 700, dataVencimento: "2026-08-10T00:00:00.000Z", diasParaVencimento: -16, prioridade: "vencido", faixaAging: "8_30", temBaixaConciliada: false, baixas: [] },
+        { id: 92, tipo: "pagar", estado: "aberto", descricao: "Serviço próximo", origem: "manual", competencia: null, categoriaId: 1, categoriaNome: "Receitas de vendas", clienteId: null, fornecedorId: 13, contraparte: "Fornecedor próximo", numeroParcela: null, totalParcelas: null, valorOriginal: "300.00", desconto: "0.00", juros: "0.00", valorDevido: 300, valorBaixado: 0, saldoAberto: 300, dataVencimento: "2026-08-30T00:00:00.000Z", diasParaVencimento: 4, prioridade: "vence_em_breve", faixaAging: "a_vencer", temBaixaConciliada: false, baixas: [] },
+        { id: 93, tipo: "receber", estado: "aberto", descricao: "Venda em aberto", origem: "orcamento", competencia: null, categoriaId: 1, categoriaNome: "Receitas de vendas", clienteId: 7, fornecedorId: null, contraparte: "Cliente operacional", numeroParcela: 1, totalParcelas: 1, valorOriginal: "990.00", desconto: "0.00", juros: "0.00", valorDevido: 990, valorBaixado: 0, saldoAberto: 990, dataVencimento: "2026-09-10T00:00:00.000Z", diasParaVencimento: 15, prioridade: "normal", faixaAging: "a_vencer", temBaixaConciliada: false, baixas: [] },
+      ],
+      resumo: { quantidade: 4, saldoAberto: 2240, vencido: 700, venceHoje: 250, proximosSeteDias: 300, aging: { a_vencer: 1290, vence_hoje: 250, "1_7": 0, "8_30": 700, "31_60": 0, "61_90": 0, mais_90: 0, encerrado: 0 } },
+      agrupamentos: [], top5Contrapartes: [],
+      convencaoContaFinanceira: "O filtro por conta retorna somente títulos que já possuem baixa válida nessa conta; títulos em aberto não recebem conta prevista.",
+    };
   });
 
   it("pede confirmação e remove o título da listagem após confirmar a exclusão", async () => {
@@ -559,5 +596,34 @@ describe("FinanceiroPage — cancelamento manual", () => {
     fireEvent.change(screen.getByLabelText("Descrição"), { target: { value: "Recebimento revisado" } });
     fireEvent.click(screen.getByRole("button", { name: /salvar alterações em lote/i }));
     expect(state.atualizarLote).toHaveBeenCalledWith(expect.objectContaining({ ids: [10, 11], descricao: "Recebimento revisado" }));
+  });
+
+  it("exibe cards rastreáveis e aging usando o mesmo conjunto de títulos operacionais", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    expect(screen.getByText("Aging por vencimento")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /vencido/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /atraso 8–30/i })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /atraso 8–30/i }));
+    const tabela = screen.getAllByRole("table").find((elemento) => within(elemento).queryByText("Fornecedor atrasado"));
+    expect(tabela).toBeDefined();
+    expect(within(tabela!).queryByText("Fornecedor parcial")).not.toBeInTheDocument();
+    expect(within(tabela!).getByText("Frete vencido")).toBeInTheDocument();
+  });
+
+  it("apresenta saldo residual, baixas e ações do detalhe para um título parcial", async () => {
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getByText("Fornecedor parcial"));
+    const dialogo = await screen.findByRole("dialog");
+    expect(within(dialogo).getByText("Saldo em aberto")).toBeInTheDocument();
+    expect(within(dialogo).getByText((_, elemento) => elemento?.textContent === "R$ 250,00")).toBeInTheDocument();
+    expect(within(dialogo).getByText(/já pago/i)).toBeInTheDocument();
+    expect(within(dialogo).getByText((_, elemento) => elemento?.textContent === "R$ 950,00")).toBeInTheDocument();
+    expect(within(dialogo).getByRole("button", { name: "Pagar" })).toBeInTheDocument();
+    expect(within(dialogo).getByRole("button", { name: "Baixas" })).toBeInTheDocument();
   });
 });

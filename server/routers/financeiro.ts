@@ -256,6 +256,36 @@ export const financeiroRouter = router({
     })),
   }),
 
+  contasOperacionais: router({
+    list: protectedProcedure.input(z.object({
+      tipo: TipoTituloSchema,
+      estado: z.enum(["aberto", "parcial"]).optional(),
+      situacao: z.enum(["vencido", "vence_hoje", "proximos_7_dias", "a_vencer"]).optional(),
+      aging: z.enum(["a_vencer", "vence_hoje", "1_7", "8_30", "31_60", "61_90", "mais_90"]).optional(),
+      clienteId: z.number().int().positive().optional(),
+      fornecedorId: z.number().int().positive().optional(),
+      categoriaId: z.number().int().positive().optional(),
+      origem: z.enum(["orcamento", "romaneio_carga", "nota_diesel", "serragem_terceiros", "folha_pagamento", "manual", "recorrencia"]).optional(),
+      descricao: z.string().trim().min(1).max(300).optional(),
+      valorMinimo: z.number().nonnegative().optional(),
+      valorMaximo: z.number().nonnegative().optional(),
+      dataInicio: DataFinanceiraSchema.optional(),
+      dataFim: DataFinanceiraSchema.optional(),
+      contaFinanceiraId: z.number().int().positive().optional(),
+      ordenar: z.enum(["prioridade", "vencimento_asc", "vencimento_desc", "saldo_desc", "contraparte"]).default("prioridade"),
+    }).refine((filtro) => !filtro.dataInicio || !filtro.dataFim || filtro.dataInicio <= filtro.dataFim, {
+      message: "A data inicial não pode ser posterior à data final",
+      path: ["dataFim"],
+    })).query(({ ctx, input }) => {
+      const { dataInicio, dataFim, ...filtros } = input;
+      return db.getContasOperacionais({
+        ...filtros,
+        dataInicio: dataInicio ? dataLocal(dataInicio) : undefined,
+        dataFim: dataFim ? fimDoDiaLocal(dataFim) : undefined,
+      }, { empresaId: ctx.configuracaoEmpresa.id });
+    }),
+  }),
+
   intercambios: router({
     modeloLancamentosCsv: protectedProcedure.query(() => db.getModeloImportacaoLancamentosCsv()),
     exportarLancamentosCsv: protectedProcedure.input(z.object({

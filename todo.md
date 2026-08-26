@@ -765,3 +765,12 @@
 - [x] Validar visualmente, testar e publicar o ajuste pontual do painel
 - [x] Ajustar o resumo por categoria e origem para eliminar rolagem horizontal e preservar a leitura dos valores
 - [x] Validar visualmente, testar e publicar o ajuste pontual do resumo por categoria
+- [x] Consolidar o escopo da Etapa 5 e auditar títulos, baixas, filtros, navegação e detalhe financeiro existentes
+- [x] Definir regras puras de saldo em aberto, status operacional, aging, prioridade e ordenação por tipo de título
+- [x] Implementar consultas operacionais de contas a receber e a pagar usando somente títulos e baixas existentes
+- [x] Garantir que cards, lista, aging e detalhamento usem o mesmo saldo em aberto conforme os filtros ativos
+- [x] Respeitar baixas parciais, títulos pagos e cancelados, sem duplicar valores ou criar estruturas paralelas
+- [x] Criar filtros por vencimento, status, parte relacionada, origem, categoria, conta financeira e faixa de valor
+- [x] Construir resumos, listas priorizadas, aging e detalhe do título com trilha de baixas e auditoria
+- [x] Cobrir totais, filtros, aging, parcialidade, cancelamentos, prioridade, ordenação e acesso com regressões
+- [x] Validar dados, TypeScript, suíte, build, auditoria e interface da Etapa 5 antes de publicar

@@ -25,6 +25,7 @@ import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarEx
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes, sugerirTransferenciasInternas } from "../conciliacao.logic";
 import { montarFluxoCaixaGerencial } from "../fluxo-caixa.logic";
+import { calcularContaOperacional, ordenarContasOperacionais, resumirContasOperacionais } from "../contas-operacionais.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
 
 import { getDb } from "./core";
@@ -972,6 +973,196 @@ export async function listTitulosFinanceiros(
     return true;
   });
   return Promise.all(titulosVisiveis.map((titulo) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
+}
+
+export type FiltrosContasOperacionais = {
+  tipo: "receber" | "pagar";
+  estado?: "aberto" | "parcial";
+  situacao?: "vencido" | "vence_hoje" | "proximos_7_dias" | "a_vencer";
+  aging?: "a_vencer" | "vence_hoje" | "1_7" | "8_30" | "31_60" | "61_90" | "mais_90";
+  clienteId?: number;
+  fornecedorId?: number;
+  categoriaId?: number;
+  origem?: TituloFinanceiro["origem"];
+  descricao?: string;
+  valorMinimo?: number;
+  valorMaximo?: number;
+  dataInicio?: Date;
+  dataFim?: Date;
+  /**
+   * Filtra títulos que já possuam baixa válida naquela conta. Títulos em aberto
+   * não carregam uma conta prevista e nunca recebem essa informação por inferência.
+   */
+  contaFinanceiraId?: number;
+  ordenar?: "prioridade" | "vencimento_asc" | "vencimento_desc" | "saldo_desc" | "contraparte";
+};
+
+type DependenciasContasOperacionais = {
+  database?: DatabaseConnection;
+  empresaId: number;
+  agora?: Date;
+  titulos?: TituloFinanceiro[];
+  baixas?: Array<Pick<InferSelectModel<typeof baixasFinanceiras>, "id" | "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "conciliada" | "estornada">>;
+  categorias?: Array<Pick<CategoriaFinanceira, "id" | "nome">>;
+  clientes?: Array<Pick<InferSelectModel<typeof clientes>, "id" | "nome">>;
+  fornecedores?: Array<Pick<Fornecedor, "id" | "nome">>;
+  contas?: Array<Pick<InferSelectModel<typeof contasFinanceiras>, "id" | "nome">>;
+};
+
+function situacaoOperacionalCorresponde(
+  conta: ReturnType<typeof calcularContaOperacional>,
+  situacao: FiltrosContasOperacionais["situacao"],
+) {
+  if (!situacao) return true;
+  if (situacao === "vencido") return conta.prioridade === "vencido";
+  if (situacao === "vence_hoje") return conta.prioridade === "vence_hoje";
+  if (situacao === "proximos_7_dias") return conta.prioridade === "vence_em_breve";
+  return conta.prioridade === "normal";
+}
+
+/**
+ * Projeta uma única fila operacional de pagar ou receber. Esta consulta é
+ * deliberadamente de leitura: reconstrói o saldo com as baixas válidas em lote
+ * e não altera títulos, baixas, conciliações ou contas financeiras.
+ */
+export async function getContasOperacionais(
+  filtros: FiltrosContasOperacionais,
+  dependencias: DependenciasContasOperacionais,
+) {
+  const db = dependencias.database ?? await getDb();
+  if (!db && !dependencias.titulos) throw new Error("Database not available");
+  const agora = dependencias.agora ?? new Date();
+  const condicoes = [
+    eq(titulosFinanceiros.empresaId, dependencias.empresaId),
+    eq(titulosFinanceiros.tipo, filtros.tipo),
+  ];
+  if (filtros.clienteId) condicoes.push(eq(titulosFinanceiros.clienteId, filtros.clienteId));
+  if (filtros.fornecedorId) condicoes.push(eq(titulosFinanceiros.fornecedorId, filtros.fornecedorId));
+  if (filtros.categoriaId) condicoes.push(eq(titulosFinanceiros.categoriaId, filtros.categoriaId));
+  if (filtros.origem) condicoes.push(eq(titulosFinanceiros.origem, filtros.origem));
+
+  const titulos = dependencias.titulos ?? await db!.select().from(titulosFinanceiros)
+    .where(and(...condicoes));
+  const tituloIds = titulos.map((titulo) => titulo.id);
+  const [baixas, categorias, listaClientes, listaFornecedores, contas] = await Promise.all([
+    dependencias.baixas ?? (tituloIds.length ? db!.select({
+      id: baixasFinanceiras.id,
+      tituloId: baixasFinanceiras.tituloId,
+      contaFinanceiraId: baixasFinanceiras.contaFinanceiraId,
+      valor: baixasFinanceiras.valor,
+      dataBaixa: baixasFinanceiras.dataBaixa,
+      formaPagamento: baixasFinanceiras.formaPagamento,
+      conciliada: baixasFinanceiras.conciliada,
+      estornada: baixasFinanceiras.estornada,
+    }).from(baixasFinanceiras).where(and(
+      eq(baixasFinanceiras.empresaId, dependencias.empresaId),
+      inArray(baixasFinanceiras.tituloId, tituloIds),
+    )) : []),
+    dependencias.categorias ?? db!.select({ id: categoriasFinanceiras.id, nome: categoriasFinanceiras.nome })
+      .from(categoriasFinanceiras).where(eq(categoriasFinanceiras.empresaId, dependencias.empresaId)),
+    dependencias.clientes ?? db!.select({ id: clientes.id, nome: clientes.nome })
+      .from(clientes).where(eq(clientes.empresaId, dependencias.empresaId)),
+    dependencias.fornecedores ?? db!.select({ id: fornecedores.id, nome: fornecedores.nome })
+      .from(fornecedores).where(eq(fornecedores.empresaId, dependencias.empresaId)),
+    dependencias.contas ?? db!.select({ id: contasFinanceiras.id, nome: contasFinanceiras.nome })
+      .from(contasFinanceiras).where(eq(contasFinanceiras.empresaId, dependencias.empresaId)),
+  ]);
+
+  const baixasPorTitulo = new Map<number, typeof baixas>();
+  baixas.forEach((baixa) => {
+    const existentes = baixasPorTitulo.get(baixa.tituloId) ?? [];
+    existentes.push(baixa);
+    baixasPorTitulo.set(baixa.tituloId, existentes);
+  });
+  const categoriaPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome]));
+  const clientePorId = new Map(listaClientes.map((cliente) => [cliente.id, cliente.nome]));
+  const fornecedorPorId = new Map(listaFornecedores.map((fornecedor) => [fornecedor.id, fornecedor.nome]));
+  const contaPorId = new Map(contas.map((conta) => [conta.id, conta.nome]));
+  const textoBuscado = filtros.descricao?.trim().toLocaleLowerCase("pt-BR");
+
+  const itens = titulos.map((titulo) => {
+    const baixasDoTitulo = baixasPorTitulo.get(titulo.id) ?? [];
+    const ciclo = calcularCicloTituloFinanceiro({
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      dataVencimento: titulo.dataVencimento,
+      baixas: baixasDoTitulo.map((baixa) => ({ valor: baixa.valor, estornada: baixa.estornada })),
+      cancelado: titulo.estado === "cancelado",
+      agora,
+    });
+    const conta = calcularContaOperacional({
+      id: titulo.id,
+      tipo: titulo.tipo,
+      estado: ciclo.estado,
+      dataVencimento: titulo.dataVencimento,
+      valorOriginal: titulo.valorOriginal,
+      desconto: titulo.desconto,
+      juros: titulo.juros,
+      valorBaixado: ciclo.valorBaixado,
+    }, agora);
+    const contraparte = titulo.tipo === "receber"
+      ? (titulo.clienteId ? clientePorId.get(titulo.clienteId) : null) ?? titulo.contraparteNome ?? "Cliente não informado"
+      : (titulo.fornecedorId ? fornecedorPorId.get(titulo.fornecedorId) : null) ?? titulo.contraparteNome ?? "Fornecedor não informado";
+    const baixasValidas = baixasDoTitulo.filter((baixa) => !baixa.estornada);
+    return {
+      ...conta,
+      descricao: titulo.descricao,
+      origem: titulo.origem,
+      competencia: titulo.competencia,
+      categoriaId: titulo.categoriaId,
+      categoriaNome: categoriaPorId.get(titulo.categoriaId) ?? "Categoria não informada",
+      clienteId: titulo.clienteId,
+      fornecedorId: titulo.fornecedorId,
+      contraparte,
+      numeroParcela: titulo.numeroParcela,
+      totalParcelas: titulo.totalParcelas,
+      valorDevido: ciclo.valorDevido,
+      valorBaixado: ciclo.valorBaixado,
+      temBaixaConciliada: baixasValidas.some((baixa) => Boolean(baixa.conciliada)),
+      baixas: baixasDoTitulo.map((baixa) => ({
+        ...baixa,
+        contaNome: contaPorId.get(baixa.contaFinanceiraId) ?? "Conta não informada",
+      })),
+    };
+  }).filter((item) => {
+    if (item.estado === "quitado" || item.estado === "cancelado" || item.saldoAberto <= 0.005) return false;
+    if (filtros.estado && item.estado !== filtros.estado) return false;
+    if (!situacaoOperacionalCorresponde(item, filtros.situacao)) return false;
+    if (filtros.aging && item.faixaAging !== filtros.aging) return false;
+    if (textoBuscado && !`${item.descricao} ${item.contraparte}`.toLocaleLowerCase("pt-BR").includes(textoBuscado)) return false;
+    if (filtros.valorMinimo !== undefined && item.saldoAberto < filtros.valorMinimo) return false;
+    if (filtros.valorMaximo !== undefined && item.saldoAberto > filtros.valorMaximo) return false;
+    const vencimento = item.dataVencimento.getTime();
+    if (filtros.dataInicio && vencimento < filtros.dataInicio.getTime()) return false;
+    if (filtros.dataFim && vencimento > filtros.dataFim.getTime()) return false;
+    if (filtros.contaFinanceiraId && !item.baixas.some((baixa) => !baixa.estornada && baixa.contaFinanceiraId === filtros.contaFinanceiraId)) return false;
+    return true;
+  });
+
+  const itensOrdenados = filtros.ordenar === "vencimento_asc" ? [...itens].sort((a, b) => a.dataVencimento.getTime() - b.dataVencimento.getTime() || a.id - b.id)
+    : filtros.ordenar === "vencimento_desc" ? [...itens].sort((a, b) => b.dataVencimento.getTime() - a.dataVencimento.getTime() || a.id - b.id)
+      : filtros.ordenar === "saldo_desc" ? [...itens].sort((a, b) => b.saldoAberto - a.saldoAberto || a.id - b.id)
+        : filtros.ordenar === "contraparte" ? [...itens].sort((a, b) => a.contraparte.localeCompare(b.contraparte, "pt-BR") || a.id - b.id)
+          : ordenarContasOperacionais(itens);
+  const agrupamentos = Array.from(itens.reduce((mapa, item) => {
+    const chave = item.tipo === "receber" ? `cliente:${item.clienteId ?? item.contraparte}` : `fornecedor:${item.fornecedorId ?? item.contraparte}`;
+    const existente = mapa.get(chave) ?? { contraparte: item.contraparte, quantidade: 0, saldoAberto: 0, vencido: 0 };
+    existente.quantidade += 1;
+    existente.saldoAberto += item.saldoAberto;
+    if (item.prioridade === "vencido") existente.vencido += item.saldoAberto;
+    mapa.set(chave, existente);
+    return mapa;
+  }, new Map<string, { contraparte: string; quantidade: number; saldoAberto: number; vencido: number }>()).values())
+    .sort((a, b) => b.saldoAberto - a.saldoAberto || a.contraparte.localeCompare(b.contraparte, "pt-BR"));
+
+  return {
+    itens: itensOrdenados,
+    resumo: resumirContasOperacionais(itens),
+    agrupamentos,
+    top5Contrapartes: agrupamentos.slice(0, 5),
+    convencaoContaFinanceira: "O filtro por conta retorna somente títulos que já possuem baixa válida nessa conta; títulos em aberto não recebem conta prevista.",
+  };
 }
 
 function dataImportada(valor: string): Date {
