@@ -1,6 +1,7 @@
 import {
   cloneElement,
   isValidElement,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -28,7 +29,7 @@ import {
 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { toast } from "sonner";
-import { useLocation } from "wouter";
+import { useLocation, useSearch } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { Button } from "@/components/ui/button";
 import {
@@ -401,6 +402,7 @@ export default function ProducaoPage() {
   const [etapa, setEtapa] = useState<"toras" | "pecas">("toras");
   const [codigoPlaqueta, setCodigoPlaqueta] = useState("");
   const [aceitarToraSemPlaqueta, setAceitarToraSemPlaqueta] = useState(false);
+  const [plaquetaSemIdentificacaoSelecionada, setPlaquetaSemIdentificacaoSelecionada] = useState("");
   const [dialogImportacao, setDialogImportacao] = useState(false);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
   const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
@@ -495,7 +497,13 @@ export default function ProducaoPage() {
   });
   const utils = trpc.useUtils();
   const [, setLocation] = useLocation();
+  const buscaDaRota = useSearch();
+  const rastreabilidadeAberta = useRef<number | null>(null);
   const plaquetas = trpc.producao.plaquetas.list.useQuery({ limite: 10 });
+  const plaquetasSemIdentificacao =
+    trpc.producao.plaquetas.semIdentificacaoDisponiveis.useQuery(undefined, {
+      enabled: aceitarToraSemPlaqueta,
+    });
   const buscaPlaquetaDigitada = trpc.producao.plaquetas.buscar.useQuery(
     { codigo: normalizarCodigo(codigoPlaqueta) },
     { enabled: Boolean(codigoPlaqueta.trim()), retry: false }
@@ -769,6 +777,16 @@ export default function ProducaoPage() {
       );
     }
   };
+  useEffect(() => {
+    const idOrigem = Number(
+      new URLSearchParams(buscaDaRota).get("romaneioId")
+    );
+    if (!Number.isInteger(idOrigem) || idOrigem <= 0) return;
+    if (rastreabilidadeAberta.current === idOrigem) return;
+    rastreabilidadeAberta.current = idOrigem;
+    setLocation("/producao");
+    void abrirEdicaoRomaneio(idOrigem);
+  }, [buscaDaRota, setLocation]);
   const abrirImportacao = () => {
     setArquivoImportacao(null);
     setErrosImportacao([]);
@@ -925,24 +943,7 @@ export default function ProducaoPage() {
     const codigoNormalizado = normalizarCodigo(codigoPlaqueta);
     if (!codigoNormalizado) {
       if (aceitarToraSemPlaqueta) {
-        const toraSemPlaqueta: ToraForm = {
-          plaquetaId: "",
-          codigo: "Sem plaqueta",
-          semPlaqueta: true,
-          madeiraNome: "",
-          diametro: "",
-          comprimento: "",
-          volume: "",
-          origem: "entrada_imediata",
-          exigeConferenciaManual: true,
-        };
-        setRomaneio(atual => ({
-          ...atual,
-          toras: [toraSemPlaqueta, ...atual.toras],
-        }));
-        toast.message(
-          "Tora sem plaqueta adicionada. Informe as medidas para criar uma identificação interna e registrar o consumo."
-        );
+        toast.error("Selecione abaixo a tora sem plaqueta que já está disponível no estoque");
         return;
       }
       toast.error("Digite o código da plaqueta");
@@ -1015,6 +1016,36 @@ export default function ProducaoPage() {
       toast.warning(
         "Há mais de uma tora com esta plaqueta. Preencha manualmente as medidas da tora selecionada antes de continuar."
       );
+  };
+  const adicionarToraSemIdentificacao = (id: string) => {
+    const plaqueta = (plaquetasSemIdentificacao.data ?? []).find(
+      (item: any) => String(item.id) === id
+    );
+    if (!plaqueta) return;
+    if (romaneio.toras.some(tora => tora.plaquetaId === String(plaqueta.id))) {
+      toast.error("Essa tora sem plaqueta já foi adicionada ao romaneio diário");
+      return;
+    }
+    const tora: ToraForm = {
+      plaquetaId: String(plaqueta.id),
+      codigo: plaqueta.codigo,
+      semPlaqueta: true,
+      madeiraNome: String(plaqueta.madeiraNome ?? ""),
+      diametro: String(plaqueta.diametro ?? ""),
+      comprimento: String(plaqueta.comprimento ?? ""),
+      volume: String(plaqueta.volumeDisponivel ?? plaqueta.volumeInicial ?? ""),
+      origem: "estoque",
+      exigeConferenciaManual: false,
+    };
+    setRomaneio(atual => ({
+      ...atual,
+      toras: [tora, ...atual.toras],
+      itens: atual.itens.map(item =>
+        item.madeiraNome ? item : { ...item, madeiraNome: tora.madeiraNome }
+      ),
+    }));
+    setPlaquetaSemIdentificacaoSelecionada("");
+    toast.success("Tora sem plaqueta selecionada do estoque e vinculada ao romaneio");
   };
   const atualizarTora = (
     indice: number,
@@ -3365,10 +3396,42 @@ export default function ProducaoPage() {
                         >
                           Aceitar tora sem plaqueta
                           <span className="mt-0.5 block font-normal text-amber-800 dark:text-amber-200">
-                            Use quando a identificação física foi perdida. O sistema exigirá as medidas e criará um código interno rastreável.
+                            Use quando a identificação física foi perdida. Se a tora já entrou no estoque, selecione-a abaixo para consumir o mesmo registro, sem criar um novo código.
                           </span>
                         </Label>
                       </div>
+                      {aceitarToraSemPlaqueta && (
+                        <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50/40 p-2.5 dark:border-amber-900/70 dark:bg-amber-950/10">
+                          <Label htmlFor="tora-sem-plaqueta-estoque" className="text-xs font-semibold text-amber-950 dark:text-amber-100">
+                            Tora sem plaqueta disponível no estoque
+                          </Label>
+                          <select
+                            id="tora-sem-plaqueta-estoque"
+                            aria-label="Tora sem plaqueta disponível no estoque"
+                            className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            value={plaquetaSemIdentificacaoSelecionada}
+                            onChange={evento => {
+                              const id = evento.target.value;
+                              setPlaquetaSemIdentificacaoSelecionada(id);
+                              if (id) adicionarToraSemIdentificacao(id);
+                            }}
+                          >
+                            <option value="">Selecione pela essência, diâmetro e comprimento</option>
+                            {(plaquetasSemIdentificacao.data ?? []).map((plaqueta: any) => (
+                              <option key={plaqueta.id} value={String(plaqueta.id)}>
+                                {plaqueta.madeiraNome} · Ø {formatarNumero(plaqueta.diametro, 2)} cm · {formatarNumero(plaqueta.comprimento, 3)} m · {formatarNumero(plaqueta.volumeDisponivel, 3)} m³ · {plaqueta.codigo}
+                              </option>
+                            ))}
+                          </select>
+                          {plaquetasSemIdentificacao.isLoading ? (
+                            <p className="text-xs text-muted-foreground">Carregando toras sem plaqueta disponíveis...</p>
+                          ) : (plaquetasSemIdentificacao.data ?? []).length === 0 ? (
+                            <p className="text-xs text-amber-800 dark:text-amber-200">Não há tora sem plaqueta disponível no estoque. Registre a entrada pelo Estoque antes de serrar.</p>
+                          ) : (
+                            <p className="text-xs text-amber-800 dark:text-amber-200">A seleção preenche as medidas e preserva a identificação interna já cadastrada.</p>
+                          )}
+                        </div>
+                      )}
                       {codigoPlaqueta.trim() && !plaquetas.isLoading && (
                         <p
                           className={`rounded-md px-2 py-1 text-xs font-medium ${
@@ -3392,9 +3455,7 @@ export default function ProducaoPage() {
                         className="w-full"
                         type="button"
                         onClick={() => void adicionarTora()}
-                        disabled={
-                          !codigoPlaqueta.trim() && !aceitarToraSemPlaqueta
-                        }
+                        disabled={!codigoPlaqueta.trim()}
                       >
                         <Plus className="mr-1.5 h-4 w-4" />
                         Adicionar tora

@@ -48,7 +48,7 @@ vi.mock("@/lib/trpc", () => {
     trpc: {
       useUtils: () => ({ producao: { plaquetas: { list: invalidar, buscar: { fetch: buscarPlaqueta } }, romaneios: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheRomaneio) } }, estoque: { resumo: invalidar }, serragemTerceiros: { list: invalidar, detalhe: { fetch: vi.fn().mockResolvedValue(detalheSerragem) } } }, cliente: { list: invalidar } }),
       producao: {
-        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, buscar: { useQuery: ({ codigo }: { codigo: string }) => ({ data: [...plaquetas, plaquetaForaDaLista].find((item) => item.codigo === codigo || item.codigoFisico === codigo) ?? null, isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
+        plaquetas: { list: { useQuery: () => ({ data: { itens: plaquetas, total: 2, ...resumoPlaquetasMock }, isLoading: false }) }, buscar: { useQuery: ({ codigo }: { codigo: string }) => ({ data: [...plaquetas, plaquetaForaDaLista].find((item) => item.codigo === codigo || item.codigoFisico === codigo) ?? null, isLoading: false }) }, semIdentificacaoDisponiveis: { useQuery: () => ({ data: [{ id: 77, codigo: "SEM-000077", madeiraNome: "Cedrinho", diametro: "32.00", comprimento: "4.50", volumeInicial: "0.452390", volumeDisponivel: "0.452390", dataEntrada: "2026-08-15T12:00:00.000Z" }], isLoading: false }) }, confirmarVariacoesAtipicas: { useMutation: () => ({ isPending: false, mutate: (input: { variacoes: Array<{ essencia: string; assinatura: string }> }, callbacks: { onSuccess?: () => void }) => { confirmarVariacoesMock(input); callbacks.onSuccess?.(); } }) }, create: mutationInerte },
         romaneios: { list: { useQuery: () => ({ data: romaneios, isLoading: false }) }, itens: queryVazia, confirmar: mutationInerte, update: mutationInerte, atualizarCabecalhoEmLote: mutationInerte, excluir: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
         estoque: { resumo: queryVazia },
         serragemTerceiros: { list: { useQuery: () => ({ data: serragens, isLoading: false }) }, criar: { useMutation: () => ({ mutate: criarSerragemMock, isPending: false }) }, update: { useMutation: () => ({ mutate: atualizarSerragemMock, isPending: false }) }, atualizarCabecalhoEmLote: mutationInerte, registrarRetirada: mutationInerte, modeloTorasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarTorasCsv: mutationInerte, modeloPecasCsv: { useQuery: () => ({ data: undefined, isLoading: false, refetch: vi.fn() }) }, importarPecasCsv: mutationInerte },
@@ -307,18 +307,20 @@ describe("ProducaoPage", () => {
     expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
   });
 
-  it("aceita uma tora sem plaqueta física e exige suas medidas para gerar rastreabilidade interna", async () => {
+  it("seleciona uma tora sem plaqueta física já existente no estoque sem criar nova identificação", async () => {
     const user = userEvent.setup();
     render(<ProducaoPage />);
 
     await user.click(screen.getByRole("button", { name: "Nova produção diária" }));
     await user.click(screen.getByRole("checkbox", { name: /Aceitar tora sem plaqueta/i }));
-    await user.click(screen.getByLabelText("Código da plaqueta"));
-    await user.keyboard("{Enter}");
+    const seletor = screen.getByRole("combobox", { name: "Tora sem plaqueta disponível no estoque" });
+    expect(screen.getByText(/A seleção preenche as medidas e preserva a identificação interna já cadastrada/i)).toBeInTheDocument();
+    await user.selectOptions(seletor, "77");
 
-    expect(screen.getByText("Sem plaqueta")).toBeInTheDocument();
-    expect(screen.getAllByText(/Ajuste as medidas/i)).not.toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeDisabled();
+    expect(screen.getByText("SEM-000077")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("32.00")).toBeInTheDocument();
+    expect(screen.getByDisplayValue("4.50")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continuar para peças" })).toBeEnabled();
   });
 
   it("não preenche automaticamente as medidas quando a plaqueta física está duplicada", async () => {

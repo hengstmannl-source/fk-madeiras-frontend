@@ -5,7 +5,7 @@ import {
   empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel, regularizacoesVolumePlaquetas,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertComponentePacoteOrcamento, type InsertProdutoComercial, type InsertComponenteProdutoComercial, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -70,6 +70,111 @@ export async function getPlaquetaDisponivelPorCodigo(codigoInformado: string) {
       .orderBy(desc(plaquetas.createdAt), desc(plaquetas.id))
   );
   return candidatas.find(item => item.estado === "disponivel") ?? null;
+}
+
+/**
+ * Lista somente as toras sem identificação física que ainda pertencem ao
+ * estoque. A produção deve consumir uma destas plaquetas, nunca criar uma
+ * segunda identificação interna para a mesma tora.
+ */
+export async function listPlaquetasSemIdentificacaoDisponiveis() {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) return [];
+
+  return ordenarPlaquetasPorEntradaMaisRecente(
+    await db
+      .select({
+        id: plaquetas.id,
+        codigo: plaquetas.codigo,
+        madeiraNome: plaquetas.madeiraNome,
+        diametro: plaquetas.diametro,
+        comprimento: plaquetas.comprimento,
+        volumeInicial: plaquetas.volumeInicial,
+        volumeDisponivel: plaquetas.volumeDisponivel,
+        dataEntrada: plaquetas.dataEntrada,
+        origem: plaquetas.origem,
+        createdAt: plaquetas.createdAt,
+      })
+      .from(plaquetas)
+      .where(
+        and(
+          eq(plaquetas.empresaId, empresaId),
+          eq(plaquetas.estado, "disponivel"),
+          eq(plaquetas.situacaoIdentificacao, "sem_plaqueta")
+        )
+      )
+      .orderBy(desc(plaquetas.createdAt), desc(plaquetas.id))
+  );
+}
+
+/** Retorna somente vínculos já existentes, sem inferir ou reconstituir origem. */
+export async function getRastreabilidadePlaqueta(plaquetaId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) return null;
+
+  const plaqueta = (
+    await db
+      .select({
+        id: plaquetas.id,
+        codigo: plaquetas.codigo,
+        codigoFisico: plaquetas.codigoFisico,
+        situacaoIdentificacao: plaquetas.situacaoIdentificacao,
+        madeiraNome: plaquetas.madeiraNome,
+        diametro: plaquetas.diametro,
+        comprimento: plaquetas.comprimento,
+        volumeInicial: plaquetas.volumeInicial,
+        volumeDisponivel: plaquetas.volumeDisponivel,
+        estado: plaquetas.estado,
+        origemDeclarada: plaquetas.origem,
+        romaneioCargaId: plaquetas.romaneioCargaId,
+        dataEntrada: plaquetas.dataEntrada,
+      })
+      .from(plaquetas)
+      .where(and(eq(plaquetas.id, plaquetaId), eq(plaquetas.empresaId, empresaId)))
+      .limit(1)
+  )[0];
+  if (!plaqueta) return null;
+
+  const [carga, consumo, regularizacoes] = await Promise.all([
+    plaqueta.romaneioCargaId
+      ? db
+          .select({ id: romaneiosCargaToras.id, numero: romaneiosCargaToras.numero, data: romaneiosCargaToras.dataCarga })
+          .from(romaneiosCargaToras)
+          .where(and(eq(romaneiosCargaToras.id, plaqueta.romaneioCargaId), eq(romaneiosCargaToras.empresaId, empresaId)))
+          .limit(1)
+      : Promise.resolve([]),
+    db
+      .select({
+        id: romaneiosProducao.id,
+        numero: romaneiosProducao.numero,
+        data: romaneiosProducao.dataProducao,
+        volumeConsumido: itensRomaneioToras.volume,
+      })
+      .from(itensRomaneioToras)
+      .innerJoin(romaneiosProducao, and(eq(romaneiosProducao.id, itensRomaneioToras.romaneioId), eq(romaneiosProducao.empresaId, empresaId)))
+      .where(and(eq(itensRomaneioToras.plaquetaId, plaqueta.id), eq(itensRomaneioToras.empresaId, empresaId)))
+      .limit(1),
+    db.select({
+      id: regularizacoesVolumePlaquetas.id,
+      volumeAnterior: regularizacoesVolumePlaquetas.volumeAnterior,
+      volumeConfirmado: regularizacoesVolumePlaquetas.volumeConfirmado,
+      justificativa: regularizacoesVolumePlaquetas.justificativa,
+      criadoPor: regularizacoesVolumePlaquetas.criadoPor,
+      createdAt: regularizacoesVolumePlaquetas.createdAt,
+    }).from(regularizacoesVolumePlaquetas)
+      .where(and(eq(regularizacoesVolumePlaquetas.plaquetaId, plaqueta.id), eq(regularizacoesVolumePlaquetas.empresaId, empresaId)))
+      .orderBy(desc(regularizacoesVolumePlaquetas.createdAt)),
+  ]);
+
+  const origem = carga[0]
+    ? { tipo: "romaneio_carga" as const, id: carga[0].id, numero: carga[0].numero, data: carga[0].data }
+    : consumo[0]
+      ? { tipo: "romaneio_producao" as const, id: consumo[0].id, numero: consumo[0].numero, data: consumo[0].data }
+      : null;
+
+  return { plaqueta, origem, consumo: consumo[0] ?? null, regularizacoes };
 }
 
 export async function listPlaquetas(parametros: { busca?: string; estado?: "disponivel" | "consumida" | "cancelada"; limite?: number; deslocamento?: number } = {}) {

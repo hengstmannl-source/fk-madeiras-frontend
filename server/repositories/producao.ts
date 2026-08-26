@@ -5,7 +5,7 @@ import {
   empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
   baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
-  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
+  plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel, regularizacoesVolumePlaquetas,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertComponentePacoteOrcamento, type InsertProdutoComercial, type InsertComponenteProdutoComercial, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
@@ -206,6 +206,74 @@ export async function confirmarRomaneioProducao(data: {
       await tx.insert(movimentacoesEstoqueSerrado).values({ empresaId: data.empresaId, loteId, tipo: "entrada_producao", quantidade: 1, motivo: `Aproveitamento do romaneio ${numero}`, criadoPor: data.criadoPor });
     }
     return { id: romaneioId, numero, ...calculo };
+  });
+}
+
+/**
+ * Regulariza exclusivamente uma tora consumida cujo volume persistido esteja
+ * ausente ou inválido. A produção resultante não é reaberta e o valor original
+ * fica preservado na trilha própria de regularização.
+ */
+export async function regularizarVolumePlaquetaConsumida(data: {
+  plaquetaId: number;
+  volumeConfirmado: string;
+  justificativa: string;
+  criadoPor: number;
+  empresaId: number;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const volumeConfirmado = Number(String(data.volumeConfirmado).replace(",", "."));
+  if (!Number.isFinite(volumeConfirmado) || volumeConfirmado <= 0) {
+    throw new Error("Informe um volume cúbico confirmado maior que zero");
+  }
+  const justificativa = data.justificativa.trim();
+  if (justificativa.length < 10) {
+    throw new Error("Explique a regularização do volume com ao menos 10 caracteres");
+  }
+
+  return db.transaction(async (tx: any) => {
+    const plaqueta = (await tx.select().from(plaquetas)
+      .where(and(eq(plaquetas.id, data.plaquetaId), eq(plaquetas.empresaId, data.empresaId)))
+      .limit(1))[0];
+    if (!plaqueta) throw new Error("A plaqueta não foi encontrada");
+    if (plaqueta.estado !== "consumida") throw new Error("A regularização de volume é permitida apenas para tora já consumida");
+
+    const consumo = (await tx.select().from(itensRomaneioToras)
+      .where(and(eq(itensRomaneioToras.plaquetaId, plaqueta.id), eq(itensRomaneioToras.empresaId, data.empresaId)))
+      .limit(1))[0];
+    if (!consumo) throw new Error("Não foi localizado o consumo de produção desta plaqueta");
+
+    const volumePlaqueta = Number(plaqueta.volumeInicial ?? 0);
+    const volumeConsumo = Number(consumo.volume ?? 0);
+    if (volumePlaqueta > 0 && volumeConsumo > 0) {
+      throw new Error("Esta tora já possui volume válido. A regularização é exclusiva para dados ausentes ou inválidos");
+    }
+    const volumeAnterior = volumeConsumo > 0 ? volumeConsumo : volumePlaqueta;
+
+    await tx.update(plaquetas).set({ volumeInicial: volumeConfirmado.toFixed(6), volumeDisponivel: "0.000000" })
+      .where(and(eq(plaquetas.id, plaqueta.id), eq(plaquetas.empresaId, data.empresaId)));
+    await tx.update(itensRomaneioToras).set({ volume: volumeConfirmado.toFixed(6) })
+      .where(and(eq(itensRomaneioToras.id, consumo.id), eq(itensRomaneioToras.empresaId, data.empresaId)));
+    await tx.update(movimentacoesPlaquetas).set({ volume: volumeConfirmado.toFixed(6), motivo: `Consumo regularizado: ${justificativa}` })
+      .where(and(eq(movimentacoesPlaquetas.plaquetaId, plaqueta.id), eq(movimentacoesPlaquetas.romaneioId, consumo.romaneioId), eq(movimentacoesPlaquetas.empresaId, data.empresaId), eq(movimentacoesPlaquetas.tipo, "consumo")));
+
+    const volumes = await tx.select({ volume: itensRomaneioToras.volume }).from(itensRomaneioToras)
+      .where(and(eq(itensRomaneioToras.romaneioId, consumo.romaneioId), eq(itensRomaneioToras.empresaId, data.empresaId)));
+    const volumeTora = volumes.reduce((soma: number, item: { volume: string | null }) => soma + Number(item.volume ?? 0), 0);
+    await tx.update(romaneiosProducao).set({ volumeTora: volumeTora.toFixed(6) })
+      .where(and(eq(romaneiosProducao.id, consumo.romaneioId), eq(romaneiosProducao.empresaId, data.empresaId)));
+
+    const registro = await tx.insert(regularizacoesVolumePlaquetas).values({
+      empresaId: data.empresaId,
+      plaquetaId: plaqueta.id,
+      romaneioProducaoId: consumo.romaneioId,
+      volumeAnterior: volumeAnterior.toFixed(6),
+      volumeConfirmado: volumeConfirmado.toFixed(6),
+      justificativa,
+      criadoPor: data.criadoPor,
+    });
+    return { plaquetaId: plaqueta.id, romaneioProducaoId: consumo.romaneioId, volumeAnterior, volumeConfirmado, regularizacaoId: getInsertedId(registro as MysqlInsertResult) };
   });
 }
 

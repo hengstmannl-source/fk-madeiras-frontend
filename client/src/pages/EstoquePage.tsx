@@ -16,7 +16,7 @@ import {
   Upload,
   Warehouse,
 } from "lucide-react";
-import { Link, useSearch } from "wouter";
+import { Link, useLocation, useSearch } from "wouter";
 import { etiquetaPlaqueta } from "@shared/plaquetas";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc";
@@ -246,6 +246,9 @@ export default function EstoquePage() {
     id: number;
     numero: string;
   } | null>(null);
+  const [plaquetaRastreadaId, setPlaquetaRastreadaId] = useState<number | null>(null);
+  const [volumeRegularizado, setVolumeRegularizado] = useState("");
+  const [justificativaRegularizacao, setJustificativaRegularizacao] = useState("");
   const [carga, setCarga] = useState<CargaFormulario>(novaCarga);
   const referenciasPlaquetasCarga = useRef<Record<number, HTMLInputElement | null>>({});
   const [indicePlaquetaParaFoco, setIndicePlaquetaParaFoco] = useState<number | null>(null);
@@ -266,6 +269,7 @@ export default function EstoquePage() {
   const carregouEdicao = useRef<number | null>(null);
   const utils = trpc.useUtils();
   const buscaUrl = useSearch();
+  const [, setLocation] = useLocation();
   const { user } = useAuth();
   useEffect(() => {
     const parametros = new URLSearchParams(buscaUrl);
@@ -300,6 +304,21 @@ export default function EstoquePage() {
     estado: estadoPlaquetas || undefined,
     limite: 10,
     deslocamento: deslocamentoPlaquetas,
+  });
+  const rastreabilidadePlaqueta = trpc.producao.plaquetas.rastreabilidade.useQuery(
+    { id: plaquetaRastreadaId ?? 1 },
+    { enabled: plaquetaRastreadaId !== null }
+  );
+  const regularizarVolumeConsumido = trpc.producao.plaquetas.regularizarVolumeConsumido.useMutation({
+    onSuccess: () => {
+      toast.success("Volume regularizado com trilha de auditoria");
+      setVolumeRegularizado("");
+      setJustificativaRegularizacao("");
+      void utils.producao.plaquetas.rastreabilidade.invalidate();
+      void utils.producao.plaquetas.list.invalidate();
+      void utils.producao.romaneios.list.invalidate();
+    },
+    onError: erro => toast.error(erro.message),
   });
   const serrado = trpc.producao.estoque.resumo.useQuery();
   const serradoProprio = useMemo(
@@ -1043,7 +1062,14 @@ export default function EstoquePage() {
                       {plaquetasVisiveis.map((item: any) => (
                         <TableRow key={item.id}>
                           <TableCell>
-                            <IdentificacaoTora item={item} />
+                            <button
+                              type="button"
+                              className="rounded text-left outline-none transition-colors hover:text-primary focus-visible:ring-2 focus-visible:ring-ring"
+                              aria-label={`Ver rastreabilidade de ${etiquetaPlaqueta(item)}`}
+                              onClick={() => setPlaquetaRastreadaId(item.id)}
+                            >
+                              <IdentificacaoTora item={item} />
+                            </button>
                           </TableCell>
                           <TableCell>{item.madeiraNome}</TableCell>
                           <TableCell className="text-right">
@@ -1737,6 +1763,128 @@ export default function EstoquePage() {
               </Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={plaquetaRastreadaId !== null}
+        onOpenChange={aberto => {
+          if (!aberto) setPlaquetaRastreadaId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Rastreabilidade da tora</DialogTitle>
+            <DialogDescription>
+              A consulta exibe somente os vínculos já registrados no estoque e na produção.
+            </DialogDescription>
+          </DialogHeader>
+          {rastreabilidadePlaqueta.isLoading ? (
+            <div className="py-8 text-center text-sm text-muted-foreground">Carregando a cadeia de origem...</div>
+          ) : rastreabilidadePlaqueta.data ? (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-lg border bg-muted/30 p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tora no estoque</p>
+                <p className="mt-1 font-semibold">{etiquetaPlaqueta(rastreabilidadePlaqueta.data.plaqueta)}</p>
+                <p className="mt-1 text-muted-foreground">
+                  {rastreabilidadePlaqueta.data.plaqueta.madeiraNome} · Ø {rastreabilidadePlaqueta.data.plaqueta.diametro ? formatarNumero(rastreabilidadePlaqueta.data.plaqueta.diametro, 2) : "—"} cm · {rastreabilidadePlaqueta.data.plaqueta.comprimento ? formatarNumero(rastreabilidadePlaqueta.data.plaqueta.comprimento, 3) : "—"} m · {formatarNumero(rastreabilidadePlaqueta.data.plaqueta.volumeInicial, 3)} m³ na entrada
+                </p>
+              </div>
+              {rastreabilidadePlaqueta.data.origem ? (
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">Origem registrada</p>
+                  <p className="mt-1 font-medium">
+                    {rastreabilidadePlaqueta.data.origem.tipo === "romaneio_carga" ? "Romaneio de entrada" : "Romaneio de produção"} · {rastreabilidadePlaqueta.data.origem.numero}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{formatarData(rastreabilidadePlaqueta.data.origem.data)}</p>
+                  {rastreabilidadePlaqueta.data.origem.tipo === "romaneio_carga" ? (
+                    <Button
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        const origem = rastreabilidadePlaqueta.data?.origem;
+                        if (!origem || origem.tipo !== "romaneio_carga") return;
+                        setPlaquetaRastreadaId(null);
+                        abrirEdicao(origem.id);
+                      }}
+                    >
+                      Abrir romaneio de entrada
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => {
+                        const origem = rastreabilidadePlaqueta.data?.origem;
+                        if (!origem || origem.tipo !== "romaneio_producao") return;
+                        setPlaquetaRastreadaId(null);
+                        setLocation(`/producao?romaneioId=${origem.id}`);
+                      }}
+                    >
+                      Abrir romaneio de produção
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-amber-950 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
+                  <p className="font-medium">Origem documental não vinculada</p>
+                  <p className="mt-1 text-xs">{rastreabilidadePlaqueta.data.plaqueta.origemDeclarada || "Esta tora foi registrada fora de um romaneio de entrada e ainda não possui um vínculo documental adicional."}</p>
+                </div>
+              )}
+              {rastreabilidadePlaqueta.data.consumo && (
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Consumo na produção</p>
+                  <p className="mt-1">{rastreabilidadePlaqueta.data.consumo.numero} · {formatarNumero(rastreabilidadePlaqueta.data.consumo.volumeConsumido, 3)} m³ consumidos</p>
+                </div>
+              )}
+              {rastreabilidadePlaqueta.data.regularizacoes.length > 0 && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sky-950 dark:border-sky-900 dark:bg-sky-950/20 dark:text-sky-100">
+                  <p className="text-xs font-semibold uppercase tracking-wide">Histórico de regularização de volume</p>
+                  <div className="mt-2 space-y-2">
+                    {rastreabilidadePlaqueta.data.regularizacoes.map((regularizacao: any) => (
+                      <div key={regularizacao.id} className="rounded border border-sky-200/80 bg-background/70 p-2 text-xs dark:border-sky-900">
+                        <p><strong>{formatarNumero(regularizacao.volumeAnterior, 3)} m³</strong> → <strong>{formatarNumero(regularizacao.volumeConfirmado, 3)} m³</strong></p>
+                        <p className="mt-1 text-muted-foreground">{regularizacao.justificativa}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {user?.role === "admin" && rastreabilidadePlaqueta.data.consumo &&
+                (Number(rastreabilidadePlaqueta.data.plaqueta.volumeInicial ?? 0) <= 0 || Number(rastreabilidadePlaqueta.data.consumo.volumeConsumido ?? 0) <= 0) && (
+                  <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-950 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-100">
+                    <p className="font-medium">Regularizar volume ausente</p>
+                    <p className="mt-1 text-xs">Use apenas o volume conferido fisicamente ou em documento. A correção preserva o valor anterior, o consumo e a justificativa em uma trilha de auditoria.</p>
+                    <div className="mt-3 grid gap-3 sm:grid-cols-[150px_1fr]">
+                      <Campo label="Volume confirmado (m³)">
+                        <Input aria-label="Volume confirmado da tora" inputMode="decimal" value={volumeRegularizado} onChange={evento => setVolumeRegularizado(evento.target.value)} placeholder="Ex.: 0,845" />
+                      </Campo>
+                      <Campo label="Justificativa">
+                        <Textarea aria-label="Justificativa da regularização" value={justificativaRegularizacao} onChange={evento => setJustificativaRegularizacao(evento.target.value)} placeholder="Informe a conferência documental ou física realizada" />
+                      </Campo>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="mt-3"
+                      disabled={regularizarVolumeConsumido.isPending || !volumeRegularizado.trim() || justificativaRegularizacao.trim().length < 10}
+                      onClick={() => {
+                        const rastreabilidade = rastreabilidadePlaqueta.data;
+                        if (!rastreabilidade) return;
+                        regularizarVolumeConsumido.mutate({
+                          plaquetaId: rastreabilidade.plaqueta.id,
+                          volumeConfirmado: volumeRegularizado,
+                          justificativa: justificativaRegularizacao,
+                        });
+                      }}
+                    >
+                      {regularizarVolumeConsumido.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Registrar volume conferido
+                    </Button>
+                  </div>
+                )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">Não foi possível localizar essa tora no estoque atual.</div>
+          )}
         </DialogContent>
       </Dialog>
       <AlertDialog

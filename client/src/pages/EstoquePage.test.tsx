@@ -11,14 +11,16 @@ vi.stubGlobal("ResizeObserver", class {
 });
 Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
 
-const { criarCargaMutate, criarFornecedorMutate, importarMutate, excluirMutate, cargasListQuery, plaquetasListQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
+const { criarCargaMutate, criarFornecedorMutate, importarMutate, excluirMutate, regularizarVolumeMutate, cargasListQuery, plaquetasListQuery, rastreabilidadeQuery, estoqueResumoQuery, perfilAtual } = vi.hoisted(() => ({
   criarCargaMutate: vi.fn(),
   criarFornecedorMutate: vi.fn(),
   importarMutate: vi.fn(),
   excluirMutate: vi.fn(),
+  regularizarVolumeMutate: vi.fn(),
   perfilAtual: { role: "admin" },
   cargasListQuery: vi.fn(() => ({ data: [{ id: 1, numero: "CAR-000001", dataCarga: "2026-08-12T12:00:00.000Z", dataVencimento: "2026-08-20T12:00:00.000Z", origem: "Fazenda Norte", fornecedorId: 7, responsavel: "João", totalPlaquetas: 2, volumeTotal: "1.200000", valorProdutos: "1080.00", fretePorMetroCubico: "100.00", frete: "120.00", valorTotal: "1200.00" }], isLoading: false })),
   plaquetasListQuery: vi.fn(() => ({ data: { itens: [{ id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeDisponivel: "0.353000", valorMetroCubico: "900.00", valorTotal: "317.70", estado: "disponivel" }], total: 20, totalDisponiveis: 20, proximoDeslocamento: 10 }, isLoading: false })),
+  rastreabilidadeQuery: vi.fn(() => ({ data: { plaqueta: { id: 5, codigo: "TOR-0005", madeiraNome: "Cedrinho", diametro: "30.00", comprimento: "5.00", volumeInicial: "0.353000", origemDeclarada: null }, origem: { tipo: "romaneio_carga", id: 1, numero: "CAR-000001", data: "2026-08-12T12:00:00.000Z" }, consumo: null, regularizacoes: [] }, isLoading: false })),
   estoqueResumoQuery: vi.fn(() => ({ data: [
     { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeEntrada: 26, quantidadeSaida: 6, quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
     { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "4.00", quantidadeEntrada: 8, quantidadeSaida: 4, quantidadeDisponivel: 4, volumeDisponivel: "0.060000" },
@@ -32,7 +34,7 @@ vi.mock("@/lib/trpc", () => {
   const mutation = { useMutation: () => ({ mutate: vi.fn(), isPending: false }) };
   return {
     trpc: {
-      useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar } }, financeiro: { fornecedores: { list: invalidar } } }),
+      useUtils: () => ({ producao: { cargas: { list: invalidar, get: invalidar }, plaquetas: { list: invalidar, rastreabilidade: invalidar }, romaneios: { list: invalidar } }, financeiro: { fornecedores: { list: invalidar } } }),
       producao: {
         cargas: {
           list: { useQuery: cargasListQuery },
@@ -44,7 +46,7 @@ vi.mock("@/lib/trpc", () => {
           excluir: { useMutation: () => ({ mutate: excluirMutate, isPending: false }) },
           importarPlaquetasCsv: { useMutation: () => ({ mutate: importarMutate, isPending: false }) },
         },
-        plaquetas: { list: { useQuery: plaquetasListQuery }, create: mutation },
+        plaquetas: { list: { useQuery: plaquetasListQuery }, rastreabilidade: { useQuery: rastreabilidadeQuery }, regularizarVolumeConsumido: { useMutation: () => ({ mutate: regularizarVolumeMutate, isPending: false }) }, create: mutation },
         estoque: { resumo: { useQuery: estoqueResumoQuery } },
       },
       financeiro: { fornecedores: { list: { useQuery: () => ({ data: [{ id: 7, nome: "Madeiras Norte" }], isLoading: false }) }, create: { useMutation: () => ({ mutate: criarFornecedorMutate, isPending: false }) } } },
@@ -60,8 +62,10 @@ afterEach(() => {
   criarFornecedorMutate.mockReset();
   importarMutate.mockReset();
   excluirMutate.mockReset();
+  regularizarVolumeMutate.mockReset();
   cargasListQuery.mockClear();
   plaquetasListQuery.mockClear();
+  rastreabilidadeQuery.mockClear();
   estoqueResumoQuery.mockReset();
   estoqueResumoQuery.mockImplementation(() => ({ data: [
     { madeiraNome: "Cedrinho", espessura: "2.50", largura: "15.00", comprimento: "3.00", quantidadeEntrada: 26, quantidadeSaida: 6, quantidadeDisponivel: 20, volumeDisponivel: "0.225000" },
@@ -284,6 +288,17 @@ describe("EstoquePage", () => {
     expect(screen.getByText("Exibindo 1–1 de 20 plaqueta(s).")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Próximas 10" }));
     expect(plaquetasListQuery).toHaveBeenLastCalledWith({ busca: "Cedrinho", limite: 10, deslocamento: 10 });
+  });
+
+  it("abre a rastreabilidade da plaqueta e permite acessar seu romaneio de entrada", async () => {
+    const user = userEvent.setup();
+    render(<EstoquePage />);
+
+    await user.click(screen.getByRole("button", { name: "Ver rastreabilidade de TOR-0005" }));
+
+    expect(await screen.findByText("Origem registrada")).toBeInTheDocument();
+    expect(screen.getByText("Romaneio de entrada · CAR-000001")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Abrir romaneio de entrada" })).toBeInTheDocument();
   });
 
   it("oculta a ação de exclusão para utilizadores sem perfil administrativo", () => {

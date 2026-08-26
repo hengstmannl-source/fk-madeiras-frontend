@@ -799,3 +799,8 @@
 - [x] Construir as telas gerenciais de configuração, lançamentos, rateios, custos, margem, cobertura e simulação de preço
 - [x] Cobrir regressões de rastreabilidade, rateio, custos diretos, competência, cobertura, versionamento, venda histórica e acesso
 - [x] Validar migration, dados existentes, interface, TypeScript, suíte e build antes de publicar a Etapa 6
+- [x] Auditar sem alteração as plaquetas sem identificação, suas origens e as toras consumidas com volume cúbico incompleto
+- [x] Exibir a rastreabilidade da plaqueta no estoque e navegar para o romaneio ou documento que a originou
+- [x] Permitir selecionar, na produção, uma tora disponível sem plaqueta pela essência e medidas, consumindo o mesmo registro de estoque sem gerar nova identificação
+- [x] Disponibilizar correção auditável de volume para tora já consumida, preservando a cadeia de produção e estoque
+- [x] Cobrir regressões, validar a interface e publicar as correções de plaquetas e volume

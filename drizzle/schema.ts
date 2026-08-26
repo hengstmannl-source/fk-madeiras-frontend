@@ -425,6 +425,28 @@ export const plaquetas = mysqlTable("plaquetas", {
 export type Plaqueta = typeof plaquetas.$inferSelect;
 export type InsertPlaqueta = typeof plaquetas.$inferInsert;
 
+/**
+ * Corrige volume físico informado indevidamente sem apagar a medição, o consumo
+ * ou o romaneio original. Cada regularização registra o valor anterior, o valor
+ * confirmado e quem justificou a alteração.
+ */
+export const regularizacoesVolumePlaquetas = mysqlTable("regularizacoesVolumePlaquetas", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  plaquetaId: int("plaquetaId").notNull(),
+  romaneioProducaoId: int("romaneioProducaoId"),
+  volumeAnterior: decimal("volumeAnterior", { precision: 14, scale: 6 }).notNull(),
+  volumeConfirmado: decimal("volumeConfirmado", { precision: 14, scale: 6 }).notNull(),
+  justificativa: text("justificativa").notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  plaquetaIndice: index("regularizacoes_volume_plaquetas_plaqueta_indice").on(table.empresaId, table.plaquetaId, table.createdAt),
+  romaneioIndice: index("regularizacoes_volume_plaquetas_romaneio_indice").on(table.empresaId, table.romaneioProducaoId),
+}));
+
+export type RegularizacaoVolumePlaqueta = typeof regularizacoesVolumePlaquetas.$inferSelect;
+
 /** Conferências registradas para alertas de volume atípico por essência. */
 export const conferenciasVariacaoPlaquetas = mysqlTable("conferenciasVariacaoPlaquetas", {
   id: int("id").autoincrement().primaryKey(),

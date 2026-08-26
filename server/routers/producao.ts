@@ -57,6 +57,12 @@ const ListaPlaquetasSchema = z.object({
   deslocamento: z.number().int().min(0).default(0),
 });
 
+const RegularizacaoVolumeConsumidoSchema = z.object({
+  plaquetaId: z.number().int().positive(),
+  volumeConfirmado: DecimalPositivo,
+  justificativa: z.string().trim().min(10, "Explique a regularização com ao menos 10 caracteres").max(2000),
+});
+
 const ConfirmacaoVariacoesAtipicasSchema = z.object({
   variacoes: z.array(z.object({
     essencia: z.string().trim().min(1).max(200),
@@ -204,6 +210,13 @@ export const producaoRouter = router({
   plaquetas: router({
     list: protectedProcedure.input(ListaPlaquetasSchema.optional()).query(({ ctx, input }) => db.listPlaquetas(input)),
     buscar: protectedProcedure.input(z.object({ codigo: z.string().trim().min(1, "Digite o código da plaqueta").max(80) })).query(({ ctx, input }) => db.getPlaquetaDisponivelPorCodigo(input.codigo)),
+    semIdentificacaoDisponiveis: protectedProcedure.query(() => db.listPlaquetasSemIdentificacaoDisponiveis()),
+    rastreabilidade: protectedProcedure.input(z.object({ id: z.number().int().positive() })).query(({ ctx, input }) => db.getRastreabilidadePlaqueta(input.id)),
+    regularizarVolumeConsumido: adminProcedure.input(RegularizacaoVolumeConsumidoSchema).mutation(({ ctx, input }) => db.regularizarVolumePlaquetaConsumida({
+      ...input,
+      criadoPor: ctx.user.id,
+      empresaId: ctx.configuracaoEmpresa.id,
+    })),
     confirmarVariacoesAtipicas: protectedProcedure.input(ConfirmacaoVariacoesAtipicasSchema).mutation(({ ctx, input }) => db.confirmarVariacoesAtipicasPlaquetas(input.variacoes, ctx.user.id)),
     relatorioExcecoes: protectedProcedure.input(RelatorioExcecoesPlaquetasSchema.optional()).query(({ ctx, input }) => db.getRelatorioExcecoesPlaquetas(input)),
     create: protectedProcedure.input(PlaquetaSchema).mutation(({ ctx, input }) => db.createPlaqueta({

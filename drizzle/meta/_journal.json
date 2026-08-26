@@ -491,6 +491,13 @@
       "when": 1787771180608,
       "tag": "0069_sturdy_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "5",
+      "when": 1787774018762,
+      "tag": "0070_short_tana_nile",
+      "breakpoints": true
     }
   ]
 }
