@@ -248,4 +248,33 @@
     white-space: normal;
     overflow-wrap: anywhere;
   }
+
+  /* O resumo por categoria possui três colunas e fica ao lado do fluxo diário.
+     Suas colunas passam a dividir o painel disponível, mantendo os valores
+     monetários visíveis e permitindo que somente o nome da categoria quebre. */
+  .overflow-hidden.rounded-lg.border.bg-white:has(> .border-b > h3) [data-slot="table-container"]:has(> [data-slot="table"] > [data-slot="table-header"] > tr > th:nth-child(3):last-child) {
+    overflow-x: clip;
+  }
+
+  .overflow-hidden.rounded-lg.border.bg-white:has(> .border-b > h3) [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(3):last-child) {
+    table-layout: fixed;
+  }
+
+  .overflow-hidden.rounded-lg.border.bg-white:has(> .border-b > h3) [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(3):last-child) :is(th, td) {
+    min-width: 0;
+  }
+
+  .overflow-hidden.rounded-lg.border.bg-white:has(> .border-b > h3) [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(3):last-child) :is(th, td):nth-child(1) {
+    width: 43%;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .overflow-hidden.rounded-lg.border.bg-white:has(> .border-b > h3) [data-slot="table"]:has(> [data-slot="table-header"] > tr > th:nth-child(3):last-child) :is(th, td):nth-child(n + 2) {
+    width: 28.5%;
+    padding-left: 0.5rem;
+    padding-right: 0.5rem;
+    white-space: nowrap;
+    font-size: 0.75rem;
+  }
 }

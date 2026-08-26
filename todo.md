@@ -763,3 +763,5 @@
 - [x] Validar dados, TypeScript, suíte, build, auditoria e interface da Etapa 3 antes de publicar
 - [x] Ajustar o painel de movimentações do fluxo para eliminar rolagem horizontal e preservar a legibilidade dos dados
 - [x] Validar visualmente, testar e publicar o ajuste pontual do painel
+- [x] Ajustar o resumo por categoria e origem para eliminar rolagem horizontal e preservar a leitura dos valores
+- [x] Validar visualmente, testar e publicar o ajuste pontual do resumo por categoria
