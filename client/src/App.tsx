@@ -25,6 +25,7 @@ import InventarioPage from "./pages/InventarioPage";
 import DieselPage from "./pages/DieselPage";
 import EquipePage from "./pages/EquipePage";
 import { RhFichasFinanceiras } from "./pages/RhFichasFinanceiras";
+import RentabilidadeMadeiraPage from "./pages/RentabilidadeMadeiraPage";
 import { CadastroEmpresaPage, ConvitePage, LoginPage } from "./pages/AcessoPage";
 import { tratarAtalhosProducao } from "./lib/producaoKeyboardShortcuts";
 
@@ -59,6 +60,7 @@ function Router() {
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />
         <Route path="/orcamentos/:id" component={OrcamentoEdit} />
         <Route path="/financeiro" component={FinanceiroPage} />
+        <Route path="/financeiro/rentabilidade-madeira" component={RentabilidadeMadeiraPage} />
         <Route path="/financeiro/caixa-cheque" component={CaixaChequePage} />
         <Route path="/conciliacao-bancaria" component={ConciliacaoBancariaPage} />
         <Route path="/producao" component={ProducaoComAtalhos} />

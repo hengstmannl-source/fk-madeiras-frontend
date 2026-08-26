@@ -463,6 +463,34 @@
       "when": 1787750354741,
       "tag": "0065_foamy_rumiko_fujikawa",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "5",
+      "when": 1787770043888,
+      "tag": "0066_premium_darkstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "5",
+      "when": 1787770293297,
+      "tag": "0067_black_abomination",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "5",
+      "when": 1787771124970,
+      "tag": "0068_omniscient_quasimodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "5",
+      "when": 1787771180608,
+      "tag": "0069_sturdy_electro",
+      "breakpoints": true
     }
   ]
 }

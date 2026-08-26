@@ -785,6 +785,183 @@ export const abastecimentosDiesel = mysqlTable("abastecimentosDiesel", {
 export type AbastecimentoDiesel = typeof abastecimentosDiesel.$inferSelect;
 export type InsertAbastecimentoDiesel = typeof abastecimentosDiesel.$inferInsert;
 
+/** Centro gerencial que separa custos industriais dos comerciais e administrativos. */
+export const centrosCustosGerenciais = mysqlTable("centrosCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  codigo: mysqlEnum("codigo", ["industrial", "comercial_administrativo"]).notNull(),
+  nome: varchar("nome", { length: 150 }).notNull(),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaCodigoUnico: uniqueIndex("centros_custos_gerenciais_empresa_codigo_unico").on(table.empresaId, table.codigo),
+}));
+
+export type CentroCustoGerencial = typeof centrosCustosGerenciais.$inferSelect;
+export type InsertCentroCustoGerencial = typeof centrosCustosGerenciais.$inferInsert;
+
+/** Categoria configurável e sua base de apropriação; não altera a categoria financeira original. */
+export const categoriasCustosGerenciais = mysqlTable("categoriasCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  centroCustoId: int("centroCustoId").notNull(),
+  categoriaFinanceiraId: int("categoriaFinanceiraId"),
+  codigo: varchar("codigo", { length: 80 }).notNull(),
+  nome: varchar("nome", { length: 150 }).notNull(),
+  tipo: mysqlEnum("tipo", ["estrutural", "direto_venda"]).notNull().default("estrutural"),
+  baseApropriacao: mysqlEnum("baseApropriacao", ["m3_produzido", "m3_vendido", "valor_vendido", "quantidade_vendida", "carga", "pedido", "percentual_receita", "manual"]).notNull(),
+  /** Só permite aproveitar a comissão já calculada na venda quando configurado expressamente. */
+  incluirComissaoVendaAutomatica: boolean("incluirComissaoVendaAutomatica").notNull().default(false),
+  ativo: boolean("ativo").notNull().default(true),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  empresaCodigoUnico: uniqueIndex("categorias_custos_gerenciais_empresa_codigo_unico").on(table.empresaId, table.codigo),
+  centroIndice: index("categorias_custos_gerenciais_centro_indice").on(table.empresaId, table.centroCustoId, table.ativo),
+}));
+
+export type CategoriaCustoGerencial = typeof categoriasCustosGerenciais.$inferSelect;
+export type InsertCategoriaCustoGerencial = typeof categoriasCustosGerenciais.$inferInsert;
+
+/** Custo gerencial por competência, independente da baixa ou do título financeiro de origem. */
+export const lancamentosCustosGerenciais = mysqlTable("lancamentosCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  categoriaCustoId: int("categoriaCustoId").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  /** Competência padrão de origem; em venda direta é a competência da própria venda. */
+  competenciaOriginal: timestamp("competenciaOriginal"),
+  competenciaAlteradaEm: timestamp("competenciaAlteradaEm"),
+  competenciaAlteradaPor: int("competenciaAlteradaPor"),
+  justificativaCompetencia: text("justificativaCompetencia"),
+  descricao: varchar("descricao", { length: 300 }).notNull(),
+  /** Define se valor representa moeda ou percentual; nunca é inferido da categoria. */
+  unidadeValor: mysqlEnum("unidadeValor", ["monetario", "percentual"]).notNull().default("monetario"),
+  valor: decimal("valor", { precision: 14, scale: 4 }).notNull(),
+  origem: mysqlEnum("origem", ["manual", "financeiro_referenciado", "venda_direta"]).notNull().default("manual"),
+  tituloFinanceiroId: int("tituloFinanceiroId"),
+  orcamentoId: int("orcamentoId"),
+  romaneioCargaId: int("romaneioCargaId"),
+  romaneioProducaoId: int("romaneioProducaoId"),
+  loteId: int("loteId"),
+  notaDieselId: int("notaDieselId"),
+  comprovanteUrl: varchar("comprovanteUrl", { length: 1000 }),
+  observacoes: text("observacoes"),
+  estado: mysqlEnum("estado", ["ativo", "cancelado"]).notNull().default("ativo"),
+  canceladoEm: timestamp("canceladoEm"),
+  canceladoPor: int("canceladoPor"),
+  motivoCancelamento: text("motivoCancelamento"),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  competenciaIndice: index("lancamentos_custos_gerenciais_competencia_indice").on(table.empresaId, table.competencia, table.estado),
+  categoriaCompetenciaIndice: index("lancamentos_custos_gerenciais_categoria_competencia_indice").on(table.empresaId, table.categoriaCustoId, table.competencia),
+  vendaIndice: index("lancamentos_custos_gerenciais_venda_indice").on(table.empresaId, table.orcamentoId, table.estado),
+}));
+
+export type LancamentoCustoGerencial = typeof lancamentosCustosGerenciais.$inferSelect;
+export type InsertLancamentoCustoGerencial = typeof lancamentosCustosGerenciais.$inferInsert;
+
+/** Versão imutável de um rateio mensal, preservando a base e os fatores utilizados no cálculo. */
+export const rateiosCustosGerenciais = mysqlTable("rateiosCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  versao: int("versao").notNull(),
+  estado: mysqlEnum("estado", ["vigente", "substituido"]).notNull().default("vigente"),
+  criteriosSnapshot: text("criteriosSnapshot").notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  substituidoEm: timestamp("substituidoEm"),
+  substituidoPor: int("substituidoPor"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  empresaCompetenciaVersaoUnica: uniqueIndex("rateios_custos_gerenciais_empresa_competencia_versao_unico").on(table.empresaId, table.competencia, table.versao),
+  competenciaEstadoIndice: index("rateios_custos_gerenciais_competencia_estado_indice").on(table.empresaId, table.competencia, table.estado),
+}));
+
+export type RateioCustoGerencial = typeof rateiosCustosGerenciais.$inferSelect;
+export type InsertRateioCustoGerencial = typeof rateiosCustosGerenciais.$inferInsert;
+
+/** Componente calculado de uma versão de rateio, usado para auditoria sem recalcular o histórico. */
+export const itensRateiosCustosGerenciais = mysqlTable("itensRateiosCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  rateioId: int("rateioId").notNull(),
+  categoriaCustoId: int("categoriaCustoId").notNull(),
+  baseApropriacao: mysqlEnum("baseApropriacao", ["m3_produzido", "m3_vendido", "valor_vendido", "quantidade_vendida", "carga", "pedido", "percentual_receita", "manual"]).notNull(),
+  baseTotal: decimal("baseTotal", { precision: 18, scale: 6 }).notNull(),
+  valorRateado: decimal("valorRateado", { precision: 14, scale: 2 }).notNull(),
+  fatorUnitario: decimal("fatorUnitario", { precision: 18, scale: 8 }).notNull(),
+  coberturaPercentual: decimal("coberturaPercentual", { precision: 8, scale: 2 }).notNull().default("100"),
+  memoriaCalculo: text("memoriaCalculo").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  rateioCategoriaUnica: uniqueIndex("itens_rateios_custos_gerenciais_rateio_categoria_unico").on(table.rateioId, table.categoriaCustoId),
+  categoriaIndice: index("itens_rateios_custos_gerenciais_categoria_indice").on(table.empresaId, table.categoriaCustoId),
+}));
+
+export type ItemRateioCustoGerencial = typeof itensRateiosCustosGerenciais.$inferSelect;
+export type InsertItemRateioCustoGerencial = typeof itensRateiosCustosGerenciais.$inferInsert;
+
+/** Cálculo imutável por produção, lote ou venda; nunca altera o documento operacional de origem. */
+export const calculosCustosGerenciais = mysqlTable("calculosCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  entidadeTipo: mysqlEnum("entidadeTipo", ["romaneio_producao", "lote", "venda"]).notNull(),
+  entidadeId: int("entidadeId").notNull(),
+  competencia: timestamp("competencia").notNull(),
+  versao: int("versao").notNull(),
+  estado: mysqlEnum("estado", ["vigente", "substituido"]).notNull().default("vigente"),
+  rateioId: int("rateioId"),
+  custoMateriaPrima: decimal("custoMateriaPrima", { precision: 14, scale: 2 }).notNull().default("0"),
+  custoIndustrial: decimal("custoIndustrial", { precision: 14, scale: 2 }).notNull().default("0"),
+  custoAdministrativo: decimal("custoAdministrativo", { precision: 14, scale: 2 }).notNull().default("0"),
+  custoComercial: decimal("custoComercial", { precision: 14, scale: 2 }).notNull().default("0"),
+  custoTotal: decimal("custoTotal", { precision: 14, scale: 2 }).notNull().default("0"),
+  coberturaPercentual: decimal("coberturaPercentual", { precision: 8, scale: 2 }).notNull().default("0"),
+  statusCobertura: mysqlEnum("statusCobertura", ["completo", "parcial", "nao_determinado", "sem_volume_produzido"]).notNull(),
+  criteriosSnapshot: text("criteriosSnapshot").notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  substituidoEm: timestamp("substituidoEm"),
+  substituidoPor: int("substituidoPor"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  empresaEntidadeVersaoUnica: uniqueIndex("calculos_custos_gerenciais_empresa_entidade_versao_unico").on(table.empresaId, table.entidadeTipo, table.entidadeId, table.versao),
+  entidadeEstadoIndice: index("calculos_custos_gerenciais_entidade_estado_indice").on(table.empresaId, table.entidadeTipo, table.entidadeId, table.estado),
+  rateioIndice: index("calculos_custos_gerenciais_rateio_indice").on(table.empresaId, table.rateioId),
+}));
+
+export type CalculoCustoGerencial = typeof calculosCustosGerenciais.$inferSelect;
+export type InsertCalculoCustoGerencial = typeof calculosCustosGerenciais.$inferInsert;
+
+/** Parcelas do cálculo gerencial que preservam origem, categoria e memória de cada custo. */
+export const componentesCalculosCustosGerenciais = mysqlTable("componentesCalculosCustosGerenciais", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  calculoId: int("calculoId").notNull(),
+  categoriaCustoId: int("categoriaCustoId"),
+  itemRateioId: int("itemRateioId"),
+  lancamentoCustoId: int("lancamentoCustoId"),
+  tipo: mysqlEnum("tipo", ["materia_prima", "industrial", "administrativo", "comercial", "frete_comercial", "comissao", "taxa", "direto_venda"]).notNull(),
+  origemTipo: mysqlEnum("origemTipo", ["consumo_tora", "rateio_categoria", "lancamento_direto", "venda"]).notNull(),
+  origemId: int("origemId"),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  coberturaPercentual: decimal("coberturaPercentual", { precision: 8, scale: 2 }).notNull().default("100"),
+  memoriaCalculo: text("memoriaCalculo").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  calculoIndice: index("componentes_calculos_custos_gerenciais_calculo_indice").on(table.empresaId, table.calculoId),
+  categoriaIndice: index("componentes_calculos_custos_gerenciais_categoria_indice").on(table.empresaId, table.categoriaCustoId),
+  lancamentoIndice: index("componentes_calculos_custos_gerenciais_lancamento_indice").on(table.empresaId, table.lancamentoCustoId),
+}));
+
+export type ComponenteCalculoCustoGerencial = typeof componentesCalculosCustosGerenciais.$inferSelect;
+export type InsertComponenteCalculoCustoGerencial = typeof componentesCalculosCustosGerenciais.$inferInsert;
+
 export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),

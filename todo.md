@@ -781,3 +781,21 @@
 - [x] Completar os indicadores operacionais com Total a vencer, Próximos 30 dias e percentual vencido, todos com drill-down
 - [x] Tornar a concentração por cliente ou fornecedor rastreável e distinguir prioridades de atraso por faixa de aging
 - [x] Ampliar as regressões da Etapa 5 para fronteiras de aging, parcelamento, baixa, estorno, conciliação e origem
+- [x] Ler integralmente a especificação da Etapa 6 e auditar romaneios, produção, estoque, vendas, despesas, diesel e fretes existentes
+- [x] Mapear entidades, dados e repositórios do fluxo entrada de tora → produção → estoque serrado → venda → título financeiro
+- [x] Diagnosticar a confiabilidade atual de custos, rendimentos, subprodutos e custos diretos sem alterar estruturas ou dados
+- [x] Apresentar o diagnóstico e aguardar validação das premissas antes de modelar ou implementar o custo real da madeira
+- [x] Reauditar integralmente a Etapa 6 revisada, preservando históricos e separando custo rastreável, industrial e comercial/administrativo
+- [x] Mapear o custo de matéria-prima por romaneio, plaqueta, tora consumida, romaneio de produção e lote serrado
+- [x] Diagnosticar a disponibilidade de dados para rateios mensais por m³ produzido e para margem por venda sem usar pagamentos como custo
+- [x] Apresentar e validar as novas premissas de centros de custo e rateios antes de criar tabelas, cálculos ou telas
+- [x] Incorporar a validação revisada: custo de matéria-prima pelo volume efetivamente produzido, sem custo artificial de aproveitamento
+- [x] Modelar bases de apropriação configuráveis por categoria, incluindo m³ produzido, m³ vendido, valor vendido, quantidade, carga, pedido e percentual sobre receita
+- [x] Separar custos estruturais rateados, custos diretos de venda e frete comercial sem misturar com frete de entrada
+- [x] Preservar a exclusão da produção de terceiros e a regra de custo parcial sem estimativas para origens ausentes
+- [x] Criar tabelas e migration não destrutiva para centros, categorias, lançamentos, rateios versionados e componentes de custo gerencial
+- [x] Implementar regras puras para matéria-prima rastreável, cobertura, bases configuráveis, custos diretos e preço sugerido
+- [x] Implementar repositórios e contratos tRPC com competência auditável, evidência opcional e sem alterar dados financeiros ou operacionais
+- [x] Construir as telas gerenciais de configuração, lançamentos, rateios, custos, margem, cobertura e simulação de preço
+- [x] Cobrir regressões de rastreabilidade, rateio, custos diretos, competência, cobertura, versionamento, venda histórica e acesso
+- [x] Validar migration, dados existentes, interface, TypeScript, suíte e build antes de publicar a Etapa 6

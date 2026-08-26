@@ -7,3 +7,4 @@ export * from "./dashboard";
 export * from "./estoque";
 export * from "./producao";
 export * from "./diesel";
+export * from "./custosGerenciais";

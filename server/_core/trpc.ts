@@ -21,6 +21,7 @@ const acessosPorModulo: Record<ModuloOperacional, readonly string[]> = {
 
 const moduloDaRota: Record<string, ModuloOperacional> = {
   financeiro: "financeiro",
+  custosGerenciais: "financeiro",
   rh: "rh",
   orcamento: "vendas",
   cliente: "vendas",
@@ -72,6 +73,17 @@ const requireUser = t.middleware(async opts => {
 });
 
 export const protectedProcedure = t.procedure.use(requireUser);
+
+/** Procedimentos de leitura do módulo financeiro, inclusive subrouters aninhados. */
+export const financeiroProcedure = t.procedure.use(requireUser).use(
+  t.middleware(async opts => {
+    const papel = opts.ctx.user?.papel;
+    const papelPlataforma = opts.ctx.user?.role;
+    const autorizado = papelPlataforma === "admin" || papel === "proprietario" || papel === "administrador" || papel === "financeiro" || papel === "consulta";
+    if (!autorizado) throw new TRPCError({ code: "FORBIDDEN", message: "O seu perfil não tem acesso a este módulo." });
+    return opts.next();
+  }),
+);
 
 export const adminProcedure = t.procedure.use(
   t.middleware(async opts => {
