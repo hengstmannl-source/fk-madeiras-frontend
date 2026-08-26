@@ -735,3 +735,11 @@
 - [x] Validar dados cadastrais e manter o histórico financeiro imutável durante a edição da conta
 - [x] Cobrir edição de conta bancária e preservação de movimentações com testes de regressão
 - [x] Validar TypeScript, suíte, build e interface da edição de contas bancárias antes de publicar
+- [x] Auditar contas, baixas, títulos, movimentos, fluxo de caixa e candidatos históricos a transferências sem alterar dados
+- [x] Modelar transferências internas e movimentos vinculados por origem e destino, sem criar títulos financeiros
+- [x] Validar contas distintas, contas ativas, valor positivo e a política atual de saldo negativo antes de confirmar transferências
+- [x] Registrar transferência em transação única, preservando saldo consolidado e excluindo-a de receitas, despesas e categorias
+- [x] Criar histórico bilateral por conta e permitir estorno único por operação inversa sem apagar registros
+- [x] Adaptar a interface financeira com criação, consulta e estorno de transferências claramente distintas de títulos
+- [x] Cobrir transferência, ausência de título, ausência de receita/despesa, saldo consolidado, validações, concorrência e estorno com regressões
+- [x] Validar banco, TypeScript, suíte, build e auditorias da Etapa 2B antes de publicar

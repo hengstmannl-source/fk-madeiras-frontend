@@ -704,6 +704,52 @@ export const contasFinanceiras = mysqlTable("contasFinanceiras", {
 export type ContaFinanceira = typeof contasFinanceiras.$inferSelect;
 export type InsertContaFinanceira = typeof contasFinanceiras.$inferInsert;
 
+/** Transferência interna entre duas contas da mesma empresa, sem natureza de receita ou despesa. */
+export const transferenciasFinanceiras = mysqlTable("transferenciasFinanceiras", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  contaOrigemId: int("contaOrigemId").notNull(),
+  contaDestinoId: int("contaDestinoId").notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  dataTransferencia: timestamp("dataTransferencia").notNull(),
+  descricao: varchar("descricao", { length: 300 }),
+  observacoes: text("observacoes"),
+  estado: mysqlEnum("estado", ["efetivada", "estornada"]).notNull().default("efetivada"),
+  estornadaEm: timestamp("estornadaEm"),
+  estornadaPor: int("estornadaPor"),
+  motivoEstorno: text("motivoEstorno"),
+  transferenciaOrigemId: int("transferenciaOrigemId").unique(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (table) => ({
+  origemIndice: index("transferencias_financeiras_origem_indice").on(table.empresaId, table.contaOrigemId, table.dataTransferencia),
+  destinoIndice: index("transferencias_financeiras_destino_indice").on(table.empresaId, table.contaDestinoId, table.dataTransferencia),
+  estadoIndice: index("transferencias_financeiras_estado_indice").on(table.empresaId, table.estado, table.dataTransferencia),
+}));
+
+export type TransferenciaFinanceira = typeof transferenciasFinanceiras.$inferSelect;
+export type InsertTransferenciaFinanceira = typeof transferenciasFinanceiras.$inferInsert;
+
+/** Lançamentos patrimoniais espelhados, auditáveis e vinculados à mesma transferência. */
+export const movimentosTransferenciasFinanceiras = mysqlTable("movimentosTransferenciasFinanceiras", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  transferenciaId: int("transferenciaId").notNull(),
+  contaFinanceiraId: int("contaFinanceiraId").notNull(),
+  tipo: mysqlEnum("tipo", ["entrada", "saida"]).notNull(),
+  valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
+  dataMovimento: timestamp("dataMovimento").notNull(),
+  descricao: varchar("descricao", { length: 300 }).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  transferenciaTipoUnico: uniqueIndex("movimentos_transferencia_tipo_unico").on(table.transferenciaId, table.tipo),
+  contaDataIndice: index("movimentos_transferencia_conta_data_indice").on(table.empresaId, table.contaFinanceiraId, table.dataMovimento),
+}));
+
+export type MovimentoTransferenciaFinanceira = typeof movimentosTransferenciasFinanceiras.$inferSelect;
+export type InsertMovimentoTransferenciaFinanceira = typeof movimentosTransferenciasFinanceiras.$inferInsert;
+
 export const notasDiesel = mysqlTable("notasDiesel", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),

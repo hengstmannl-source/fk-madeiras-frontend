@@ -17,8 +17,10 @@ import {
   validarEdicaoTituloFinanceiro,
   validarDevolucaoCheque,
   validarExclusaoTituloFinanceiro,
+  validarTransferenciaFinanceira,
   validarValorBaixaContraSaldo,
   validarValorDosCheques,
+  calcularSaldoContaComTransferencias,
 } from "./financeiro.logic";
 
 describe("regras financeiras", () => {
@@ -92,6 +94,31 @@ describe("regras financeiras", () => {
     expect(validarValorBaixaContraSaldo("65.00", 65)).toBe(65);
     expect(() => validarValorBaixaContraSaldo("65.01", 65)).toThrow("não pode exceder o saldo em aberto");
     expect(() => validarValorBaixaContraSaldo("0", 65)).toThrow("maior que zero");
+  });
+
+  it("valida transferências somente entre contas diferentes, ativas e com valor positivo", () => {
+    expect(validarTransferenciaFinanceira({
+      contaOrigemId: 10,
+      contaDestinoId: 11,
+      valor: "250,15",
+      contaOrigemAtiva: true,
+      contaDestinoAtiva: true,
+    })).toBe(250.15);
+    expect(() => validarTransferenciaFinanceira({ contaOrigemId: 10, contaDestinoId: 10, valor: "1", contaOrigemAtiva: true, contaDestinoAtiva: true })).toThrow("origem e destino diferentes");
+    expect(() => validarTransferenciaFinanceira({ contaOrigemId: 10, contaDestinoId: 11, valor: "0", contaOrigemAtiva: true, contaDestinoAtiva: true })).toThrow("maior que zero");
+    expect(() => validarTransferenciaFinanceira({ contaOrigemId: 10, contaDestinoId: 11, valor: "1", contaOrigemAtiva: false, contaDestinoAtiva: true })).toThrow("origem está inativa");
+    expect(() => validarTransferenciaFinanceira({ contaOrigemId: 10, contaDestinoId: 11, valor: "1", contaOrigemAtiva: true, contaDestinoAtiva: false })).toThrow("destino está inativa");
+  });
+
+  it("reconstrói o saldo por conta com pares de transferências sem classificá-los como fluxo de caixa", () => {
+    expect(calcularSaldoContaComTransferencias({
+      saldoBase: "1000.00",
+      movimentos: [{ tipo: "saida", valor: "250.25" }, { tipo: "entrada", valor: "19.90" }],
+    })).toBe(769.65);
+    expect(calcularSaldoContaComTransferencias({
+      saldoBase: "400.00",
+      movimentos: [{ tipo: "saida", valor: "75.00" }, { tipo: "entrada", valor: "75.00" }],
+    })).toBe(400);
   });
 
   it("permite cancelar somente títulos sem baixas financeiras", () => {

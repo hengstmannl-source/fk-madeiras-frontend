@@ -91,6 +91,37 @@ export function validarValorBaixaContraSaldo(valor: string | number, saldoAberto
   return valorBaixa;
 }
 
+/** Valida uma movimentação patrimonial entre contas sem produzir título, receita ou despesa. */
+export function validarTransferenciaFinanceira(input: {
+  contaOrigemId: number;
+  contaDestinoId: number;
+  valor: string | number;
+  contaOrigemAtiva: boolean;
+  contaDestinoAtiva: boolean;
+}) {
+  if (input.contaOrigemId === input.contaDestinoId) {
+    throw new Error("Selecione contas de origem e destino diferentes");
+  }
+  const valor = decimalParaNumero(input.valor);
+  if (valor <= 0) throw new Error("O valor da transferência deve ser maior que zero");
+  if (!input.contaOrigemAtiva) throw new Error("A conta de origem está inativa");
+  if (!input.contaDestinoAtiva) throw new Error("A conta de destino está inativa");
+  return Math.round(valor * 100) / 100;
+}
+
+/** Calcula o reflexo patrimonial de transferências sem misturá-las ao fluxo de receitas e despesas. */
+export function calcularSaldoContaComTransferencias(input: {
+  saldoBase: string | number;
+  movimentos: Array<{ tipo: "entrada" | "saida"; valor: string | number }>;
+}) {
+  const saldoEmCentavos = Math.round(decimalParaNumero(input.saldoBase) * 100);
+  const transferenciasEmCentavos = input.movimentos.reduce((total, movimento) => {
+    const valor = Math.round(decimalParaNumero(movimento.valor) * 100);
+    return total + (movimento.tipo === "entrada" ? valor : -valor);
+  }, 0);
+  return (saldoEmCentavos + transferenciasEmCentavos) / 100;
+}
+
 export type BaixaParaRecalculo = {
   valor: string | number;
   estornada?: boolean | number | null;

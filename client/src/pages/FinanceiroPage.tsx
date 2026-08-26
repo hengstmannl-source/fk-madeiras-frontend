@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import {
-  ArrowDownToLine, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
+  ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Building2, CalendarClock, CheckCircle2,
   CircleAlert, CircleDollarSign, Copy, Download, Eye, FileSpreadsheet, Landmark, Loader2, Paperclip, Pencil, Plus, RefreshCw, RotateCcw, ScanLine, Search, Tags, Trash2, Upload, WalletCards, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,9 +31,9 @@ const dataHaDias = (dias: number) => {
   return data.toISOString().slice(0, 10);
 };
 
-export function abaFinanceiraDaUrl(search: string): "fluxo" | "lancamentos" | "recorrencias" | "fornecedores" | "categorias" | "contas" {
+export function abaFinanceiraDaUrl(search: string): "fluxo" | "lancamentos" | "recorrencias" | "fornecedores" | "categorias" | "contas" | "transferencias" {
   const aba = new URLSearchParams(search).get("aba");
-  return ["fluxo", "recorrencias", "fornecedores", "categorias", "contas"].includes(aba ?? "") ? aba as "fluxo" | "recorrencias" | "fornecedores" | "categorias" | "contas" : "lancamentos";
+  return ["fluxo", "recorrencias", "fornecedores", "categorias", "contas", "transferencias"].includes(aba ?? "") ? aba as "fluxo" | "lancamentos" | "recorrencias" | "fornecedores" | "categorias" | "contas" | "transferencias" : "lancamentos";
 }
 const valorInicialLancamento = () => ({
   tipo: "receber" as "receber" | "pagar",
@@ -75,6 +75,14 @@ const valorInicialConta = () => ({
   dataInicio: "",
   saldoInicial: "0",
   observacoes: "",
+});
+
+const valorInicialTransferencia = () => ({
+  contaOrigemId: "",
+  contaDestinoId: "",
+  valor: "",
+  dataTransferencia: hoje(),
+  descricao: "",
 });
 
 const estadoLabels: Record<string, string> = {
@@ -144,7 +152,7 @@ function StatusBadge({ estado }: { estado: string }) {
 export default function FinanceiroPage() {
   const utils = trpc.useUtils();
   const search = useSearch();
-  const [aba, setAba] = useState<"lancamentos" | "fluxo" | "recorrencias" | "fornecedores" | "categorias" | "contas">(() => abaFinanceiraDaUrl(search));
+  const [aba, setAba] = useState<"lancamentos" | "fluxo" | "recorrencias" | "fornecedores" | "categorias" | "contas" | "transferencias">(() => abaFinanceiraDaUrl(search));
   const [lancamentoAberto, setLancamentoAberto] = useState(false);
   const [baixaAberta, setBaixaAberta] = useState(false);
   const [fornecedorAberto, setFornecedorAberto] = useState(false);
@@ -185,6 +193,11 @@ export default function FinanceiroPage() {
   const [codigoBoletoLancamento, setCodigoBoletoLancamento] = useState("");
   const [anexoParaVisualizar, setAnexoParaVisualizar] = useState<{ nomeArquivo: string; url: string; mimeType: string } | null>(null);
   const [relatorioPdfParaVisualizar, setRelatorioPdfParaVisualizar] = useState<{ url: string; nomeArquivo: string } | null>(null);
+  const [transferenciaAberta, setTransferenciaAberta] = useState(false);
+  const [transferencia, setTransferencia] = useState(valorInicialTransferencia);
+  const [contaFiltroTransferencias, setContaFiltroTransferencias] = useState("todas");
+  const [transferenciaParaEstornar, setTransferenciaParaEstornar] = useState<number | null>(null);
+  const [motivoEstornoTransferencia, setMotivoEstornoTransferencia] = useState("");
 
   const copiarCodigoBoleto = async (codigo: string) => {
     try {
@@ -221,6 +234,11 @@ export default function FinanceiroPage() {
   const categorias = trpc.financeiro.categorias.list.useQuery();
   const fornecedores = trpc.financeiro.fornecedores.list.useQuery();
   const contas = trpc.financeiro.contas.list.useQuery();
+  const transferencias = trpc.financeiro.transferencias.list.useQuery(
+    contaFiltroTransferencias === "todas"
+      ? { incluirEstornadas: true }
+      : { contaFinanceiraId: Number(contaFiltroTransferencias), incluirEstornadas: true },
+  );
   const contaBaixa = (contas.data ?? []).find((item) => String(item.id) === baixa.contaFinanceiraId);
   const caixaChequeSelecionado = contaBaixa?.tipo === "caixa_cheque";
   const chequesDisponiveis = trpc.financeiro.cheques.list.useQuery(
@@ -268,6 +286,8 @@ export default function FinanceiroPage() {
   const criarConta = trpc.financeiro.contas.create.useMutation();
   const atualizarConta = trpc.financeiro.contas.update.useMutation();
   const excluirConta = trpc.financeiro.contas.delete.useMutation();
+  const criarTransferencia = trpc.financeiro.transferencias.create.useMutation();
+  const estornarTransferencia = trpc.financeiro.transferencias.estornar.useMutation();
   const criarCliente = trpc.cliente.create.useMutation();
   const criarRecorrencia = trpc.financeiro.recorrencias.create.useMutation();
   const conciliarBaixa = trpc.financeiro.titulos.conciliarBaixa.useMutation();
@@ -343,6 +363,8 @@ export default function FinanceiroPage() {
     utils.financeiro.categorias.list.invalidate();
     utils.financeiro.fornecedores.list.invalidate();
     utils.financeiro.contas.list.invalidate();
+    utils.financeiro.transferencias.list.invalidate();
+    utils.financeiro.transferencias.movimentosPorConta.invalidate();
     utils.financeiro.cheques.list.invalidate();
     utils.financeiro.cheques.resumo.invalidate();
     utils.financeiro.recorrencias.list.invalidate();
@@ -350,6 +372,57 @@ export default function FinanceiroPage() {
     utils.financeiro.relatorios.fluxoCaixa.invalidate();
     utils.financeiro.relatorios.previsaoSemanal.invalidate();
     if (tituloBaixas) utils.financeiro.titulos.baixas.invalidate({ tituloId: tituloBaixas.id });
+  };
+
+  const abrirNovaTransferencia = () => {
+    setTransferencia(valorInicialTransferencia());
+    setTransferenciaAberta(true);
+  };
+
+  const confirmarTransferencia = () => {
+    const contaOrigemId = Number(transferencia.contaOrigemId);
+    const contaDestinoId = Number(transferencia.contaDestinoId);
+    const valor = Number(transferencia.valor.replace(",", "."));
+    if (!contaOrigemId || !contaDestinoId || !Number.isFinite(valor) || valor <= 0) {
+      toast.error("Informe as duas contas e um valor positivo para transferir.");
+      return;
+    }
+    if (contaOrigemId === contaDestinoId) {
+      toast.error("Selecione contas de origem e destino diferentes.");
+      return;
+    }
+    criarTransferencia.mutate({
+      contaOrigemId,
+      contaDestinoId,
+      valor: transferencia.valor.replace(",", "."),
+      dataTransferencia: transferencia.dataTransferencia,
+      ...(transferencia.descricao.trim() ? { descricao: transferencia.descricao.trim() } : {}),
+    }, {
+      onSuccess: () => {
+        toast.success("Transferência interna registrada sem criar título financeiro.");
+        setTransferenciaAberta(false);
+        setTransferencia(valorInicialTransferencia());
+        invalidarFinanceiro();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const confirmarEstornoTransferencia = () => {
+    if (!transferenciaParaEstornar) return;
+    if (motivoEstornoTransferencia.trim().length < 3) {
+      toast.error("Informe um motivo de ao menos 3 caracteres para o estorno.");
+      return;
+    }
+    estornarTransferencia.mutate({ id: transferenciaParaEstornar, motivo: motivoEstornoTransferencia.trim() }, {
+      onSuccess: () => {
+        toast.success("Estorno registrado como uma nova transferência inversa.");
+        setTransferenciaParaEstornar(null);
+        setMotivoEstornoTransferencia("");
+        invalidarFinanceiro();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
   };
 
   const pesquisarTitulos = () => {
@@ -849,7 +922,7 @@ export default function FinanceiroPage() {
   const carregando = titulos.isLoading || categorias.isLoading || contas.isLoading || fornecedores.isLoading || recorrencias.isLoading;
   const abas = [
     ["lancamentos", "Lançamentos", WalletCards], ["fluxo", "Fluxo de caixa", CircleDollarSign], ["fornecedores", "Fornecedores", Building2],
-    ["recorrencias", "Recorrências", RefreshCw], ["categorias", "Categorias", Tags], ["contas", "Contas", Landmark],
+    ["recorrencias", "Recorrências", RefreshCw], ["categorias", "Categorias", Tags], ["contas", "Contas", Landmark], ["transferencias", "Transferências", ArrowLeftRight],
   ] as const;
 
   return (
@@ -988,6 +1061,23 @@ export default function FinanceiroPage() {
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTituloParaEditar(null)} disabled={atualizarTitulo.isPending}>Cancelar</Button><Button onClick={salvarAgendamento} disabled={atualizarTitulo.isPending}>{atualizarTitulo.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar alterações</Button></div>
           </div>
         </DialogContent>
+      </Dialog>
+
+      {aba === "transferencias" && <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm">
+        <div className="flex flex-col gap-3 border-b bg-muted/20 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3"><div className="rounded-lg bg-violet-500/10 p-2 text-violet-700"><ArrowLeftRight className="h-5 w-5" /></div><div><h2 className="font-semibold">Transferências internas</h2><p className="mt-0.5 text-xs text-muted-foreground">Movimente valores entre contas sem criar título, receita, despesa ou categoria.</p></div></div>
+          <Button size="sm" onClick={abrirNovaTransferencia} disabled={(contas.data ?? []).length < 2}><Plus className="mr-1.5 h-3.5 w-3.5" />Nova transferência</Button>
+        </div>
+        <div className="flex flex-col gap-3 border-b px-5 py-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-muted-foreground">Cada operação registra uma saída na origem e uma entrada no destino, vinculadas entre si.</p><Select value={contaFiltroTransferencias} onValueChange={setContaFiltroTransferencias}><SelectTrigger className="w-full sm:w-60" aria-label="Filtrar transferências por conta"><SelectValue placeholder="Todas as contas" /></SelectTrigger><SelectContent><SelectItem value="todas">Todas as contas</SelectItem>{(contas.data ?? []).map((conta) => <SelectItem key={conta.id} value={String(conta.id)}>{conta.nome}</SelectItem>)}</SelectContent></Select></div>
+        {transferencias.isLoading ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />Carregando transferências...</div> : transferencias.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/40"><TableHead>Data</TableHead><TableHead>Origem</TableHead><TableHead>Destino</TableHead><TableHead>Descrição</TableHead><TableHead className="text-right">Valor</TableHead><TableHead>Status</TableHead><TableHead className="text-right">Ação</TableHead></TableRow></TableHeader><TableBody>{transferencias.data.map((item) => <TableRow key={item.id}><TableCell className="whitespace-nowrap text-sm">{formatarDataFinanceira(item.dataTransferencia)}</TableCell><TableCell className="font-medium text-sm">{item.contaOrigemNome}</TableCell><TableCell className="font-medium text-sm">{item.contaDestinoNome}</TableCell><TableCell className="max-w-64"><p className="truncate text-sm" title={item.descricao ?? undefined}>{item.descricao ?? "—"}</p>{item.transferenciaOrigemId && <p className="mt-0.5 text-xs text-muted-foreground">Estorno da transferência #{item.transferenciaOrigemId}</p>}</TableCell><TableCell className="text-right font-semibold text-violet-700">{formatCurrency(item.valor)}</TableCell><TableCell><Badge variant="outline" className={item.estado === "estornada" ? "border-slate-200 bg-slate-100 text-slate-600" : "border-emerald-200 bg-emerald-50 text-emerald-700"}>{item.estado === "estornada" ? "Estornada" : "Efetivada"}</Badge></TableCell><TableCell className="text-right">{item.estado === "efetivada" ? <Button size="sm" variant="ghost" className="text-amber-700 hover:text-amber-800" onClick={() => { setTransferenciaParaEstornar(item.id); setMotivoEstornoTransferencia(""); }}><RotateCcw className="mr-1.5 h-3.5 w-3.5" />Estornar</Button> : "—"}</TableCell></TableRow>)}</TableBody></Table></div> : <EstadoVazio icon={<ArrowLeftRight className="h-8 w-8" />} texto={(contas.data ?? []).length < 2 ? "Cadastre ao menos duas contas para transferir valores" : "Nenhuma transferência registrada"} acao={(contas.data ?? []).length < 2 ? abrirNovaConta : abrirNovaTransferencia} labelAcao={(contas.data ?? []).length < 2 ? "Nova conta" : "Nova transferência"} />}
+      </section>}
+
+      <Dialog open={transferenciaAberta} onOpenChange={(aberto) => { setTransferenciaAberta(aberto); if (!aberto) setTransferencia(valorInicialTransferencia()); }}>
+        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>Nova transferência interna</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-violet-200 bg-violet-50 p-3 text-sm text-violet-950">Esta operação registra somente uma movimentação patrimonial entre contas. Não cria contas a pagar, receber, receitas ou despesas.</div><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label>Conta de origem *</Label><Select value={transferencia.contaOrigemId} onValueChange={(valor) => setTransferencia((atual) => ({ ...atual, contaOrigemId: valor }))}><SelectTrigger aria-label="Conta de origem"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{(contas.data ?? []).map((conta) => <SelectItem key={conta.id} value={String(conta.id)}>{conta.nome}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2"><Label>Conta de destino *</Label><Select value={transferencia.contaDestinoId} onValueChange={(valor) => setTransferencia((atual) => ({ ...atual, contaDestinoId: valor }))}><SelectTrigger aria-label="Conta de destino"><SelectValue placeholder="Selecione" /></SelectTrigger><SelectContent>{(contas.data ?? []).filter((conta) => String(conta.id) !== transferencia.contaOrigemId).map((conta) => <SelectItem key={conta.id} value={String(conta.id)}>{conta.nome}</SelectItem>)}</SelectContent></Select></div></div><div className="grid gap-4 sm:grid-cols-2"><div className="space-y-2"><Label htmlFor="transferencia-valor">Valor *</Label><Input id="transferencia-valor" aria-label="Valor da transferência" inputMode="decimal" placeholder="0,00" value={transferencia.valor} onChange={(evento) => setTransferencia((atual) => ({ ...atual, valor: evento.target.value }))} /></div><div className="space-y-2"><Label htmlFor="transferencia-data">Data *</Label><Input id="transferencia-data" aria-label="Data da transferência" type="date" value={transferencia.dataTransferencia} onChange={(evento) => setTransferencia((atual) => ({ ...atual, dataTransferencia: evento.target.value }))} /></div></div><div className="space-y-2"><Label htmlFor="transferencia-descricao">Descrição</Label><Textarea id="transferencia-descricao" aria-label="Descrição da transferência" value={transferencia.descricao} onChange={(evento) => setTransferencia((atual) => ({ ...atual, descricao: evento.target.value }))} placeholder="Ex.: Depósito do caixa no banco" maxLength={300} /></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTransferenciaAberta(false)} disabled={criarTransferencia.isPending}>Cancelar</Button><Button onClick={confirmarTransferencia} disabled={criarTransferencia.isPending}>{criarTransferencia.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Confirmar transferência</Button></div></div></DialogContent>
+      </Dialog>
+
+      <Dialog open={transferenciaParaEstornar !== null} onOpenChange={(aberto) => { if (!aberto) { setTransferenciaParaEstornar(null); setMotivoEstornoTransferencia(""); } }}>
+        <DialogContent className="max-w-md"><DialogHeader><DialogTitle>Estornar transferência</DialogTitle></DialogHeader><div className="space-y-4"><div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-950">O estorno preserva a operação original e registra uma nova transferência inversa entre as mesmas contas.</div><div className="space-y-2"><Label htmlFor="motivo-estorno-transferencia">Motivo do estorno *</Label><Textarea id="motivo-estorno-transferencia" aria-label="Motivo do estorno da transferência" value={motivoEstornoTransferencia} onChange={(evento) => setMotivoEstornoTransferencia(evento.target.value)} placeholder="Descreva o motivo" maxLength={4000} /></div><div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setTransferenciaParaEstornar(null)} disabled={estornarTransferencia.isPending}>Cancelar</Button><Button variant="destructive" onClick={confirmarEstornoTransferencia} disabled={estornarTransferencia.isPending}>{estornarTransferencia.isPending && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}Confirmar estorno</Button></div></div></DialogContent>
       </Dialog>
 
       <Dialog open={Boolean(anexoParaVisualizar)} onOpenChange={(aberto) => !aberto && setAnexoParaVisualizar(null)}>

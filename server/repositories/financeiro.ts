@@ -4,15 +4,15 @@ import {
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
-  baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros,
+  baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros, transferenciasFinanceiras, movimentosTransferenciasFinanceiras,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertComponentePacoteOrcamento, type InsertProdutoComercial, type InsertComponenteProdutoComercial, type InsertModeloMedidaVenda, type InsertFornecedor,
   type InsertCategoriaFinanceira, type InsertContaFinanceira,
-  type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira,
+  type InsertTituloFinanceiro, type InsertBaixaFinanceira, type InsertChequeFinanceiro, type InsertRecorrenciaFinanceira, type TransferenciaFinanceira,
 } from "../../drizzle/schema";
 import { ENV } from '../_core/env';
-import { calcularCicloTituloFinanceiro, calcularEstadoTitulo, calcularParcelas, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarValorBaixaContraSaldo, validarValorDosCheques } from "../financeiro.logic";
+import { calcularCicloTituloFinanceiro, calcularEstadoTitulo, calcularParcelas, calcularPrevisaoSemanal, calcularRelatorioFluxoCaixa, classificarAlertaCompensacaoCheque, decimalParaNumero, planejarAtualizacaoAlertas, podeCancelarTituloFinanceiro, podeEstornarBaixa, proximoVencimento, saldoAbertoTitulo, tipoAlertaAtualDoTitulo, validarDepositoCheque, validarDevolucaoCheque, validarEdicaoTituloFinanceiro, validarExclusaoTituloFinanceiro, validarTransferenciaFinanceira, validarValorBaixaContraSaldo, validarValorDosCheques } from "../financeiro.logic";
 import { criarModeloCsvLancamentos, exportarLancamentosCsv, prepararImportacaoLancamentos } from "../financeiro.intercambio";
 import { criarModeloCsvFornecedores, prepararImportacaoFornecedores } from "../fornecedores.intercambio";
 import { criarModeloCsvPlaquetasCarga, prepararImportacaoPlaquetasCarga } from "../estoque.intercambio";
@@ -251,19 +251,236 @@ export async function excluirContaFinanceira(id: number) {
   const conta = (await db.select({ id: contasFinanceiras.id }).from(contasFinanceiras)
     .where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId))).limit(1))[0];
   if (!conta) throw new Error("Conta financeira não encontrada");
-  const [baixa, cheque, chequeDestino, extrato, movimentoExtrato, recorrencia] = await Promise.all([
+  const [baixa, cheque, chequeDestino, extrato, movimentoExtrato, recorrencia, transferenciaOrigem, transferenciaDestino, movimentoTransferencia] = await Promise.all([
     db.select({ id: baixasFinanceiras.id }).from(baixasFinanceiras).where(and(eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.contaFinanceiraId, id))).limit(1),
     db.select({ id: chequesFinanceiros.id }).from(chequesFinanceiros).where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.contaFinanceiraId, id))).limit(1),
     db.select({ id: chequesFinanceiros.id }).from(chequesFinanceiros).where(and(eq(chequesFinanceiros.empresaId, empresaId), eq(chequesFinanceiros.contaDestinoId, id))).limit(1),
     db.select({ id: extratosBancarios.id }).from(extratosBancarios).where(and(eq(extratosBancarios.empresaId, empresaId), eq(extratosBancarios.contaFinanceiraId, id))).limit(1),
     db.select({ id: movimentosExtratoBancario.id }).from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.contaFinanceiraId, id))).limit(1),
     db.select({ id: recorrenciasFinanceiras.id }).from(recorrenciasFinanceiras).where(and(eq(recorrenciasFinanceiras.empresaId, empresaId), eq(recorrenciasFinanceiras.contaFinanceiraId, id))).limit(1),
+    db.select({ id: transferenciasFinanceiras.id }).from(transferenciasFinanceiras).where(and(eq(transferenciasFinanceiras.empresaId, empresaId), eq(transferenciasFinanceiras.contaOrigemId, id))).limit(1),
+    db.select({ id: transferenciasFinanceiras.id }).from(transferenciasFinanceiras).where(and(eq(transferenciasFinanceiras.empresaId, empresaId), eq(transferenciasFinanceiras.contaDestinoId, id))).limit(1),
+    db.select({ id: movimentosTransferenciasFinanceiras.id }).from(movimentosTransferenciasFinanceiras).where(and(eq(movimentosTransferenciasFinanceiras.empresaId, empresaId), eq(movimentosTransferenciasFinanceiras.contaFinanceiraId, id))).limit(1),
   ]);
-  if (baixa.length || cheque.length || chequeDestino.length || extrato.length || movimentoExtrato.length || recorrencia.length) {
-    throw new Error("Esta conta não pode ser excluída porque possui movimentações, cheques, extratos ou recorrências vinculados");
+  if (baixa.length || cheque.length || chequeDestino.length || extrato.length || movimentoExtrato.length || recorrencia.length || transferenciaOrigem.length || transferenciaDestino.length || movimentoTransferencia.length) {
+    throw new Error("Esta conta não pode ser excluída porque possui movimentações, transferências, cheques, extratos ou recorrências vinculados");
   }
   await db.delete(contasFinanceiras).where(and(eq(contasFinanceiras.id, id), eq(contasFinanceiras.empresaId, empresaId)));
   return { success: true };
+}
+
+type CriarTransferenciaFinanceiraInput = {
+  contaOrigemId: number;
+  contaDestinoId: number;
+  valor: string | number;
+  dataTransferencia: Date;
+  descricao?: string | null;
+  observacoes?: string | null;
+  criadoPor: number;
+};
+
+function descricaoTransferencia(input: {
+  descricao?: string | null;
+  origemNome: string;
+  destinoNome: string;
+}) {
+  return input.descricao?.trim() || `Transferência de ${input.origemNome} para ${input.destinoNome}`;
+}
+
+async function contasDaTransferencia(
+  database: any,
+  empresaId: number,
+  contaOrigemId: number,
+  contaDestinoId: number,
+) {
+  const contas: Array<{ id: number; nome: string; ativa: boolean | number | null }> = await database.select().from(contasFinanceiras).where(and(
+    eq(contasFinanceiras.empresaId, empresaId),
+    inArray(contasFinanceiras.id, [contaOrigemId, contaDestinoId]),
+  )).for("update");
+  const origem = contas.find((conta) => conta.id === contaOrigemId);
+  const destino = contas.find((conta) => conta.id === contaDestinoId);
+  if (!origem) throw new Error("Conta de origem não encontrada");
+  if (!destino) throw new Error("Conta de destino não encontrada");
+  return { origem, destino };
+}
+
+async function registrarMovimentosTransferencia(
+  database: any,
+  input: {
+    transferenciaId: number;
+    empresaId: number;
+    contaOrigemId: number;
+    contaDestinoId: number;
+    valor: string;
+    dataTransferencia: Date;
+    origemNome: string;
+    destinoNome: string;
+    prefixoDescricao?: string;
+  },
+) {
+  const prefixo = input.prefixoDescricao ? `${input.prefixoDescricao}: ` : "";
+  await database.insert(movimentosTransferenciasFinanceiras).values([
+    {
+      empresaId: input.empresaId,
+      transferenciaId: input.transferenciaId,
+      contaFinanceiraId: input.contaOrigemId,
+      tipo: "saida",
+      valor: input.valor,
+      dataMovimento: input.dataTransferencia,
+      descricao: `${prefixo}Transferência para ${input.destinoNome}`,
+    },
+    {
+      empresaId: input.empresaId,
+      transferenciaId: input.transferenciaId,
+      contaFinanceiraId: input.contaDestinoId,
+      tipo: "entrada",
+      valor: input.valor,
+      dataMovimento: input.dataTransferencia,
+      descricao: `${prefixo}Transferência de ${input.origemNome}`,
+    },
+  ]);
+}
+
+/**
+ * Registra a movimentação patrimonial entre duas contas da empresa.
+ * Não cria título financeiro, baixa, categoria, receita ou despesa.
+ */
+export async function criarTransferenciaFinanceira(input: CriarTransferenciaFinanceiraInput) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  return db.transaction(async (tx) => {
+    const { origem, destino } = await contasDaTransferencia(tx, empresaId, input.contaOrigemId, input.contaDestinoId);
+    const valor = validarTransferenciaFinanceira({
+      contaOrigemId: origem.id,
+      contaDestinoId: destino.id,
+      valor: input.valor,
+      contaOrigemAtiva: Boolean(origem.ativa),
+      contaDestinoAtiva: Boolean(destino.ativa),
+    });
+    const valorFormatado = valor.toFixed(2);
+    const descricao = descricaoTransferencia({ ...input, origemNome: origem.nome, destinoNome: destino.nome });
+    const resultado = await tx.insert(transferenciasFinanceiras).values({
+      empresaId,
+      contaOrigemId: origem.id,
+      contaDestinoId: destino.id,
+      valor: valorFormatado,
+      dataTransferencia: input.dataTransferencia,
+      descricao,
+      observacoes: input.observacoes?.trim() || null,
+      estado: "efetivada",
+      criadoPor: input.criadoPor,
+    });
+    const transferenciaId = getInsertedId(resultado as MysqlInsertResult);
+    await registrarMovimentosTransferencia(tx, {
+      transferenciaId,
+      empresaId,
+      contaOrigemId: origem.id,
+      contaDestinoId: destino.id,
+      valor: valorFormatado,
+      dataTransferencia: input.dataTransferencia,
+      origemNome: origem.nome,
+      destinoNome: destino.nome,
+    });
+    return { success: true, transferenciaId };
+  });
+}
+
+export async function listTransferenciasFinanceiras(filtros: { contaFinanceiraId?: number; incluirEstornadas?: boolean } = {}) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) return [];
+  const conditions: SQL[] = [eq(transferenciasFinanceiras.empresaId, empresaId)];
+  if (filtros.contaFinanceiraId) {
+    conditions.push(or(
+      eq(transferenciasFinanceiras.contaOrigemId, filtros.contaFinanceiraId),
+      eq(transferenciasFinanceiras.contaDestinoId, filtros.contaFinanceiraId),
+    ) as SQL);
+  }
+  if (!filtros.incluirEstornadas) conditions.push(eq(transferenciasFinanceiras.estado, "efetivada"));
+  const transferencias = await db.select().from(transferenciasFinanceiras)
+    .where(and(...conditions)).orderBy(desc(transferenciasFinanceiras.dataTransferencia), desc(transferenciasFinanceiras.id));
+  const contaIds = Array.from(new Set(transferencias.flatMap((transferencia) => [transferencia.contaOrigemId, transferencia.contaDestinoId])));
+  const contas = contaIds.length ? await db.select({ id: contasFinanceiras.id, nome: contasFinanceiras.nome })
+    .from(contasFinanceiras).where(and(eq(contasFinanceiras.empresaId, empresaId), inArray(contasFinanceiras.id, contaIds))) : [];
+  const nomes = new Map(contas.map((conta) => [conta.id, conta.nome]));
+  return transferencias.map((transferencia) => ({
+    ...transferencia,
+    contaOrigemNome: nomes.get(transferencia.contaOrigemId) ?? "Conta de origem removida",
+    contaDestinoNome: nomes.get(transferencia.contaDestinoId) ?? "Conta de destino removida",
+  }));
+}
+
+export async function listMovimentosTransferenciasPorConta(contaFinanceiraId: number) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) return [];
+  return db.select().from(movimentosTransferenciasFinanceiras).where(and(
+    eq(movimentosTransferenciasFinanceiras.empresaId, empresaId),
+    eq(movimentosTransferenciasFinanceiras.contaFinanceiraId, contaFinanceiraId),
+  )).orderBy(desc(movimentosTransferenciasFinanceiras.dataMovimento), desc(movimentosTransferenciasFinanceiras.id));
+}
+
+/** Estorna por uma nova transferência inversa, mantendo a trilha de auditoria íntegra. */
+export async function estornarTransferenciaFinanceira(input: { id: number; motivo: string; estornadoPor: number }) {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const motivo = input.motivo.trim();
+  if (motivo.length < 3) throw new Error("Informe o motivo do estorno da transferência");
+  return db.transaction(async (tx) => {
+    const transferencia = (await tx.select().from(transferenciasFinanceiras).where(and(
+      eq(transferenciasFinanceiras.id, input.id),
+      eq(transferenciasFinanceiras.empresaId, empresaId),
+    )).for("update").limit(1))[0] as TransferenciaFinanceira | undefined;
+    if (!transferencia) throw new Error("Transferência não encontrada");
+    if (transferencia.estado !== "efetivada") throw new Error("Esta transferência já foi estornada");
+    const { origem, destino } = await contasDaTransferencia(tx, empresaId, transferencia.contaOrigemId, transferencia.contaDestinoId);
+    validarTransferenciaFinanceira({
+      contaOrigemId: destino.id,
+      contaDestinoId: origem.id,
+      valor: transferencia.valor,
+      contaOrigemAtiva: Boolean(destino.ativa),
+      contaDestinoAtiva: Boolean(origem.ativa),
+    });
+    const [atualizacao] = await tx.update(transferenciasFinanceiras).set({
+      estado: "estornada",
+      estornadaEm: new Date(),
+      estornadaPor: input.estornadoPor,
+      motivoEstorno: motivo,
+    }).where(and(
+      eq(transferenciasFinanceiras.id, transferencia.id),
+      eq(transferenciasFinanceiras.empresaId, empresaId),
+      eq(transferenciasFinanceiras.estado, "efetivada"),
+    ));
+    if (atualizacao.affectedRows !== 1) throw new Error("Esta transferência já foi estornada");
+    const descricao = `Estorno da transferência #${transferencia.id}: ${motivo}`;
+    const resultado = await tx.insert(transferenciasFinanceiras).values({
+      empresaId,
+      contaOrigemId: destino.id,
+      contaDestinoId: origem.id,
+      valor: transferencia.valor,
+      dataTransferencia: new Date(),
+      descricao,
+      observacoes: `Operação inversa da transferência #${transferencia.id}`,
+      estado: "efetivada",
+      transferenciaOrigemId: transferencia.id,
+      criadoPor: input.estornadoPor,
+    });
+    const estornoId = getInsertedId(resultado as MysqlInsertResult);
+    await registrarMovimentosTransferencia(tx, {
+      transferenciaId: estornoId,
+      empresaId,
+      contaOrigemId: destino.id,
+      contaDestinoId: origem.id,
+      valor: String(transferencia.valor),
+      dataTransferencia: new Date(),
+      origemNome: destino.nome,
+      destinoNome: origem.nome,
+      prefixoDescricao: "Estorno",
+    });
+    return { success: true, transferenciaId: transferencia.id, estornoId };
+  });
 }
 
 export async function listCaixasCheque() {

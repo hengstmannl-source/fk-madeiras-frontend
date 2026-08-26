@@ -103,6 +103,15 @@ export const ContaSchema = z.object({
   observacoes: z.string().max(4000).nullable().optional(),
 });
 
+export const TransferenciaFinanceiraSchema = z.object({
+  contaOrigemId: z.number().int().positive(),
+  contaDestinoId: z.number().int().positive(),
+  valor: z.string().regex(/^\d+(?:[.,]\d{1,2})?$/, "Informe um valor válido"),
+  dataTransferencia: DataFinanceiraSchema,
+  descricao: z.string().trim().max(300).nullable().optional(),
+  observacoes: z.string().max(4000).nullable().optional(),
+});
+
 export const RecorrenciaSchema = z.object({
   tipo: TipoTituloSchema,
   descricao: z.string().trim().min(2).max(300),
@@ -172,6 +181,28 @@ export const financeiroRouter = router({
     delete: protectedProcedure.input(z.object({ id: z.number().int().positive() })).mutation(({ ctx, input }) => (
       db.excluirContaFinanceira(input.id)
     )),
+  }),
+
+  transferencias: router({
+    list: protectedProcedure.input(z.object({
+      contaFinanceiraId: z.number().int().positive().optional(),
+      incluirEstornadas: z.boolean().optional(),
+    }).optional()).query(({ ctx, input }) => db.listTransferenciasFinanceiras(input ?? {})),
+    movimentosPorConta: protectedProcedure.input(z.object({ contaFinanceiraId: z.number().int().positive() }))
+      .query(({ ctx, input }) => db.listMovimentosTransferenciasPorConta(input.contaFinanceiraId)),
+    create: protectedProcedure.input(TransferenciaFinanceiraSchema).mutation(({ ctx, input }) => db.criarTransferenciaFinanceira({
+      ...input,
+      valor: input.valor.replace(",", "."),
+      dataTransferencia: dataLocal(input.dataTransferencia),
+      criadoPor: ctx.user.id,
+    })),
+    estornar: protectedProcedure.input(z.object({
+      id: z.number().int().positive(),
+      motivo: z.string().trim().min(3, "Informe o motivo do estorno").max(4000),
+    })).mutation(({ ctx, input }) => db.estornarTransferenciaFinanceira({
+      ...input,
+      estornadoPor: ctx.user.id,
+    })),
   }),
 
   cheques: router({
