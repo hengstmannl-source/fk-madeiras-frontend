@@ -804,3 +804,6 @@
 - [x] Permitir selecionar, na produção, uma tora disponível sem plaqueta pela essência e medidas, consumindo o mesmo registro de estoque sem gerar nova identificação
 - [x] Disponibilizar correção auditável de volume para tora já consumida, preservando a cadeia de produção e estoque
 - [x] Cobrir regressões, validar a interface e publicar as correções de plaquetas e volume
+- [x] Auditar a sobreposição entre Margem por venda e Rentabilidade da madeira, comparando fontes, fórmulas e ações disponíveis
+- [x] Separar com clareza a margem comercial da rentabilidade por custo, ajustando nomenclatura, navegação e conteúdo quando necessário
+- [x] Atualizar regressões, validar visualmente e publicar o ajuste de navegação financeira

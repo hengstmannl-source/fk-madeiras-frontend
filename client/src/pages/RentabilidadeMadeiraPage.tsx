@@ -126,7 +126,7 @@ export default function RentabilidadeMadeiraPage() {
         <h1 className="text-2xl font-bold tracking-tight text-foreground">Rentabilidade da madeira</h1>
         <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Custo rastreável de matéria-prima, rateios configuráveis e rentabilidade por produção, lote e venda. As apurações são versões auditáveis e não modificam estoque, vendas, títulos ou baixas.</p>
       </div>
-      <Badge variant="outline" className="h-auto max-w-md whitespace-normal border-sky-300 bg-sky-50 px-3 py-2 text-left text-sky-900 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100"><ShieldCheck className="mr-2 inline h-4 w-4" />Margem comercial existente permanece separada do custo gerencial.</Badge>
+      <Badge variant="outline" className="h-auto max-w-md whitespace-normal border-sky-300 bg-sky-50 px-3 py-2 text-left text-sky-900 dark:border-sky-800 dark:bg-sky-950/30 dark:text-sky-100"><ShieldCheck className="mr-2 inline h-4 w-4" />O acerto comercial de Vendas não inclui custo de matéria-prima ou rateios gerenciais.</Badge>
     </header>
 
     <nav className="flex gap-1 overflow-x-auto rounded-xl border border-border/70 bg-muted/35 p-1" aria-label="Seções de rentabilidade">

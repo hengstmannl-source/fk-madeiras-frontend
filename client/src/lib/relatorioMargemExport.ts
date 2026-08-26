@@ -94,7 +94,7 @@ export async function exportarRelatorioMargemPdf(input: {
   };
   const rodape = () => {
     pagina.drawLine({ start: { x: margem, y: 38 }, end: { x: largura - margem, y: 38 }, thickness: 0.45, color: rgb(0.72, 0.76, 0.73) });
-    escrever("FK Madeiras — Relatório de margem por venda", margem, 23, 7, false, rgb(0.35, 0.4, 0.42));
+    escrever("FK Madeiras — Acerto comercial por venda", margem, 23, 7, false, rgb(0.35, 0.4, 0.42));
     const paginaTexto = `Página ${documento.getPageCount()}`;
     escrever(paginaTexto, largura - margem - larguraTexto(paginaTexto, 7), 23, 7, false, rgb(0.35, 0.4, 0.42));
   };
@@ -110,7 +110,7 @@ export async function exportarRelatorioMargemPdf(input: {
     pagina = documento.addPage([largura, altura]);
     y = altura - 38;
     escrever("FK MADEIRAS", margem, y, 15, true, rgb(0.08, 0.28, 0.20));
-    escrever(inicial ? "RELATÓRIO DE MARGEM POR VENDA" : "RELATÓRIO DE MARGEM POR VENDA — CONTINUAÇÃO", margem, y - 19, 10, true);
+    escrever(inicial ? "ACERTO COMERCIAL POR VENDA" : "ACERTO COMERCIAL POR VENDA — CONTINUAÇÃO", margem, y - 19, 10, true);
     if (inicial) {
       escrever(`Emitido em ${dataBr(new Date())}`, margem, y - 33, 7.5, false, rgb(0.35, 0.4, 0.42));
       escrever(`Filtros: ${truncar(filtrosTexto(input.filtros), larguraUtil, 7.5)}`, margem, y - 45, 7.5, false, rgb(0.35, 0.4, 0.42));
@@ -142,5 +142,5 @@ export async function exportarRelatorioMargemPdf(input: {
   escrever(totais, largura - margem - fonteNegrito.widthOfTextAtSize(totais, 7.5), y - 15, 7.5, true, rgb(0.08, 0.28, 0.20));
   const bytes = await documento.save();
   const dados = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  return { url: URL.createObjectURL(new Blob([dados], { type: "application/pdf" })), nomeArquivo: `relatorio-margem-vendas-${new Date().toISOString().slice(0, 10)}.pdf` };
+  return { url: URL.createObjectURL(new Blob([dados], { type: "application/pdf" })), nomeArquivo: `acerto-comercial-vendas-${new Date().toISOString().slice(0, 10)}.pdf` };
 }

@@ -9,7 +9,7 @@ describe("navegação principal", () => {
 
   it("organiza financeiro e vendas com as opções prioritárias", () => {
     expect(dashboardNavigation.financeiro.map((item) => item.label)).toEqual(["Financeiro", "Contas a pagar", "Contas a receber", "Contas pagas", "Contas recebidas", "Caixa Cheque", "Conciliação bancária", "Rentabilidade da madeira"]);
-    expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados", "Pagas", "Entregues", "Concluídas", "Margem por venda"]);
+    expect(dashboardNavigation.vendas.map((item) => item.label)).toEqual(["Vendas", "Aprovados", "Pagas", "Entregues", "Concluídas", "Acerto comercial"]);
     expect(dashboardNavigation.producao.map((item) => item.label)).toEqual(["Produção", "Estoque", "Relatório de plaquetas", "Inventário"]);
     expect(dashboardNavigation.producao.every((item) => !item.disabled)).toBe(true);
     expect(dashboardNavigation.combustivel.map((item) => item.label)).toEqual(["Diesel"]);

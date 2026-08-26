@@ -61,8 +61,8 @@ export default function RelatorioMargemVendasPage() {
     const planilha = XLSX.utils.json_to_sheet(linhasMargemParaPlanilha(vendasFiltradas));
     planilha["!cols"] = [{ wch: 14 }, { wch: 26 }, { wch: 20 }, { wch: 13 }, { wch: 16 }, { wch: 17 }, { wch: 15 }, { wch: 19 }, { wch: 17 }, { wch: 13 }, { wch: 50 }];
     const livro = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(livro, planilha, "Margem por venda");
-    XLSX.writeFileXLSX(livro, `relatorio-margem-vendas-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.utils.book_append_sheet(livro, planilha, "Acerto comercial");
+    XLSX.writeFileXLSX(livro, `acerto-comercial-vendas-${new Date().toISOString().slice(0, 10)}.xlsx`);
   };
   const exportarPdf = async () => {
     setExportandoPdf(true);
@@ -76,10 +76,10 @@ export default function RelatorioMargemVendasPage() {
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <div className="mb-2 flex items-center gap-2 text-primary"><BarChart3 className="h-4 w-4" /><span className="text-xs font-semibold uppercase tracking-wider">Vendas</span></div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Margem por venda</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Acompanhe o valor final após desconto, frete, comissão e os acréscimos de taxas comerciais. A margem indicada compara o valor final da venda ao subtotal bruto.</p>
+        <h1 className="text-2xl font-bold tracking-tight text-foreground">Acerto comercial por venda</h1>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">Acompanhe a composição comercial do pedido após descontos, frete, comissão e taxas. O índice comercial compara o valor final ao subtotal bruto, sem apurar custo ou lucro.</p>
       </div>
-      <Badge variant="outline" className="h-auto max-w-md whitespace-normal border-amber-300 bg-amber-50 px-3 py-2 text-left text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">Não inclui o custo das peças ou da matéria-prima. Para margem de lucro contábil, será necessário associar custos às vendas.</Badge>
+      <Badge variant="outline" className="h-auto max-w-md whitespace-normal border-amber-300 bg-amber-50 px-3 py-2 text-left text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100">Este é o acerto do valor comercial. Não inclui custo das peças, matéria-prima ou rateios; para rentabilidade por custo, use Financeiro → Rentabilidade da madeira.</Badge>
     </div>
 
     <Card className="border-border/60 shadow-sm">
@@ -102,7 +102,7 @@ export default function RelatorioMargemVendasPage() {
       <Card className="border-border/60"><CardHeader className="pb-2"><CardDescription>Frete abatido</CardDescription><CardTitle className="text-lg text-rose-700 dark:text-rose-300">− {formatarMoeda.format(resumo.frete)}</CardTitle></CardHeader></Card>
       <Card className="border-border/60"><CardHeader className="pb-2"><CardDescription>Comissões</CardDescription><CardTitle className="text-lg text-rose-700 dark:text-rose-300">− {formatarMoeda.format(resumo.comissao)}</CardTitle></CardHeader></Card>
       <Card className="border-border/60"><CardHeader className="pb-2"><CardDescription>Taxas adicionadas</CardDescription><CardTitle className="text-lg text-emerald-700 dark:text-emerald-300">+ {formatarMoeda.format(resumo.taxas)}</CardTitle></CardHeader></Card>
-      <Card className="border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30"><CardHeader className="pb-2"><CardDescription>Valor líquido · margem</CardDescription><CardTitle className="flex items-center gap-2 text-lg text-emerald-800 dark:text-emerald-200"><CircleDollarSign className="h-4 w-4" />{formatarMoeda.format(resumo.liquido)}</CardTitle><p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{formatarPercentual.format(margemMediaPonderada)}%</p></CardHeader></Card>
+      <Card className="border-emerald-200 bg-emerald-50/60 dark:border-emerald-900 dark:bg-emerald-950/30"><CardHeader className="pb-2"><CardDescription>Valor final · índice comercial</CardDescription><CardTitle className="flex items-center gap-2 text-lg text-emerald-800 dark:text-emerald-200"><CircleDollarSign className="h-4 w-4" />{formatarMoeda.format(resumo.liquido)}</CardTitle><p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">{formatarPercentual.format(margemMediaPonderada)}%</p></CardHeader></Card>
     </div>
 
     <Card className="overflow-hidden border-border/60 shadow-sm">
@@ -110,7 +110,7 @@ export default function RelatorioMargemVendasPage() {
       <CardContent className="p-0">
         {relatorio.isLoading ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />Carregando relatório...</div>
           : vendasFiltradas.length === 0 ? <div className="p-12 text-center text-muted-foreground"><TrendingDown className="mx-auto mb-2 h-6 w-6" />Nenhuma venda aprovada foi encontrada para os filtros informados.</div>
-          : <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead>Venda</TableHead><TableHead>Cliente</TableHead><TableHead>Vendedor</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead className="text-right">Frete</TableHead><TableHead className="text-right">Comissão</TableHead><TableHead className="text-right">Taxas</TableHead><TableHead className="text-right">Valor final</TableHead><TableHead className="text-right">Margem</TableHead></TableRow></TableHeader>
+          : <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead>Venda</TableHead><TableHead>Cliente</TableHead><TableHead>Vendedor</TableHead><TableHead>Data</TableHead><TableHead className="text-right">Subtotal</TableHead><TableHead className="text-right">Frete</TableHead><TableHead className="text-right">Comissão</TableHead><TableHead className="text-right">Taxas</TableHead><TableHead className="text-right">Valor final</TableHead><TableHead className="text-right">Índice comercial</TableHead></TableRow></TableHeader>
             <TableBody>{vendasFiltradas.map((venda) => <TableRow key={venda.id} className="hover:bg-muted/30"><TableCell className="font-semibold text-primary">{venda.numero ?? `Venda #${venda.id}`}</TableCell><TableCell>{venda.clienteNome ?? "Cliente não localizado"}</TableCell><TableCell className="text-muted-foreground">{venda.vendedor?.trim() || "—"}</TableCell><TableCell className="text-muted-foreground">{formatarData(venda.createdAt)}</TableCell><TableCell className="text-right">{formatarMoeda.format(venda.subtotal)}</TableCell><TableCell className="text-right text-rose-700 dark:text-rose-300">− {formatarMoeda.format(venda.abatimentoFrete)}</TableCell><TableCell className="text-right text-rose-700 dark:text-rose-300">− {formatarMoeda.format(venda.comissao)}</TableCell><TableCell className="text-right text-emerald-700 dark:text-emerald-300">+ {formatarMoeda.format(venda.totalTaxas)}</TableCell><TableCell className="text-right font-semibold">{formatarMoeda.format(venda.valorLiquido)}</TableCell><TableCell className="text-right"><Badge variant="outline" className={venda.margemPercentual >= 80 ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-200" : "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200"}><TrendingUp className="mr-1 h-3.5 w-3.5" />{formatarPercentual.format(venda.margemPercentual)}%</Badge></TableCell></TableRow>)}</TableBody></Table></div>}
       </CardContent>
     </Card>

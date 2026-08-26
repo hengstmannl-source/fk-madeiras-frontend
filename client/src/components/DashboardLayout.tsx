@@ -65,7 +65,7 @@ export const dashboardNavigation = {
     { icon: CircleDollarSign, label: "Pagas", path: "/orcamentos/pagas" },
     { icon: Truck, label: "Entregues", path: "/orcamentos/entregues" },
     { icon: CircleCheckBig, label: "Concluídas", path: "/orcamentos/concluidas" },
-    { icon: CircleDollarSign, label: "Margem por venda", path: "/orcamentos/margem" },
+    { icon: CircleDollarSign, label: "Acerto comercial", path: "/orcamentos/margem" },
   ],
   gestao: [
     { icon: Users, label: "Clientes", path: "/clientes" },
