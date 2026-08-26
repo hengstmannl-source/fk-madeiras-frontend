@@ -274,8 +274,14 @@ export const financeiroRouter = router({
       movimentoId: z.number().int().positive(),
       baixaFinanceiraId: z.number().int().positive(),
     })).mutation(({ ctx, input }) => db.confirmarConciliacaoBancaria(input, ctx.user.id)),
-    desfazer: protectedProcedure.input(z.object({ movimentoId: z.number().int().positive() }))
-      .mutation(({ ctx, input }) => db.desfazerConciliacaoBancaria(input.movimentoId)),
+    confirmarTransferencia: protectedProcedure.input(z.object({
+      movimentoId: z.number().int().positive(),
+      movimentoTransferenciaFinanceiraId: z.number().int().positive(),
+    })).mutation(({ ctx, input }) => db.confirmarConciliacaoTransferenciaBancaria(input, ctx.user.id)),
+    desfazer: protectedProcedure.input(z.object({
+      movimentoId: z.number().int().positive(),
+      motivo: z.string().trim().max(1000).optional(),
+    })).mutation(({ ctx, input }) => db.desfazerConciliacaoBancaria(input.movimentoId, ctx.user.id, input.motivo)),
     criarLancamento: protectedProcedure.input(z.object({
       movimentoId: z.number().int().positive(),
       categoriaId: z.number().int().positive(),
@@ -286,7 +292,7 @@ export const financeiroRouter = router({
       movimentoId: z.number().int().positive(),
       estado: z.enum(["ignorado", "divergente"]),
       observacoes: z.string().trim().max(4000).nullable().optional(),
-    })).mutation(({ ctx, input }) => db.definirEstadoMovimentoBancario(input)),
+    })).mutation(({ ctx, input }) => db.definirEstadoMovimentoBancario(input, ctx.user.id)),
   }),
 
   titulos: router({

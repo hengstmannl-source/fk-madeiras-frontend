@@ -74,6 +74,7 @@ export default function ConciliacaoBancariaPage() {
   const prepararImportacao = trpc.financeiro.conciliacao.prepararImportacao.useMutation();
   const importarExtrato = trpc.financeiro.conciliacao.importar.useMutation();
   const confirmar = trpc.financeiro.conciliacao.confirmar.useMutation();
+  const confirmarTransferencia = trpc.financeiro.conciliacao.confirmarTransferencia.useMutation();
   const desfazer = trpc.financeiro.conciliacao.desfazer.useMutation();
   const definirEstado = trpc.financeiro.conciliacao.definirEstado.useMutation();
   const criarLancamento = trpc.financeiro.conciliacao.criarLancamento.useMutation();
@@ -124,7 +125,11 @@ export default function ConciliacaoBancariaPage() {
     importarExtrato.mutate({ contaFinanceiraId: Number(contaFinanceiraId), nomeArquivo: arquivo.name, formato: formatoArquivo, conteudo: conteudoArquivo }, {
       onSuccess: (resultado) => {
         if (resultado.erros.length) { setPreparo({ linhas: [], erros: resultado.erros }); toast.error("A importação foi recusada. Revise os dados indicados."); return; }
-        toast.success(`${resultado.importados} movimento(s) importado(s) para conciliação`);
+        const resumoImportacao = [
+          `${resultado.importados} movimento(s) importado(s)`,
+          resultado.duplicados ? `${resultado.duplicados} já existente(s) ignorado(s)` : null,
+        ].filter(Boolean).join(" · ");
+        toast.success(`${resumoImportacao} para conciliação`);
         limparImportacao();
         setImportacaoAberta(false);
         invalidar();
@@ -135,6 +140,10 @@ export default function ConciliacaoBancariaPage() {
 
   const confirmarSugestao = (movimentoId: number, baixaFinanceiraId: number) => confirmar.mutate({ movimentoId, baixaFinanceiraId }, {
     onSuccess: () => { toast.success("Movimento conciliado com a baixa financeira"); invalidar(); },
+    onError: (erro) => toast.error(erro.message),
+  });
+  const confirmarSugestaoTransferencia = (movimentoId: number, movimentoTransferenciaFinanceiraId: number) => confirmarTransferencia.mutate({ movimentoId, movimentoTransferenciaFinanceiraId }, {
+    onSuccess: () => { toast.success("Movimento conciliado como transferência interna, sem impactar receitas ou despesas"); invalidar(); },
     onError: (erro) => toast.error(erro.message),
   });
   const alterarEstado = (movimentoId: number, novoEstado: "ignorado" | "divergente") => definirEstado.mutate({ movimentoId, estado: novoEstado }, {
@@ -178,6 +187,7 @@ export default function ConciliacaoBancariaPage() {
         {(movimentos.data ?? []).map((movimento: any) => <Card key={movimento.id} className="overflow-hidden"><CardContent className="p-0"><div className="flex flex-col gap-4 p-5 lg:flex-row lg:items-start lg:justify-between"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge variant="outline" className={estiloEstado[movimento.estado as EstadoMovimento]}>{movimento.estado}</Badge><span className={`text-sm font-semibold ${movimento.tipo === "entrada" ? "text-emerald-700" : "text-rose-700"}`}>{movimento.tipo === "entrada" ? "+" : "−"}{formatCurrency(movimento.valor)}</span><span className="text-xs text-muted-foreground">{formatarData(movimento.dataMovimento)} · {movimento.contaNome}</span></div><h2 className="mt-2 break-words font-semibold text-foreground">{movimento.descricao}</h2><p className="mt-1 text-xs text-muted-foreground">Extrato: {movimento.nomeArquivo}{movimento.identificadorExterno ? ` · ID ${movimento.identificadorExterno}` : ""}</p>{movimento.estado === "conciliado" ? <p className="mt-3 text-sm text-emerald-800"><CheckCircle2 className="mr-1 inline h-4 w-4" />Conciliado com a baixa #{movimento.baixaFinanceiraId}{movimento.baixaDescricao ? ` — ${movimento.baixaDescricao}` : ""}</p> : null}{movimento.estado === "divergente" && movimento.observacoes ? <p className="mt-3 text-sm text-rose-800">Observação: {movimento.observacoes}</p> : null}</div>
           <div className="flex shrink-0 flex-wrap gap-2">{movimento.estado === "pendente" ? <><Button size="sm" variant="outline" onClick={() => abrirNovoLancamento(movimento)}><PlusCircle className="mr-1.5 h-3.5 w-3.5" />Criar lançamento</Button><Button size="sm" variant="outline" onClick={() => alterarEstado(movimento.id, "divergente")}><CircleAlert className="mr-1.5 h-3.5 w-3.5" />Divergência</Button><Button size="sm" variant="ghost" onClick={() => alterarEstado(movimento.id, "ignorado")}>Ignorar</Button></> : null}{movimento.estado === "conciliado" ? <Button size="sm" variant="outline" onClick={() => desfazer.mutate({ movimentoId: movimento.id }, { onSuccess: () => { toast.success("Conciliação desfeita"); invalidar(); }, onError: (erro) => toast.error(erro.message) })}><RefreshCw className="mr-1.5 h-3.5 w-3.5" />Desfazer</Button> : null}</div></div>
           {movimento.estado === "pendente" && movimento.sugestoes?.length ? <div className="border-t bg-muted/30 px-5 py-4"><div className="flex items-center gap-2 text-sm font-medium"><WandSparkles className="h-4 w-4 text-primary" />Sugestões de baixa compatível</div><div className="mt-3 grid gap-2">{movimento.sugestoes.slice(0, 3).map((sugestao: any) => <div key={sugestao.id} className="flex flex-col gap-2 rounded-lg border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">{sugestao.descricaoTitulo}</p><p className="text-xs text-muted-foreground">{formatCurrency(sugestao.valor)} · {formatarData(sugestao.dataBaixa)} · {sugestao.motivo}</p></div><Button size="sm" onClick={() => confirmarSugestao(movimento.id, sugestao.id)} disabled={confirmar.isPending}>Conciliar</Button></div>)}</div></div> : null}
+          {movimento.estado === "pendente" && movimento.sugestoesTransferencia?.length ? <div className="border-t bg-sky-50/60 px-5 py-4"><div className="flex items-center gap-2 text-sm font-medium text-sky-950"><Landmark className="h-4 w-4 text-sky-700" />Sugestões de transferência interna</div><p className="mt-1 text-xs text-sky-800">Esta ação apenas vincula os dois lados patrimoniais; não cria título, baixa, receita nem despesa.</p><div className="mt-3 grid gap-2">{movimento.sugestoesTransferencia.slice(0, 3).map((sugestao: any) => <div key={sugestao.id} className="flex flex-col gap-2 rounded-lg border border-sky-200 bg-background p-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="text-sm font-medium">{sugestao.descricao}</p><p className="text-xs text-muted-foreground">{formatCurrency(sugestao.valor)} · {formatarData(sugestao.dataMovimento)} · {sugestao.motivo}</p></div><Button size="sm" variant="outline" onClick={() => confirmarSugestaoTransferencia(movimento.id, sugestao.id)} disabled={confirmarTransferencia.isPending}>Conciliar transferência</Button></div>)}</div></div> : null}
         </CardContent></Card>)}
       </section>
     </>}

@@ -62,9 +62,9 @@ describe("financeiro.conciliacao - empresa única", () => {
     expect(db.importarExtratoBancario).toHaveBeenCalledWith(expect.objectContaining({ contaFinanceiraId: 12 }), 7);
     expect(db.listConciliacaoBancaria).toHaveBeenCalledWith({ estado: "pendente" });
     expect(db.confirmarConciliacaoBancaria).toHaveBeenCalledWith({ movimentoId: 21, baixaFinanceiraId: 34 }, 7);
-    expect(db.desfazerConciliacaoBancaria).toHaveBeenCalledWith(21);
+    expect(db.desfazerConciliacaoBancaria).toHaveBeenCalledWith(21, 7, undefined);
     expect(db.criarLancamentoDaConciliacao).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, categoriaId: 5 }), 7);
-    expect(db.definirEstadoMovimentoBancario).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, estado: "ignorado" }));
+    expect(db.definirEstadoMovimentoBancario).toHaveBeenCalledWith(expect.objectContaining({ movimentoId: 21, estado: "ignorado" }), 7);
   });
 
   it("não recebe empresa escolhida pelo utilizador nos relatórios de fluxo e previsão", async () => {

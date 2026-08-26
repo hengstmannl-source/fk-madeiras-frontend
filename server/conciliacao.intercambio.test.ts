@@ -24,14 +24,25 @@ describe("prepararImportacaoCsvExtrato", () => {
 describe("prepararImportacaoOfxExtrato", () => {
   it("interpreta movimentos OFX com entrada e saída", () => {
     const resultado = prepararImportacaoOfxExtrato(`<OFX><BANKTRANLIST>
-      <STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260901120000<TRNAMT>1500.00<FITID>OFX-1<MEMO>Recebimento cliente
+      <STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260901120000<TRNAMT>1500.00<FITID>OFX-1<CHECKNUM>114<MEMO>Recebimento cliente
       <STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20260902120000<TRNAMT>-220.25<FITID>OFX-2<NAME>Tarifa bancária
-    </BANKTRANLIST></OFX>`);
+    </BANKTRANLIST><LEDGERBAL><BALAMT>3250.00<DTASOF>20260902120000</LEDGERBAL></OFX>`);
 
     expect(resultado.erros).toEqual([]);
     expect(resultado.linhas).toEqual(expect.arrayContaining([
-      expect.objectContaining({ dataMovimento: "2026-09-01", tipo: "entrada", valor: "1500.00", identificadorExterno: "OFX-1" }),
+      expect.objectContaining({ dataMovimento: "2026-09-01", tipo: "entrada", valor: "1500.00", identificadorExterno: "OFX-1", numeroDocumento: "114", memoOriginal: "Recebimento cliente", saldoAposMovimento: null }),
       expect.objectContaining({ dataMovimento: "2026-09-02", tipo: "saida", valor: "220.25", identificadorExterno: "OFX-2" }),
     ]));
+    expect(resultado).toMatchObject({ saldoFinalBanco: "3250.00", dataSaldoFinalBanco: "2026-09-02" });
+  });
+
+  it("rejeita FITID repetido no mesmo arquivo antes de qualquer persistência", () => {
+    const resultado = prepararImportacaoOfxExtrato(`<OFX><BANKTRANLIST>
+      <STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260901120000<TRNAMT>1500.00<FITID>REPETIDO<MEMO>Recebimento A
+      <STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20260902120000<TRNAMT>1500.00<FITID>REPETIDO<MEMO>Recebimento B
+    </BANKTRANLIST></OFX>`);
+
+    expect(resultado.linhas).toEqual([]);
+    expect(resultado.erros).toEqual(["Movimento 2: movimento duplicado dentro do arquivo"]);
   });
 });

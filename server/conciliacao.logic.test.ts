@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { sugerirConciliacoes } from "./conciliacao.logic";
+import { sugerirConciliacoes, sugerirTransferenciasInternas } from "./conciliacao.logic";
 
 describe("sugerirConciliacoes", () => {
   it("prioriza baixa com mesma natureza, valor, data próxima e descrição relacionada", () => {
@@ -12,5 +12,26 @@ describe("sugerirConciliacoes", () => {
     expect(sugestoes).toHaveLength(1);
     expect(sugestoes[0]).toMatchObject({ id: 4, pontuacao: 100 });
     expect(sugestoes[0].motivo).toContain("descrição relacionada");
+  });
+});
+
+describe("sugerirTransferenciasInternas", () => {
+  it("sugere somente o lado espelhado de transferência da mesma conta, sentido e valor", () => {
+    const sugestoes = sugerirTransferenciasInternas({
+      contaFinanceiraId: 4,
+      tipo: "saida",
+      valor: "1850.00",
+      dataMovimento: "2026-09-03",
+      descricao: "PIX transferência entre contas",
+    }, [
+      { id: 12, transferenciaId: 7, contaFinanceiraId: 4, tipo: "saida", valor: "1850.00", dataMovimento: "2026-09-02", descricao: "Transferência para Banco", contaContrapartidaNome: "Banco" },
+      { id: 13, transferenciaId: 7, contaFinanceiraId: 8, tipo: "entrada", valor: "1850.00", dataMovimento: "2026-09-02", descricao: "Transferência de Caixa", contaContrapartidaNome: "Caixa" },
+      { id: 14, transferenciaId: 8, contaFinanceiraId: 4, tipo: "saida", valor: "850.00", dataMovimento: "2026-09-03", descricao: "Transferência divergente", contaContrapartidaNome: "Caixa" },
+    ]);
+
+    expect(sugestoes).toHaveLength(1);
+    expect(sugestoes[0]).toMatchObject({ id: 12, transferenciaId: 7 });
+    expect(sugestoes[0].motivo).toContain("transferência interna");
+    expect(sugestoes[0].motivo).toContain("contrapartida: Banco");
   });
 });

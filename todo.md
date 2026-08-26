@@ -743,3 +743,12 @@
 - [x] Adaptar a interface financeira com criação, consulta e estorno de transferências claramente distintas de títulos
 - [x] Cobrir transferência, ausência de título, ausência de receita/despesa, saldo consolidado, validações, concorrência e estorno com regressões
 - [x] Validar banco, TypeScript, suíte, build e auditorias da Etapa 2B antes de publicar
+- [x] Auditar estruturas atuais de OFX, extratos, movimentos bancários, conciliação, baixas, contas e transferências sem alterar dados
+- [x] Modelar movimentos bancários imutáveis com FITID único por conta e estados não conciliado, conciliado ou ignorado
+- [x] Implementar importação OFX idempotente, preservando dados originais e impedindo baixas automáticas durante a importação
+- [x] Criar sugestão determinística e explicável de correspondência por valor, data, tipo, conta, descrição e transferências
+- [x] Permitir conciliar, conciliar com baixa quando necessário, ignorar e desfazer conciliação de modo transacional e auditável
+- [x] Reconhecer os dois lados de transferências internas e impedir que conciliação crie receita, despesa ou baixa duplicada
+- [x] Criar tela de conciliação com importação OFX, filtros, sugestões, revisão e histórico por conta
+- [x] Cobrir importação duplicada, FITID, matching, baixa única, baixa parcial, transferência, reversão e concorrência com regressões
+- [x] Validar banco, TypeScript, suíte, build, auditorias e interface da Etapa 2C antes de publicar

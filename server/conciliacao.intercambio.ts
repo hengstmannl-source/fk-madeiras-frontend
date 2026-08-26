@@ -7,10 +7,18 @@ export type LinhaExtratoBancario = {
   tipo: TipoMovimentoBancario;
   valor: string;
   identificadorExterno: string | null;
+  memoOriginal: string | null;
+  numeroDocumento: string | null;
+  saldoAposMovimento: string | null;
   chaveBase: string;
 };
 
-export type ResultadoImportacaoExtrato = { linhas: LinhaExtratoBancario[]; erros: string[] };
+export type ResultadoImportacaoExtrato = {
+  linhas: LinhaExtratoBancario[];
+  erros: string[];
+  saldoFinalBanco: string | null;
+  dataSaldoFinalBanco: string | null;
+};
 
 const CABECALHOS_CSV = ["data", "descricao", "valor", "tipo", "identificador"] as const;
 
@@ -79,7 +87,15 @@ function tipoMovimento(valor: string, valorNumerico: number): TipoMovimentoBanca
   return null;
 }
 
-function linhaNormalizada(numeroLinha: number, data: string, descricao: string, valorBruto: string, tipoBruto: string, identificador: string): { linha?: LinhaExtratoBancario; erro?: string } {
+function linhaNormalizada(
+  numeroLinha: number,
+  data: string,
+  descricao: string,
+  valorBruto: string,
+  tipoBruto: string,
+  identificador: string,
+  metadados: { memoOriginal?: string; numeroDocumento?: string; saldoAposMovimento?: string } = {},
+): { linha?: LinhaExtratoBancario; erro?: string } {
   const dataMovimento = dataValida(data);
   const valorNumerico = converterValor(valorBruto);
   const descricaoLimpa = descricao.trim();
@@ -90,10 +106,31 @@ function linhaNormalizada(numeroLinha: number, data: string, descricao: string, 
   if (!tipo) return { erro: `Linha ${numeroLinha}: tipo deve ser entrada ou saída` };
   const valor = Math.abs(valorNumerico).toFixed(2);
   const identificadorExterno = identificador.trim().slice(0, 300) || null;
+  const memoOriginal = metadados.memoOriginal?.trim().slice(0, 500) || null;
+  const numeroDocumento = metadados.numeroDocumento?.trim().slice(0, 160) || null;
+  const saldoAposMovimentoNumerico = metadados.saldoAposMovimento ? converterValor(metadados.saldoAposMovimento) : null;
+  const saldoAposMovimento = saldoAposMovimentoNumerico === null ? null : saldoAposMovimentoNumerico.toFixed(2);
   const chaveBase = identificadorExterno
     ? `id:${normalizarTexto(identificadorExterno)}`
     : `${dataMovimento}|${tipo}|${valor}|${normalizarTexto(descricaoLimpa)}`;
-  return { linha: { numeroLinha, dataMovimento, descricao: descricaoLimpa, tipo, valor, identificadorExterno, chaveBase } };
+  return {
+    linha: {
+      numeroLinha,
+      dataMovimento,
+      descricao: descricaoLimpa,
+      tipo,
+      valor,
+      identificadorExterno,
+      memoOriginal,
+      numeroDocumento,
+      saldoAposMovimento,
+      chaveBase,
+    },
+  };
+}
+
+function resultadoVazio(erro: string): ResultadoImportacaoExtrato {
+  return { linhas: [], erros: [erro], saldoFinalBanco: null, dataSaldoFinalBanco: null };
 }
 
 export function criarModeloCsvExtratoBancario(): string {
@@ -101,12 +138,14 @@ export function criarModeloCsvExtratoBancario(): string {
 }
 
 export function prepararImportacaoCsvExtrato(conteudo: string, maximoLinhas = 2000): ResultadoImportacaoExtrato {
-  if (conteudo.length > 1_000_000) return { linhas: [], erros: ["O arquivo CSV excede o limite de 1 MB"] };
+  if (conteudo.length > 1_000_000) return resultadoVazio("O arquivo CSV excede o limite de 1 MB");
   let tabela: string[][];
   try {
     const primeiraLinha = conteudo.split(/\r?\n/, 1)[0] ?? "";
     tabela = lerCsv(conteudo, primeiraLinha.split(";").length >= primeiraLinha.split(",").length ? ";" : ",");
-  } catch (erro) { return { linhas: [], erros: [erro instanceof Error ? erro.message : "Não foi possível ler o CSV"] }; }
+  } catch (erro) {
+    return resultadoVazio(erro instanceof Error ? erro.message : "Não foi possível ler o CSV");
+  }
   const cabecalho = (tabela.shift() ?? []).map((campo) => normalizarTexto(campo.replace(/^\uFEFF/, "")));
   const aliases: Record<(typeof CABECALHOS_CSV)[number], string[]> = {
     data: ["data", "data movimento", "date", "dt lancamento"],
@@ -117,10 +156,10 @@ export function prepararImportacaoCsvExtrato(conteudo: string, maximoLinhas = 20
   };
   const indice = (campo: keyof typeof aliases) => cabecalho.findIndex((item) => aliases[campo].includes(item));
   const obrigatorios = ["data", "descricao", "valor"] as const;
-  if (obrigatorios.some((campo) => indice(campo) < 0)) return { linhas: [], erros: ["O CSV deve conter as colunas data, descricao e valor"] };
+  if (obrigatorios.some((campo) => indice(campo) < 0)) return resultadoVazio("O CSV deve conter as colunas data, descricao e valor");
   const dados = tabela.filter((linha) => linha.some((campo) => campo.trim()));
-  if (!dados.length) return { linhas: [], erros: ["O arquivo CSV não possui movimentos para importar"] };
-  if (dados.length > maximoLinhas) return { linhas: [], erros: [`O limite por importação é de ${maximoLinhas} movimentos`] };
+  if (!dados.length) return resultadoVazio("O arquivo CSV não possui movimentos para importar");
+  if (dados.length > maximoLinhas) return resultadoVazio(`O limite por importação é de ${maximoLinhas} movimentos`);
   const linhas: LinhaExtratoBancario[] = [];
   const erros: string[] = [];
   const chaves = new Set<string>();
@@ -135,7 +174,7 @@ export function prepararImportacaoCsvExtrato(conteudo: string, maximoLinhas = 20
     chaves.add(resultado.linha!.chaveBase);
     linhas.push(resultado.linha!);
   });
-  return { linhas: erros.length ? [] : linhas, erros };
+  return { linhas: erros.length ? [] : linhas, erros, saldoFinalBanco: null, dataSaldoFinalBanco: null };
 }
 
 function tagOfx(bloco: string, tag: string): string {
@@ -143,22 +182,38 @@ function tagOfx(bloco: string, tag: string): string {
 }
 
 export function prepararImportacaoOfxExtrato(conteudo: string, maximoLinhas = 2000): ResultadoImportacaoExtrato {
-  if (conteudo.length > 1_000_000) return { linhas: [], erros: ["O arquivo OFX excede o limite de 1 MB"] };
+  if (conteudo.length > 1_000_000) return resultadoVazio("O arquivo OFX excede o limite de 1 MB");
   const blocos = conteudo.split(/<STMTTRN>/i).slice(1);
-  if (!blocos.length) return { linhas: [], erros: ["O OFX não possui movimentos bancários reconhecíveis"] };
-  if (blocos.length > maximoLinhas) return { linhas: [], erros: [`O limite por importação é de ${maximoLinhas} movimentos`] };
+  if (!blocos.length) return resultadoVazio("O OFX não possui movimentos bancários reconhecíveis");
+  if (blocos.length > maximoLinhas) return resultadoVazio(`O limite por importação é de ${maximoLinhas} movimentos`);
   const linhas: LinhaExtratoBancario[] = [];
   const erros: string[] = [];
   const chaves = new Set<string>();
   blocos.forEach((bloco, indice) => {
     const numeroLinha = indice + 1;
-    const resultado = linhaNormalizada(numeroLinha, tagOfx(bloco, "DTPOSTED"), tagOfx(bloco, "MEMO") || tagOfx(bloco, "NAME") || "Movimento OFX", tagOfx(bloco, "TRNAMT"), "", tagOfx(bloco, "FITID") || tagOfx(bloco, "CHECKNUM"));
+    const memo = tagOfx(bloco, "MEMO");
+    const nome = tagOfx(bloco, "NAME");
+    const resultado = linhaNormalizada(
+      numeroLinha,
+      tagOfx(bloco, "DTPOSTED"),
+      memo || nome || "Movimento OFX",
+      tagOfx(bloco, "TRNAMT"),
+      "",
+      tagOfx(bloco, "FITID") || tagOfx(bloco, "CHECKNUM"),
+      { memoOriginal: memo || nome, numeroDocumento: tagOfx(bloco, "CHECKNUM") || tagOfx(bloco, "REFNUM") },
+    );
     if (resultado.erro) { erros.push(`Movimento ${numeroLinha}: ${resultado.erro.replace(/^Linha \d+: /, "")}`); return; }
     if (chaves.has(resultado.linha!.chaveBase)) { erros.push(`Movimento ${numeroLinha}: movimento duplicado dentro do arquivo`); return; }
     chaves.add(resultado.linha!.chaveBase);
     linhas.push(resultado.linha!);
   });
-  return { linhas: erros.length ? [] : linhas, erros };
+  const saldoFinal = converterValor(tagOfx(conteudo, "BALAMT"));
+  return {
+    linhas: erros.length ? [] : linhas,
+    erros,
+    saldoFinalBanco: saldoFinal === null ? null : saldoFinal.toFixed(2),
+    dataSaldoFinalBanco: dataValida(tagOfx(conteudo, "DTASOF")),
+  };
 }
 
 export function prepararImportacaoExtrato(conteudo: string, formato: "csv" | "ofx"): ResultadoImportacaoExtrato {

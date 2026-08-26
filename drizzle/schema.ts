@@ -852,6 +852,8 @@ export const baixasFinanceiras = mysqlTable("baixasFinanceiras", {
   dataBaixa: timestamp("dataBaixa").notNull(),
   formaPagamento: varchar("formaPagamento", { length: 50 }).notNull(),
   observacoes: text("observacoes"),
+  /** Distingue uma baixa assistida por extrato de uma baixa feita diretamente no Financeiro. */
+  origemBaixa: mysqlEnum("origemBaixa", ["manual", "conciliacao"]).notNull().default("manual"),
   conciliada: boolean("conciliada").notNull().default(false),
   conciliadaEm: timestamp("conciliadaEm"),
   estornada: boolean("estornada").notNull().default(false),
@@ -907,6 +909,8 @@ export const extratosBancarios = mysqlTable("extratosBancarios", {
   formato: mysqlEnum("formato", ["csv", "ofx"]).notNull(),
   periodoInicial: timestamp("periodoInicial"),
   periodoFinal: timestamp("periodoFinal"),
+  saldoFinalBanco: decimal("saldoFinalBanco", { precision: 14, scale: 2 }),
+  dataSaldoFinalBanco: timestamp("dataSaldoFinalBanco"),
   totalLinhas: int("totalLinhas").notNull().default(0),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -925,15 +929,60 @@ export const movimentosExtratoBancario = mysqlTable("movimentosExtratoBancario",
   tipo: mysqlEnum("tipo", ["entrada", "saida"]).notNull(),
   valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
   identificadorExterno: varchar("identificadorExterno", { length: 300 }),
+  memoOriginal: text("memoOriginal"),
+  numeroDocumento: varchar("numeroDocumento", { length: 160 }),
+  saldoAposMovimento: decimal("saldoAposMovimento", { precision: 14, scale: 2 }),
   chaveUnica: varchar("chaveUnica", { length: 180 }).notNull().unique(),
   estado: mysqlEnum("estado", ["pendente", "conciliado", "ignorado", "divergente"]).notNull().default("pendente"),
   baixaFinanceiraId: int("baixaFinanceiraId").unique(),
+  movimentoTransferenciaFinanceiraId: int("movimentoTransferenciaFinanceiraId").unique("movimentos_extrato_transferencia_unico"),
   conciliadoEm: timestamp("conciliadoEm"),
   conciliadoPor: int("conciliadoPor"),
   observacoes: text("observacoes"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  fitIdPorContaUnico: uniqueIndex("movimentos_extrato_fitid_por_conta_unico").on(table.empresaId, table.contaFinanceiraId, table.identificadorExterno),
+  contaEstadoDataIndice: index("movimentos_extrato_conta_estado_data_indice").on(table.empresaId, table.contaFinanceiraId, table.estado, table.dataMovimento),
+}));
+
+/** Vínculo histórico entre a evidência bancária e as baixas ou transferências do Financeiro. */
+export const vinculosConciliacaoBancaria = mysqlTable("vinculosConciliacaoBancaria", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  movimentoExtratoBancarioId: int("movimentoExtratoBancarioId").notNull(),
+  baixaFinanceiraId: int("baixaFinanceiraId"),
+  movimentoTransferenciaFinanceiraId: int("movimentoTransferenciaFinanceiraId"),
+  tipo: mysqlEnum("tipo", ["baixa_existente", "baixa_gerada", "transferencia"]).notNull(),
+  valorVinculado: decimal("valorVinculado", { precision: 14, scale: 2 }).notNull(),
+  criadoPor: int("criadoPor").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  desfeitoEm: timestamp("desfeitoEm"),
+  desfeitoPor: int("desfeitoPor"),
+  motivoDesfeito: text("motivoDesfeito"),
+}, (table) => ({
+  movimentoAtivoIndice: index("vinculos_conciliacao_movimento_indice").on(table.empresaId, table.movimentoExtratoBancarioId, table.desfeitoEm),
+  baixaIndice: index("vinculos_conciliacao_baixa_indice").on(table.empresaId, table.baixaFinanceiraId),
+  baixaUnico: uniqueIndex("vinculos_conciliacao_baixa_unico").on(table.baixaFinanceiraId),
+  transferenciaUnico: uniqueIndex("vinculos_conciliacao_transferencia_unico").on(table.movimentoTransferenciaFinanceiraId),
+}));
+
+export type VinculoConciliacaoBancaria = typeof vinculosConciliacaoBancaria.$inferSelect;
+export type InsertVinculoConciliacaoBancaria = typeof vinculosConciliacaoBancaria.$inferInsert;
+
+/** Auditoria mínima de importações e decisões tomadas sobre movimentos bancários. */
+export const auditoriasConciliacaoBancaria = mysqlTable("auditoriasConciliacaoBancaria", {
+  id: int("id").autoincrement().primaryKey(),
+  empresaId: int("empresaId").notNull(),
+  movimentoExtratoBancarioId: int("movimentoExtratoBancarioId").notNull(),
+  vinculoConciliacaoId: int("vinculoConciliacaoId"),
+  acao: mysqlEnum("acao", ["importado", "conciliado_baixa", "conciliado_transferencia", "ignorado", "divergente", "desfeito", "baixa_criada"]).notNull(),
+  detalhes: text("detalhes"),
+  usuarioId: int("usuarioId").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (table) => ({
+  movimentoDataIndice: index("auditorias_conciliacao_movimento_data_indice").on(table.empresaId, table.movimentoExtratoBancarioId, table.createdAt),
+}));
 
 export type MovimentoExtratoBancario = typeof movimentosExtratoBancario.$inferSelect;
 export type InsertMovimentoExtratoBancario = typeof movimentosExtratoBancario.$inferInsert;

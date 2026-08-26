@@ -4,7 +4,7 @@ import {
   orcamentos, itensOrcamento, componentesPacoteOrcamento, taxasAdicionaisOrcamento, produtosComerciais, componentesProdutoComercial, modelosMedidaVenda, historicoAlteracoes, empresaConfiguracoes,
   empresas, credenciaisUsuarios, convitesEmpresa, recuperacoesSenha,
   fornecedores, categoriasFinanceiras, contasFinanceiras, titulosFinanceiros, sequenciasVendas, sequenciasDocumentos,
-  baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros, transferenciasFinanceiras, movimentosTransferenciasFinanceiras,
+  baixasFinanceiras, chequesFinanceiros, recorrenciasFinanceiras, configuracoesFinanceiras, alertasFinanceiros, extratosBancarios, movimentosExtratoBancario, anexosFinanceiros, transferenciasFinanceiras, movimentosTransferenciasFinanceiras, vinculosConciliacaoBancaria, auditoriasConciliacaoBancaria,
   plaquetas, conferenciasVariacaoPlaquetas, romaneiosCargaToras, romaneiosProducao, itensRomaneioToras, itensRomaneioProducao, aproveitamentosRomaneioProducao, aproveitamentosOrcamento, serragensTerceiros, itensSerragemToras, itensSerragemPecas, retiradasSerragemTerceiros, itensRetiradaSerragemTerceiros, lotesPecasSerradas, movimentacoesPlaquetas, movimentacoesEstoqueSerrado, notasDiesel, abastecimentosDiesel,
   type InsertMadeira, type InsertBitola, type InsertCliente,
   type InsertOrcamento, type InsertItemOrcamento, type InsertComponentePacoteOrcamento, type InsertProdutoComercial, type InsertComponenteProdutoComercial, type InsertModeloMedidaVenda, type InsertFornecedor,
@@ -23,7 +23,7 @@ import { montarPerfilCliente } from "../clientePerfil.logic";
 import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, criarModeloCsvTorasSerragemTerceiros, prepararImportacaoTorasProducao, validarCsvPecasProducao, validarCsvTorasSerragemTerceiros } from "../producao.intercambio";
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "../diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
-import { sugerirConciliacoes } from "../conciliacao.logic";
+import { sugerirConciliacoes, sugerirTransferenciasInternas } from "../conciliacao.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
 
 import { getDb } from "./core";
@@ -43,6 +43,50 @@ type AtualizacaoCabecalhoProducao = Partial<typeof romaneiosProducao.$inferInser
 type ResultadoCicloTituloFinanceiro = ReturnType<typeof calcularCicloTituloFinanceiro> & {
   valorBaixadoFormatado: string;
 };
+
+async function criarOuReativarVinculoConciliacao(
+  database: any,
+  input: {
+    empresaId: number;
+    movimentoExtratoBancarioId: number;
+    baixaFinanceiraId?: number;
+    movimentoTransferenciaFinanceiraId?: number;
+    tipo: "baixa_existente" | "baixa_gerada" | "transferencia";
+    valorVinculado: string | number;
+    criadoPor: number;
+  },
+): Promise<number> {
+  const campo = input.baixaFinanceiraId ? vinculosConciliacaoBancaria.baixaFinanceiraId : vinculosConciliacaoBancaria.movimentoTransferenciaFinanceiraId;
+  const valor = input.baixaFinanceiraId ?? input.movimentoTransferenciaFinanceiraId;
+  if (!valor) throw new Error("Informe uma baixa ou movimento de transferência para a conciliação");
+  const existente = (await database.select().from(vinculosConciliacaoBancaria)
+    .where(and(eq(vinculosConciliacaoBancaria.empresaId, input.empresaId), eq(campo, valor))).for("update").limit(1))[0];
+  if (existente) {
+    if (!existente.desfeitoEm) throw new Error("Este registro financeiro já está conciliado em outro movimento bancário");
+    await database.update(vinculosConciliacaoBancaria).set({
+      movimentoExtratoBancarioId: input.movimentoExtratoBancarioId,
+      baixaFinanceiraId: input.baixaFinanceiraId ?? null,
+      movimentoTransferenciaFinanceiraId: input.movimentoTransferenciaFinanceiraId ?? null,
+      tipo: input.tipo,
+      valorVinculado: String(input.valorVinculado),
+      criadoPor: input.criadoPor,
+      desfeitoEm: null,
+      desfeitoPor: null,
+      motivoDesfeito: null,
+    }).where(eq(vinculosConciliacaoBancaria.id, existente.id));
+    return existente.id;
+  }
+  const inserido = await database.insert(vinculosConciliacaoBancaria).values({
+    empresaId: input.empresaId,
+    movimentoExtratoBancarioId: input.movimentoExtratoBancarioId,
+    baixaFinanceiraId: input.baixaFinanceiraId,
+    movimentoTransferenciaFinanceiraId: input.movimentoTransferenciaFinanceiraId,
+    tipo: input.tipo,
+    valorVinculado: String(input.valorVinculado),
+    criadoPor: input.criadoPor,
+  });
+  return getInsertedId(inserido as MysqlInsertResult);
+}
 
 /**
  * Materializa o ciclo de um título a partir das baixas válidas persistidas.
@@ -1009,16 +1053,16 @@ type ChequeRecebidoInput = {
   dataCompensacao?: Date | null;
 };
 
-export type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "criadoPor"> & {
+export type BaixaComChequesInput = Pick<InsertBaixaFinanceira, "tituloId" | "contaFinanceiraId" | "valor" | "dataBaixa" | "formaPagamento" | "observacoes" | "origemBaixa" | "criadoPor"> & {
   chequesRecebidos?: ChequeRecebidoInput[];
   chequeIdsUtilizados?: number[];
 };
 
-export async function registrarBaixaFinanceira(data: BaixaComChequesInput) {
+export async function registrarBaixaFinanceira(data: BaixaComChequesInput, database?: DatabaseConnection | any) {
   const empresaId = (await getEmpresaUnica()).id;
-  const db = await getDb();
+  const db = database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  return db.transaction(async (tx) => {
+  const registrar = async (tx: any) => {
     const titulo = (await tx.select().from(titulosFinanceiros)
       .where(and(eq(titulosFinanceiros.id, data.tituloId), eq(titulosFinanceiros.empresaId, empresaId))).for("update").limit(1))[0];
     if (!titulo) throw new Error("Título financeiro não encontrado");
@@ -1125,7 +1169,8 @@ export async function registrarBaixaFinanceira(data: BaixaComChequesInput) {
       }
     }
     return { id: baixaId, estado: novoEstado, valorBaixado: ciclo.valorBaixadoFormatado };
-  });
+  };
+  return database ? registrar(database) : db.transaction(registrar);
 }
 
 export async function listBaixasFinanceiras(tituloId: number) {
@@ -1196,12 +1241,21 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
   if (!conta[0]) throw new Error("A conta financeira selecionada não está ativa");
   if (conta[0].tipo !== "banco") throw new Error("Selecione uma conta do tipo banco para importar um extrato");
   const preparo = prepararImportacaoExtrato(input.conteudo, input.formato);
-  if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
+  if (preparo.erros.length) return { importados: 0, duplicados: 0, erros: preparo.erros };
   const chaves = preparo.linhas.map((linha) => chaveMovimentoExtrato(input.contaFinanceiraId, linha.chaveBase));
-  const existentes = chaves.length ? await db.select({ chaveUnica: movimentosExtratoBancario.chaveUnica }).from(movimentosExtratoBancario).where(inArray(movimentosExtratoBancario.chaveUnica, chaves)) : [];
-  if (existentes.length) return { importados: 0, erros: [`${existentes.length} movimento(s) do arquivo já foram importados anteriormente para esta conta`] };
-  const datas = preparo.linhas.map((linha) => dataExtrato(linha.dataMovimento));
-  await db.transaction(async (tx) => {
+  const resultado = await db.transaction(async (tx) => {
+    const contaBloqueada = (await tx.select({ id: contasFinanceiras.id }).from(contasFinanceiras)
+      .where(and(eq(contasFinanceiras.id, input.contaFinanceiraId), eq(contasFinanceiras.empresaId, empresaId), eq(contasFinanceiras.ativa, true)))
+      .for("update").limit(1))[0];
+    if (!contaBloqueada) throw new Error("A conta financeira selecionada não está ativa");
+    const existentes = chaves.length
+      ? await tx.select({ chaveUnica: movimentosExtratoBancario.chaveUnica }).from(movimentosExtratoBancario)
+        .where(and(eq(movimentosExtratoBancario.empresaId, empresaId), inArray(movimentosExtratoBancario.chaveUnica, chaves)))
+      : [];
+    const chavesExistentes = new Set(existentes.map((item) => item.chaveUnica));
+    const linhasNovas = preparo.linhas.filter((linha) => !chavesExistentes.has(chaveMovimentoExtrato(input.contaFinanceiraId, linha.chaveBase)));
+    if (!linhasNovas.length) return { importados: 0, duplicados: preparo.linhas.length, erros: [] as string[] };
+    const datas = linhasNovas.map((linha) => dataExtrato(linha.dataMovimento));
     const criado = await tx.insert(extratosBancarios).values({
       empresaId,
       contaFinanceiraId: input.contaFinanceiraId,
@@ -1209,11 +1263,13 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
       formato: input.formato,
       periodoInicial: new Date(Math.min(...datas.map((data) => data.getTime()))),
       periodoFinal: new Date(Math.max(...datas.map((data) => data.getTime()))),
-      totalLinhas: preparo.linhas.length,
+      saldoFinalBanco: preparo.saldoFinalBanco,
+      dataSaldoFinalBanco: preparo.dataSaldoFinalBanco ? dataExtrato(preparo.dataSaldoFinalBanco) : null,
+      totalLinhas: linhasNovas.length,
       criadoPor: userId,
     });
     const extratoId = getInsertedId(criado as MysqlInsertResult);
-    await tx.insert(movimentosExtratoBancario).values(preparo.linhas.map((linha) => ({
+    await tx.insert(movimentosExtratoBancario).values(linhasNovas.map((linha) => ({
       empresaId,
       extratoId,
       contaFinanceiraId: input.contaFinanceiraId,
@@ -1222,11 +1278,24 @@ export async function importarExtratoBancario(input: { contaFinanceiraId: number
       tipo: linha.tipo,
       valor: linha.valor,
       identificadorExterno: linha.identificadorExterno,
+      memoOriginal: linha.memoOriginal,
+      numeroDocumento: linha.numeroDocumento,
+      saldoAposMovimento: linha.saldoAposMovimento,
       chaveUnica: chaveMovimentoExtrato(input.contaFinanceiraId, linha.chaveBase),
       estado: "pendente" as const,
     })));
+    const movimentosCriados = await tx.select({ id: movimentosExtratoBancario.id }).from(movimentosExtratoBancario)
+      .where(and(eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.extratoId, extratoId)));
+    await tx.insert(auditoriasConciliacaoBancaria).values(movimentosCriados.map((movimento) => ({
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      acao: "importado" as const,
+      detalhes: `Importado do arquivo ${input.nomeArquivo.slice(0, 300)}`,
+      usuarioId: userId,
+    })));
+    return { importados: linhasNovas.length, duplicados: preparo.linhas.length - linhasNovas.length, erros: [] as string[] };
   });
-  return { importados: preparo.linhas.length, erros: [] as string[] };
+  return resultado;
 }
 
 export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: number; estado?: "pendente" | "conciliado" | "ignorado" | "divergente" } | undefined) {
@@ -1247,8 +1316,12 @@ export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: num
     tipo: movimentosExtratoBancario.tipo,
     valor: movimentosExtratoBancario.valor,
     identificadorExterno: movimentosExtratoBancario.identificadorExterno,
+    memoOriginal: movimentosExtratoBancario.memoOriginal,
+    numeroDocumento: movimentosExtratoBancario.numeroDocumento,
+    saldoAposMovimento: movimentosExtratoBancario.saldoAposMovimento,
     estado: movimentosExtratoBancario.estado,
     baixaFinanceiraId: movimentosExtratoBancario.baixaFinanceiraId,
+    movimentoTransferenciaFinanceiraId: movimentosExtratoBancario.movimentoTransferenciaFinanceiraId,
     conciliadoEm: movimentosExtratoBancario.conciliadoEm,
     observacoes: movimentosExtratoBancario.observacoes,
     baixaValor: baixasFinanceiras.valor,
@@ -1276,9 +1349,27 @@ export async function listConciliacaoBancaria(filtros: { contaFinanceiraId?: num
   }).from(baixasFinanceiras)
     .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
     .where(and(eq(baixasFinanceiras.empresaId, empresaId), inArray(baixasFinanceiras.contaFinanceiraId, contasIds), eq(baixasFinanceiras.estornada, false), eq(baixasFinanceiras.conciliada, false))) : [];
+  const transferencias = contasIds.length ? await db.select({
+    id: movimentosTransferenciasFinanceiras.id,
+    transferenciaId: movimentosTransferenciasFinanceiras.transferenciaId,
+    contaFinanceiraId: movimentosTransferenciasFinanceiras.contaFinanceiraId,
+    tipo: movimentosTransferenciasFinanceiras.tipo,
+    valor: movimentosTransferenciasFinanceiras.valor,
+    dataMovimento: transferenciasFinanceiras.dataTransferencia,
+    descricao: transferenciasFinanceiras.descricao,
+  }).from(movimentosTransferenciasFinanceiras)
+    .innerJoin(transferenciasFinanceiras, eq(movimentosTransferenciasFinanceiras.transferenciaId, transferenciasFinanceiras.id))
+    .where(and(
+      eq(movimentosTransferenciasFinanceiras.empresaId, empresaId),
+      inArray(movimentosTransferenciasFinanceiras.contaFinanceiraId, contasIds),
+      eq(transferenciasFinanceiras.estado, "efetivada"),
+    )) : [];
   return movimentos.map((movimento) => ({
     ...movimento,
     sugestoes: movimento.estado === "pendente" ? sugerirConciliacoes(movimento, baixas.filter((baixa) => baixa.contaFinanceiraId === movimento.contaFinanceiraId)) : [],
+    sugestoesTransferencia: movimento.estado === "pendente"
+      ? sugerirTransferenciasInternas(movimento, transferencias.map((transferencia) => ({ ...transferencia, descricao: transferencia.descricao ?? "Transferência interna" })))
+      : [],
   }));
 }
 
@@ -1286,31 +1377,145 @@ export async function confirmarConciliacaoBancaria(input: { movimentoId: number;
   const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
-  if (!movimento[0]) throw new Error("Movimento bancário não encontrado");
-  if (movimento[0].estado === "conciliado") throw new Error("Este movimento já foi conciliado");
-  const baixa = await db.select({ id: baixasFinanceiras.id, contaFinanceiraId: baixasFinanceiras.contaFinanceiraId, valor: baixasFinanceiras.valor, estornada: baixasFinanceiras.estornada, conciliada: baixasFinanceiras.conciliada, tipoTitulo: titulosFinanceiros.tipo }).from(baixasFinanceiras).innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id)).where(and(eq(baixasFinanceiras.id, input.baixaFinanceiraId), eq(baixasFinanceiras.empresaId, empresaId), eq(titulosFinanceiros.empresaId, empresaId))).limit(1);
-  if (!baixa[0] || baixa[0].estornada) throw new Error("A baixa selecionada não está disponível para conciliação");
-  if (baixa[0].conciliada) throw new Error("A baixa selecionada já foi conciliada em outro movimento");
-  if (baixa[0].contaFinanceiraId !== movimento[0].contaFinanceiraId) throw new Error("O movimento e a baixa devem pertencer à mesma conta financeira");
-  if ((movimento[0].tipo === "entrada" ? "receber" : "pagar") !== baixa[0].tipoTitulo) throw new Error("O tipo do movimento não corresponde ao tipo da baixa");
-  if (Math.abs(decimalParaNumero(movimento[0].valor) - decimalParaNumero(baixa[0].valor)) > 0.01) throw new Error("O valor do movimento é diferente do valor da baixa");
   await db.transaction(async (tx) => {
-    await tx.update(baixasFinanceiras).set({ conciliada: true, conciliadaEm: new Date() }).where(and(eq(baixasFinanceiras.id, baixa[0].id), eq(baixasFinanceiras.empresaId, empresaId)));
-    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId: baixa[0].id, conciliadoEm: new Date(), conciliadoPor: userId, observacoes: null }).where(and(eq(movimentosExtratoBancario.id, movimento[0].id), eq(movimentosExtratoBancario.empresaId, empresaId)));
+    const movimento = (await tx.select().from(movimentosExtratoBancario)
+      .where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).for("update").limit(1))[0];
+    if (!movimento) throw new Error("Movimento bancário não encontrado");
+    if (movimento.estado !== "pendente") throw new Error("Apenas movimentos pendentes podem ser conciliados");
+    const baixa = (await tx.select({
+      id: baixasFinanceiras.id,
+      contaFinanceiraId: baixasFinanceiras.contaFinanceiraId,
+      valor: baixasFinanceiras.valor,
+      estornada: baixasFinanceiras.estornada,
+      conciliada: baixasFinanceiras.conciliada,
+      tipoTitulo: titulosFinanceiros.tipo,
+    }).from(baixasFinanceiras)
+      .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
+      .where(and(eq(baixasFinanceiras.id, input.baixaFinanceiraId), eq(baixasFinanceiras.empresaId, empresaId), eq(titulosFinanceiros.empresaId, empresaId)))
+      .for("update").limit(1))[0];
+    if (!baixa || baixa.estornada) throw new Error("A baixa selecionada não está disponível para conciliação");
+    if (baixa.conciliada) throw new Error("A baixa selecionada já foi conciliada em outro movimento");
+    if (baixa.contaFinanceiraId !== movimento.contaFinanceiraId) throw new Error("O movimento e a baixa devem pertencer à mesma conta financeira");
+    if ((movimento.tipo === "entrada" ? "receber" : "pagar") !== baixa.tipoTitulo) throw new Error("O tipo do movimento não corresponde ao tipo da baixa");
+    if (Math.abs(decimalParaNumero(movimento.valor) - decimalParaNumero(baixa.valor)) > 0.01) throw new Error("O valor do movimento é diferente do valor da baixa");
+    const agora = new Date();
+    const vinculoId = await criarOuReativarVinculoConciliacao(tx, {
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      baixaFinanceiraId: baixa.id,
+      tipo: "baixa_existente",
+      valorVinculado: baixa.valor,
+      criadoPor: userId,
+    });
+    await tx.update(baixasFinanceiras).set({ conciliada: true, conciliadaEm: agora }).where(and(eq(baixasFinanceiras.id, baixa.id), eq(baixasFinanceiras.empresaId, empresaId), eq(baixasFinanceiras.conciliada, false)));
+    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId: baixa.id, conciliadoEm: agora, conciliadoPor: userId, observacoes: null }).where(and(eq(movimentosExtratoBancario.id, movimento.id), eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.estado, "pendente")));
+    await tx.insert(auditoriasConciliacaoBancaria).values({
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      vinculoConciliacaoId: vinculoId,
+      acao: "conciliado_baixa",
+      detalhes: `Baixa financeira #${baixa.id} conciliada por correspondência de conta, tipo e valor`,
+      usuarioId: userId,
+    });
   });
   return { success: true };
 }
 
-export async function desfazerConciliacaoBancaria(movimentoId: number) {
+export async function confirmarConciliacaoTransferenciaBancaria(input: { movimentoId: number; movimentoTransferenciaFinanceiraId: number }, userId: number) {
   const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
-  if (!movimento[0] || movimento[0].estado !== "conciliado" || !movimento[0].baixaFinanceiraId) throw new Error("Este movimento não possui uma conciliação para desfazer");
   await db.transaction(async (tx) => {
-    await tx.update(baixasFinanceiras).set({ conciliada: false, conciliadaEm: null }).where(and(eq(baixasFinanceiras.id, movimento[0].baixaFinanceiraId!), eq(baixasFinanceiras.empresaId, empresaId)));
-    await tx.update(movimentosExtratoBancario).set({ estado: "pendente", baixaFinanceiraId: null, conciliadoEm: null, conciliadoPor: null }).where(and(eq(movimentosExtratoBancario.id, movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId)));
+    const movimento = (await tx.select().from(movimentosExtratoBancario)
+      .where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).for("update").limit(1))[0];
+    if (!movimento) throw new Error("Movimento bancário não encontrado");
+    if (movimento.estado !== "pendente") throw new Error("Apenas movimentos pendentes podem ser conciliados");
+    const transferencia = (await tx.select({
+      id: movimentosTransferenciasFinanceiras.id,
+      transferenciaId: movimentosTransferenciasFinanceiras.transferenciaId,
+      contaFinanceiraId: movimentosTransferenciasFinanceiras.contaFinanceiraId,
+      tipo: movimentosTransferenciasFinanceiras.tipo,
+      valor: movimentosTransferenciasFinanceiras.valor,
+      estado: transferenciasFinanceiras.estado,
+    }).from(movimentosTransferenciasFinanceiras)
+      .innerJoin(transferenciasFinanceiras, eq(movimentosTransferenciasFinanceiras.transferenciaId, transferenciasFinanceiras.id))
+      .where(and(
+        eq(movimentosTransferenciasFinanceiras.id, input.movimentoTransferenciaFinanceiraId),
+        eq(movimentosTransferenciasFinanceiras.empresaId, empresaId),
+        eq(transferenciasFinanceiras.empresaId, empresaId),
+      )).for("update").limit(1))[0];
+    if (!transferencia || transferencia.estado !== "efetivada") throw new Error("A transferência selecionada não está disponível para conciliação");
+    if (transferencia.contaFinanceiraId !== movimento.contaFinanceiraId) throw new Error("O movimento e a transferência devem pertencer à mesma conta financeira");
+    if (transferencia.tipo !== movimento.tipo) throw new Error("O sentido da transferência não corresponde ao movimento bancário");
+    if (Math.abs(decimalParaNumero(transferencia.valor) - decimalParaNumero(movimento.valor)) > 0.01) throw new Error("O valor do movimento é diferente do valor da transferência");
+    const existente = (await tx.select({ id: vinculosConciliacaoBancaria.id }).from(vinculosConciliacaoBancaria)
+      .where(and(eq(vinculosConciliacaoBancaria.empresaId, empresaId), eq(vinculosConciliacaoBancaria.movimentoTransferenciaFinanceiraId, transferencia.id), sql`${vinculosConciliacaoBancaria.desfeitoEm} IS NULL`)).limit(1))[0];
+    if (existente) throw new Error("Este lado da transferência já está conciliado em outro movimento bancário");
+    const agora = new Date();
+    const vinculoId = await criarOuReativarVinculoConciliacao(tx, {
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      movimentoTransferenciaFinanceiraId: transferencia.id,
+      tipo: "transferencia",
+      valorVinculado: transferencia.valor,
+      criadoPor: userId,
+    });
+    await tx.update(movimentosExtratoBancario).set({
+      estado: "conciliado",
+      movimentoTransferenciaFinanceiraId: transferencia.id,
+      conciliadoEm: agora,
+      conciliadoPor: userId,
+      observacoes: null,
+    }).where(and(eq(movimentosExtratoBancario.id, movimento.id), eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.estado, "pendente")));
+    await tx.insert(auditoriasConciliacaoBancaria).values({
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      vinculoConciliacaoId: vinculoId,
+      acao: "conciliado_transferencia",
+      detalhes: `Transferência interna #${transferencia.transferenciaId} conciliada sem título, baixa, receita ou despesa`,
+      usuarioId: userId,
+    });
+  });
+  return { success: true };
+}
+
+export async function desfazerConciliacaoBancaria(movimentoId: number, userId: number, motivo = "Desfeito pelo usuário") {
+  const empresaId = (await getEmpresaUnica()).id;
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  await db.transaction(async (tx) => {
+    const movimento = (await tx.select().from(movimentosExtratoBancario)
+      .where(and(eq(movimentosExtratoBancario.id, movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).for("update").limit(1))[0];
+    if (!movimento || movimento.estado !== "conciliado") throw new Error("Este movimento não possui uma conciliação para desfazer");
+    const vinculo = (await tx.select().from(vinculosConciliacaoBancaria)
+      .where(and(eq(vinculosConciliacaoBancaria.empresaId, empresaId), eq(vinculosConciliacaoBancaria.movimentoExtratoBancarioId, movimento.id), sql`${vinculosConciliacaoBancaria.desfeitoEm} IS NULL`))
+      .for("update").limit(1))[0];
+    if (!vinculo) throw new Error("O vínculo de auditoria da conciliação não foi encontrado");
+    const agora = new Date();
+    if (vinculo.baixaFinanceiraId) {
+      await tx.update(baixasFinanceiras).set({ conciliada: false, conciliadaEm: null })
+        .where(and(eq(baixasFinanceiras.id, vinculo.baixaFinanceiraId), eq(baixasFinanceiras.empresaId, empresaId)));
+    }
+    await tx.update(movimentosExtratoBancario).set({
+      estado: "pendente",
+      baixaFinanceiraId: null,
+      movimentoTransferenciaFinanceiraId: null,
+      conciliadoEm: null,
+      conciliadoPor: null,
+    }).where(and(eq(movimentosExtratoBancario.id, movimento.id), eq(movimentosExtratoBancario.empresaId, empresaId)));
+    await tx.update(vinculosConciliacaoBancaria).set({ desfeitoEm: agora, desfeitoPor: userId, motivoDesfeito: motivo.trim() || "Desfeito pelo usuário" })
+      .where(and(eq(vinculosConciliacaoBancaria.id, vinculo.id), eq(vinculosConciliacaoBancaria.empresaId, empresaId)));
+    if (vinculo.tipo === "baixa_gerada" && vinculo.baixaFinanceiraId) {
+      await estornarBaixaFinanceira(vinculo.baixaFinanceiraId, userId, "Conciliação bancária desfeita", { database: tx, agora });
+    }
+    await tx.insert(auditoriasConciliacaoBancaria).values({
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      vinculoConciliacaoId: vinculo.id,
+      acao: "desfeito",
+      detalhes: motivo.trim() || "Conciliação desfeita pelo usuário",
+      usuarioId: userId,
+    });
   });
   return { success: true };
 }
@@ -1319,57 +1524,93 @@ export async function criarLancamentoDaConciliacao(input: { movimentoId: number;
   const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
-  if (!movimento[0] || movimento[0].estado !== "pendente") throw new Error("O movimento deve estar pendente para criar um lançamento");
-  const categoria = await db.select().from(categoriasFinanceiras).where(and(eq(categoriasFinanceiras.id, input.categoriaId), eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).limit(1);
-  if (!categoria[0]) throw new Error("Selecione uma categoria financeira ativa");
-  const tipo = movimento[0].tipo === "entrada" ? "receber" as const : "pagar" as const;
-  if (categoria[0].tipo !== "ambos" && categoria[0].tipo !== (tipo === "receber" ? "receita" : "despesa")) throw new Error("A categoria selecionada não corresponde ao tipo do movimento");
   await db.transaction(async (tx) => {
-    const tituloInserido = await tx.insert(titulosFinanceiros).values({
-      empresaId,
+    const movimento = (await tx.select().from(movimentosExtratoBancario)
+      .where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).for("update").limit(1))[0];
+    if (!movimento || movimento.estado !== "pendente") throw new Error("O movimento deve estar pendente para criar um lançamento");
+    const categoria = (await tx.select().from(categoriasFinanceiras)
+      .where(and(eq(categoriasFinanceiras.id, input.categoriaId), eq(categoriasFinanceiras.ativo, true), eq(categoriasFinanceiras.empresaId, empresaId))).limit(1))[0];
+    if (!categoria) throw new Error("Selecione uma categoria financeira ativa");
+    const tipo = movimento.tipo === "entrada" ? "receber" as const : "pagar" as const;
+    if (categoria.tipo !== "ambos" && categoria.tipo !== (tipo === "receber" ? "receita" : "despesa")) throw new Error("A categoria selecionada não corresponde ao tipo do movimento");
+    const titulo = await garantirTituloFinanceiroComChave({
+      database: tx,
       tipo,
       origem: "manual",
+      chaveIdempotencia: `CONCILIACAO-MOV-${empresaId}-${movimento.id}`,
       descricao: input.descricao.trim(),
-      categoriaId: input.categoriaId,
-      valorOriginal: movimento[0].valor,
-      desconto: "0",
-      juros: "0",
-      valorBaixado: movimento[0].valor,
-      dataEmissao: movimento[0].dataMovimento,
-      dataVencimento: movimento[0].dataMovimento,
-      competencia: movimento[0].dataMovimento,
-      estado: "quitado",
-      observacoes: input.observacoes ?? `Criado pela conciliação do movimento bancário #${movimento[0].id}`,
+      categoriaId: categoria.id,
+      valorOriginal: movimento.valor,
+      dataEmissao: movimento.dataMovimento,
+      dataVencimento: movimento.dataMovimento,
+      competencia: movimento.dataMovimento,
+      observacoes: input.observacoes ?? `Criado pela conciliação do movimento bancário #${movimento.id}`,
       criadoPor: userId,
     });
-    const tituloId = getInsertedId(tituloInserido as MysqlInsertResult);
-    const baixaInserida = await tx.insert(baixasFinanceiras).values({
-      empresaId,
-      tituloId,
-      contaFinanceiraId: movimento[0].contaFinanceiraId,
-      valor: movimento[0].valor,
-      dataBaixa: movimento[0].dataMovimento,
+    const baixa = await registrarBaixaFinanceira({
+      tituloId: titulo.id,
+      contaFinanceiraId: movimento.contaFinanceiraId,
+      valor: movimento.valor,
+      dataBaixa: movimento.dataMovimento,
       formaPagamento: "extrato_bancario",
-      observacoes: "Baixa criada automaticamente pela conciliação bancária",
-      conciliada: true,
-      conciliadaEm: new Date(),
+      observacoes: "Baixa criada explicitamente pela conciliação bancária",
+      origemBaixa: "conciliacao",
+      criadoPor: userId,
+    }, tx);
+    const agora = new Date();
+    const vinculoId = await criarOuReativarVinculoConciliacao(tx, {
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      baixaFinanceiraId: baixa.id,
+      tipo: "baixa_gerada",
+      valorVinculado: movimento.valor,
       criadoPor: userId,
     });
-    const baixaFinanceiraId = getInsertedId(baixaInserida as MysqlInsertResult);
-    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId, conciliadoEm: new Date(), conciliadoPor: userId, observacoes: input.observacoes ?? null }).where(and(eq(movimentosExtratoBancario.id, movimento[0].id), eq(movimentosExtratoBancario.empresaId, empresaId)));
+    await tx.update(baixasFinanceiras).set({ conciliada: true, conciliadaEm: agora })
+      .where(and(eq(baixasFinanceiras.id, baixa.id), eq(baixasFinanceiras.empresaId, empresaId)));
+    await tx.update(movimentosExtratoBancario).set({ estado: "conciliado", baixaFinanceiraId: baixa.id, conciliadoEm: agora, conciliadoPor: userId, observacoes: input.observacoes ?? null })
+      .where(and(eq(movimentosExtratoBancario.id, movimento.id), eq(movimentosExtratoBancario.empresaId, empresaId), eq(movimentosExtratoBancario.estado, "pendente")));
+    await tx.insert(auditoriasConciliacaoBancaria).values([
+      {
+        empresaId,
+        movimentoExtratoBancarioId: movimento.id,
+        vinculoConciliacaoId: vinculoId,
+        acao: "baixa_criada",
+        detalhes: `Título #${titulo.id} e baixa #${baixa.id} criados mediante ação explícita do usuário`,
+        usuarioId: userId,
+      },
+      {
+        empresaId,
+        movimentoExtratoBancarioId: movimento.id,
+        vinculoConciliacaoId: vinculoId,
+        acao: "conciliado_baixa",
+        detalhes: `Baixa #${baixa.id} conciliada com o movimento bancário`,
+        usuarioId: userId,
+      },
+    ]);
   });
   return { success: true };
 }
 
-export async function definirEstadoMovimentoBancario(input: { movimentoId: number; estado: "ignorado" | "divergente"; observacoes?: string | null }) {
+export async function definirEstadoMovimentoBancario(input: { movimentoId: number; estado: "ignorado" | "divergente"; observacoes?: string | null }, userId: number) {
   const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const movimento = await db.select().from(movimentosExtratoBancario).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).limit(1);
-  if (!movimento[0]) throw new Error("Movimento bancário não encontrado");
-  if (movimento[0].estado === "conciliado") throw new Error("Desfaça a conciliação antes de alterar o estado do movimento");
-  await db.update(movimentosExtratoBancario).set({ estado: input.estado, observacoes: input.observacoes ?? null }).where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId)));
+  await db.transaction(async (tx) => {
+    const movimento = (await tx.select().from(movimentosExtratoBancario)
+      .where(and(eq(movimentosExtratoBancario.id, input.movimentoId), eq(movimentosExtratoBancario.empresaId, empresaId))).for("update").limit(1))[0];
+    if (!movimento) throw new Error("Movimento bancário não encontrado");
+    if (movimento.estado === "conciliado") throw new Error("Desfaça a conciliação antes de alterar o estado do movimento");
+    await tx.update(movimentosExtratoBancario).set({ estado: input.estado, observacoes: input.observacoes ?? null })
+      .where(and(eq(movimentosExtratoBancario.id, movimento.id), eq(movimentosExtratoBancario.empresaId, empresaId)));
+    await tx.insert(auditoriasConciliacaoBancaria).values({
+      empresaId,
+      movimentoExtratoBancarioId: movimento.id,
+      acao: input.estado,
+      detalhes: input.observacoes ?? (input.estado === "ignorado" ? "Movimento ignorado pelo usuário" : "Movimento sinalizado como divergente"),
+      usuarioId: userId,
+    });
+  });
   return { success: true };
 }
 
