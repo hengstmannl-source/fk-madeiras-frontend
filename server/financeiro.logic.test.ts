@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calcularCicloTituloFinanceiro,
   calcularEstadoTitulo,
   calcularPrevisaoSemanal,
   calcularRelatorioFluxoCaixa,
@@ -16,6 +17,7 @@ import {
   validarEdicaoTituloFinanceiro,
   validarDevolucaoCheque,
   validarExclusaoTituloFinanceiro,
+  validarValorBaixaContraSaldo,
   validarValorDosCheques,
 } from "./financeiro.logic";
 
@@ -26,6 +28,50 @@ describe("regras financeiras", () => {
     expect(calcularEstadoTitulo({ valorOriginal: "100", valorBaixado: "30", dataVencimento: hoje, agora: hoje })).toBe("parcial");
     expect(calcularEstadoTitulo({ valorOriginal: "100", valorBaixado: "100", dataVencimento: hoje, agora: hoje })).toBe("quitado");
     expect(calcularEstadoTitulo({ valorOriginal: "100", dataVencimento: new Date(2026, 7, 10), agora: hoje })).toBe("vencido");
+  });
+
+  it("reconstrói saldo, valor baixado e estado a partir de baixas válidas", () => {
+    const base = {
+      valorOriginal: "100.00",
+      desconto: "10.00",
+      juros: "5.00",
+      dataVencimento: new Date(2026, 7, 20, 12),
+      agora: new Date(2026, 7, 11, 12),
+    };
+    expect(calcularCicloTituloFinanceiro({ ...base, baixas: [] })).toMatchObject({
+      valorDevido: 95,
+      valorBaixado: 0,
+      saldoAberto: 95,
+      estado: "aberto",
+    });
+    expect(calcularCicloTituloFinanceiro({ ...base, baixas: [{ valor: "30.00" }, { valor: "20.00" }] })).toMatchObject({
+      valorBaixado: 50,
+      saldoAberto: 45,
+      estado: "parcial",
+    });
+    expect(calcularCicloTituloFinanceiro({ ...base, baixas: [{ valor: "50.00" }, { valor: "45.00" }] })).toMatchObject({
+      valorBaixado: 95,
+      saldoAberto: 0,
+      estado: "quitado",
+    });
+  });
+
+  it("desconsidera baixas estornadas e preserva cancelado ou vencido como estados finais", () => {
+    const vencimentoPassado = new Date(2026, 7, 10, 12);
+    const agora = new Date(2026, 7, 11, 12);
+    expect(calcularCicloTituloFinanceiro({
+      valorOriginal: "100.00",
+      dataVencimento: vencimentoPassado,
+      agora,
+      baixas: [{ valor: "100.00", estornada: true }],
+    })).toMatchObject({ valorBaixado: 0, saldoAberto: 100, estado: "vencido" });
+    expect(calcularCicloTituloFinanceiro({
+      valorOriginal: "100.00",
+      dataVencimento: vencimentoPassado,
+      agora,
+      cancelado: true,
+      baixas: [],
+    })).toMatchObject({ valorBaixado: 0, saldoAberto: 100, estado: "cancelado" });
   });
 
   it("distribui o valor das parcelas sem perder centavos", () => {
@@ -40,6 +86,12 @@ describe("regras financeiras", () => {
 
   it("calcula o saldo em aberto considerando descontos e juros", () => {
     expect(saldoAbertoTitulo("100", "10", "5", "30")).toBe(65);
+  });
+
+  it("bloqueia baixa acima do saldo reconstruído e aceita o fechamento exato", () => {
+    expect(validarValorBaixaContraSaldo("65.00", 65)).toBe(65);
+    expect(() => validarValorBaixaContraSaldo("65.01", 65)).toThrow("não pode exceder o saldo em aberto");
+    expect(() => validarValorBaixaContraSaldo("0", 65)).toThrow("maior que zero");
   });
 
   it("permite cancelar somente títulos sem baixas financeiras", () => {

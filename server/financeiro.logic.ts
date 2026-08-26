@@ -83,6 +83,59 @@ export function saldoAbertoTitulo(valorOriginal: string | number, desconto: stri
   return Math.max(0, valorLiquidoTitulo(valorOriginal, desconto, juros) - decimalParaNumero(valorBaixado));
 }
 
+export function validarValorBaixaContraSaldo(valor: string | number, saldoAberto: string | number): number {
+  const valorBaixa = decimalParaNumero(valor);
+  if (valorBaixa <= 0 || valorBaixa > decimalParaNumero(saldoAberto) + 0.005) {
+    throw new Error("O valor da baixa deve ser maior que zero e não pode exceder o saldo em aberto");
+  }
+  return valorBaixa;
+}
+
+export type BaixaParaRecalculo = {
+  valor: string | number;
+  estornada?: boolean | number | null;
+};
+
+/**
+ * Reconstrói o ciclo materializado do título exclusivamente pelas baixas ainda válidas.
+ * O campo `valorBaixado` continua persistido por desempenho, mas nunca é a fonte de
+ * verdade dentro de uma operação financeira: ele é regravado com este resultado.
+ */
+export function calcularCicloTituloFinanceiro(input: {
+  valorOriginal: string | number;
+  desconto?: string | number;
+  juros?: string | number;
+  dataVencimento: Date;
+  baixas: BaixaParaRecalculo[];
+  cancelado?: boolean;
+  agora?: Date;
+}) {
+  const valorDevidoEmCentavos = Math.max(0, Math.round(
+    valorLiquidoTitulo(input.valorOriginal, input.desconto, input.juros) * 100,
+  ));
+  const valorBaixadoEmCentavos = input.baixas
+    .filter((baixa) => !Boolean(baixa.estornada))
+    .reduce((total, baixa) => total + Math.round(decimalParaNumero(baixa.valor) * 100), 0);
+  const valorBaixado = valorBaixadoEmCentavos / 100;
+  const saldoAberto = Math.max(0, (valorDevidoEmCentavos - valorBaixadoEmCentavos) / 100);
+  const estado = calcularEstadoTitulo({
+    valorOriginal: input.valorOriginal,
+    desconto: input.desconto,
+    juros: input.juros,
+    valorBaixado,
+    dataVencimento: input.dataVencimento,
+    cancelado: input.cancelado,
+    agora: input.agora,
+  });
+
+  return {
+    valorDevido: valorDevidoEmCentavos / 100,
+    valorBaixado,
+    saldoAberto,
+    estado,
+  };
+}
+
 export function podeCancelarTituloFinanceiro(valorBaixado: string | number | null | undefined): boolean {
   return decimalParaNumero(valorBaixado) <= CENTAVOS_EPSILON;
 }

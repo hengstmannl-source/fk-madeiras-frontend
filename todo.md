@@ -723,3 +723,10 @@
 - [x] Criar a visão de fechamento e a ação explícita de envio de saldos ao Financeiro pelo motor central, sem duplicar baixas ou conciliação
 - [x] Cobrir os fluxos simplificados de funcionário, adiantamento, competência, excesso, cancelamento e fechamento com regressões
 - [x] Validar TypeScript, suíte, build e experiência de RH simplificada antes da publicação
+- [x] Auditar todas as leituras e gravações de baixas, valorBaixado, saldo, juros, desconto e estado de títulos financeiros
+- [x] Definir uma única regra central para recalcular valor devido, baixas válidas, saldo e estado sem remover valorBaixado materializado
+- [x] Migrar criação de baixa, baixa parcial, estorno e cancelamento ao ciclo central sem alterar conciliação, transferências ou fluxo de caixa
+- [x] Proteger novas baixas contra valor superior ao saldo disponível, preservando a política de juros e descontos existente
+- [x] Assegurar que estorno apenas reverta baixas válidas e recalcule título, saldo e estado de forma idempotente
+- [x] Criar regressões para baixa total, parcial, múltiplas baixas, estorno, juros, descontos, cancelado, vencido e excesso de saldo
+- [x] Auditar dados e validações concorrentes antes de qualquer nova constraint e validar TypeScript, suíte e build antes de publicar

@@ -5,7 +5,13 @@ describe("estorno de baixas financeiras", () => {
   it("preserva a baixa, registra a auditoria e reabre parcialmente o título", async () => {
     const where = vi.fn().mockResolvedValue(undefined);
     const set = vi.fn(() => ({ where }));
-    const database = { update: vi.fn(() => ({ set })) };
+    const database = {
+      select: vi.fn(() => ({ from: () => ({ where: vi.fn().mockResolvedValue([
+        { valor: "60.00", estornada: false },
+        { valor: "40.00", estornada: true },
+      ]) }) })),
+      update: vi.fn(() => ({ set })),
+    };
     const agora = new Date(2026, 7, 11, 12);
 
     const resultado = await estornarBaixaFinanceira(8, 4, "Recebimento duplicado", {
@@ -32,4 +38,3 @@ describe("estorno de baixas financeiras", () => {
     })).rejects.toThrow("já foi estornada");
   });
 });
-
