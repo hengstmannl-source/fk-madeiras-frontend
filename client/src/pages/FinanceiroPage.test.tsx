@@ -29,6 +29,22 @@ const state = vi.hoisted(() => ({
     movimentos: [{ id: 1, tipo: "receber", origem: "manual", descricao: "Recebimento demonstrativo", valor: "50.00", dataBaixa: "2026-08-11T12:00:00.000Z", formaPagamento: "pix", contaNome: "Caixa geral" }],
   },
   previsao: [{ inicioSemana: "2026-08-10", fimSemana: "2026-08-16", entradas: 300, saidas: 120, saldoLiquido: 180, saldoProjetado: -20, quantidadeTitulos: 2 }],
+  fluxoGerencial: {
+    saldoAtual: 130,
+    saldoInicialPeriodo: 100,
+    entradasRealizadas: 50,
+    saidasRealizadas: 20,
+    entradasPrevistas: 90,
+    saidasPrevistas: 140,
+    saldoProjetado: 80,
+    menorSaldoProjetado: 80,
+    dataMenorSaldoProjetado: "2026-08-13T12:00:00.000Z",
+    possuiAlertaSaldoNegativo: false,
+    movimentosBancariosNaoConciliados: 1,
+    dias: [{ data: "2026-08-11T12:00:00.000Z", entradasRealizadas: 50, saidasRealizadas: 20, entradasPrevistas: 90, saidasPrevistas: 140, transferenciasEntrada: 0, transferenciasSaida: 0, saldoProjetado: 80, itens: [] }],
+    itensRealizados: [], itensPrevistos: [], itensTransferencias: [],
+    porCategoria: [{ nome: "Vendas", entradas: 140, saidas: 0, saldo: 140, quantidade: 2 }],
+  },
 }));
 
 vi.mock("wouter", () => ({ useSearch: () => state.search }));
@@ -53,7 +69,7 @@ vi.mock("@/lib/trpc", () => {
           recorrencias: { list: invalidar },
           alertas: { list: invalidar },
           anexos: { list: invalidar },
-          relatorios: { fluxoCaixa: invalidar, previsaoSemanal: invalidar },
+          relatorios: { fluxoCaixa: invalidar, fluxoGerencial: invalidar, previsaoSemanal: invalidar },
           intercambios: { modeloLancamentosCsv: invalidar, exportarLancamentosCsv: invalidar },
         },
       }),
@@ -142,6 +158,7 @@ vi.mock("@/lib/trpc", () => {
         alertas: { list: queryVazia },
         relatorios: {
           fluxoCaixa: { useQuery: () => ({ data: state.fluxo, isLoading: false, isFetching: false, refetch: vi.fn() }) },
+          fluxoGerencial: { useQuery: () => ({ data: state.fluxoGerencial, isLoading: false, isFetching: false, refetch: vi.fn() }) },
           previsaoSemanal: { useQuery: () => ({ data: state.previsao, isLoading: false }) },
         },
         intercambios: {
@@ -279,6 +296,9 @@ describe("FinanceiroPage — cancelamento manual", () => {
     expect(screen.getByText("Previsão semanal de caixa")).toBeInTheDocument();
     expect(screen.getByText("Títulos projetados")).toBeInTheDocument();
     expect(screen.getByText("Previsão semanal de caixa").closest("section")).toHaveTextContent(/-R\$\s*20,00/);
+    expect(screen.getByRole("heading", { name: "Fluxo de caixa gerencial" })).toBeInTheDocument();
+    expect(screen.getByText("1 movimento(s) bancário(s) aguardam conciliação.")).toBeInTheDocument();
+    expect(screen.getByText("Vendas")).toBeInTheDocument();
   });
 
   it("distingue a compra de diesel para o tanque do custo de abastecimento", async () => {

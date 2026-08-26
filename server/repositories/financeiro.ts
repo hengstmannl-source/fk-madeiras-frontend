@@ -24,6 +24,7 @@ import { criarModeloCsvPecasProducao, criarModeloCsvTorasProducao, criarModeloCs
 import { calcularCustoAbastecimentoDiesel, calcularResumoTanqueDiesel, validarExclusaoNotaDiesel } from "../diesel.logic";
 import { criarModeloCsvExtratoBancario, prepararImportacaoExtrato } from "../conciliacao.intercambio";
 import { sugerirConciliacoes, sugerirTransferenciasInternas } from "../conciliacao.logic";
+import { montarFluxoCaixaGerencial } from "../fluxo-caixa.logic";
 import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
 
 import { getDb } from "./core";
@@ -1647,6 +1648,112 @@ export async function getRelatorioFluxoCaixa(periodo: { dataInicio: Date; dataFi
   ]);
   const saldoInicialContas = contas.reduce((total, conta) => total + decimalParaNumero(conta.saldoInicial), 0);
   return calcularRelatorioFluxoCaixa({ ...periodo, saldoInicialContas, movimentos });
+}
+
+/**
+ * Leitura gerencial derivada das fontes financeiras já existentes. Não insere nem altera
+ * títulos, baixas, transferências, extratos ou conciliações.
+ */
+export async function getFluxoCaixaGerencial(input: {
+  dataInicio: Date;
+  dataFim: Date;
+  contaFinanceiraId?: number;
+  dataReferencia?: Date;
+}) {
+  const db = await getDb();
+  if (!db) throw new Error("Database not available");
+  const empresaId = (await getEmpresaUnica()).id;
+  const dataReferencia = new Date(input.dataReferencia ?? new Date());
+  dataReferencia.setHours(23, 59, 59, 999);
+  const limiteMovimentos = input.dataFim > dataReferencia ? input.dataFim : dataReferencia;
+  const filtroContaBaixa = input.contaFinanceiraId ? eq(baixasFinanceiras.contaFinanceiraId, input.contaFinanceiraId) : undefined;
+  const filtroContaTransferencia = input.contaFinanceiraId ? eq(movimentosTransferenciasFinanceiras.contaFinanceiraId, input.contaFinanceiraId) : undefined;
+  const filtroContaExtrato = input.contaFinanceiraId ? eq(movimentosExtratoBancario.contaFinanceiraId, input.contaFinanceiraId) : undefined;
+
+  const [contas, titulos, baixas, transferencias, pendenciasExtrato] = await Promise.all([
+    db.select({ id: contasFinanceiras.id, nome: contasFinanceiras.nome, saldoInicial: contasFinanceiras.saldoInicial })
+      .from(contasFinanceiras)
+      .where(and(eq(contasFinanceiras.empresaId, empresaId), ...(input.contaFinanceiraId ? [eq(contasFinanceiras.id, input.contaFinanceiraId)] : []))),
+    db.select({
+      id: titulosFinanceiros.id,
+      tipo: titulosFinanceiros.tipo,
+      descricao: titulosFinanceiros.descricao,
+      origem: titulosFinanceiros.origem,
+      valorOriginal: titulosFinanceiros.valorOriginal,
+      desconto: titulosFinanceiros.desconto,
+      juros: titulosFinanceiros.juros,
+      dataVencimento: titulosFinanceiros.dataVencimento,
+      estado: titulosFinanceiros.estado,
+      categoria: categoriasFinanceiras.nome,
+      contraparteNome: titulosFinanceiros.contraparteNome,
+      clienteNome: clientes.nome,
+      fornecedorNome: fornecedores.nome,
+    }).from(titulosFinanceiros)
+      .leftJoin(categoriasFinanceiras, eq(titulosFinanceiros.categoriaId, categoriasFinanceiras.id))
+      .leftJoin(clientes, eq(titulosFinanceiros.clienteId, clientes.id))
+      .leftJoin(fornecedores, eq(titulosFinanceiros.fornecedorId, fornecedores.id))
+      .where(eq(titulosFinanceiros.empresaId, empresaId)),
+    db.select({
+      id: baixasFinanceiras.id,
+      tituloId: baixasFinanceiras.tituloId,
+      contaFinanceiraId: baixasFinanceiras.contaFinanceiraId,
+      tipo: titulosFinanceiros.tipo,
+      valor: baixasFinanceiras.valor,
+      dataBaixa: baixasFinanceiras.dataBaixa,
+      estornada: baixasFinanceiras.estornada,
+      descricao: titulosFinanceiros.descricao,
+      origem: titulosFinanceiros.origem,
+      categoria: categoriasFinanceiras.nome,
+      contraparteNome: titulosFinanceiros.contraparteNome,
+      clienteNome: clientes.nome,
+      fornecedorNome: fornecedores.nome,
+    }).from(baixasFinanceiras)
+      .innerJoin(titulosFinanceiros, eq(baixasFinanceiras.tituloId, titulosFinanceiros.id))
+      .leftJoin(categoriasFinanceiras, eq(titulosFinanceiros.categoriaId, categoriasFinanceiras.id))
+      .leftJoin(clientes, eq(titulosFinanceiros.clienteId, clientes.id))
+      .leftJoin(fornecedores, eq(titulosFinanceiros.fornecedorId, fornecedores.id))
+      .where(and(
+        eq(baixasFinanceiras.empresaId, empresaId),
+        eq(titulosFinanceiros.empresaId, empresaId),
+        lte(baixasFinanceiras.dataBaixa, limiteMovimentos),
+        ...(filtroContaBaixa ? [filtroContaBaixa] : []),
+      )),
+    db.select({
+      id: movimentosTransferenciasFinanceiras.id,
+      contaFinanceiraId: movimentosTransferenciasFinanceiras.contaFinanceiraId,
+      tipo: movimentosTransferenciasFinanceiras.tipo,
+      valor: movimentosTransferenciasFinanceiras.valor,
+      dataMovimento: movimentosTransferenciasFinanceiras.dataMovimento,
+      descricao: movimentosTransferenciasFinanceiras.descricao,
+    }).from(movimentosTransferenciasFinanceiras)
+      .innerJoin(transferenciasFinanceiras, eq(movimentosTransferenciasFinanceiras.transferenciaId, transferenciasFinanceiras.id))
+      .where(and(
+        eq(movimentosTransferenciasFinanceiras.empresaId, empresaId),
+        eq(transferenciasFinanceiras.empresaId, empresaId),
+        eq(transferenciasFinanceiras.estado, "efetivada"),
+        lte(movimentosTransferenciasFinanceiras.dataMovimento, limiteMovimentos),
+        ...(filtroContaTransferencia ? [filtroContaTransferencia] : []),
+      )),
+    db.select({ total: sql<number>`count(*)` }).from(movimentosExtratoBancario).where(and(
+      eq(movimentosExtratoBancario.empresaId, empresaId),
+      inArray(movimentosExtratoBancario.estado, ["pendente", "divergente"]),
+      ...(filtroContaExtrato ? [filtroContaExtrato] : []),
+    )),
+  ]);
+  const contraparte = (registro: { contraparteNome: string | null; clienteNome: string | null; fornecedorNome: string | null }) => (
+    registro.contraparteNome || registro.clienteNome || registro.fornecedorNome || null
+  );
+  return montarFluxoCaixaGerencial({
+    contas,
+    titulos: titulos.map((titulo) => ({ ...titulo, contraparte: contraparte(titulo) })),
+    baixas: baixas.map((baixa) => ({ ...baixa, contraparte: contraparte(baixa) })),
+    transferencias,
+    dataInicio: input.dataInicio,
+    dataFim: input.dataFim,
+    dataReferencia,
+    contaFinanceiraId: input.contaFinanceiraId,
+    movimentosBancariosNaoConciliados: Number(pendenciasExtrato[0]?.total ?? 0),
+  });
 }
 
 export async function getPrevisaoSemanalCaixa(semanas = 8) {

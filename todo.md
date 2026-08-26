@@ -752,3 +752,12 @@
 - [x] Criar tela de conciliação com importação OFX, filtros, sugestões, revisão e histórico por conta
 - [x] Cobrir importação duplicada, FITID, matching, baixa única, baixa parcial, transferência, reversão e concorrência com regressões
 - [x] Validar banco, TypeScript, suíte, build, auditorias e interface da Etapa 2C antes de publicar
+- [x] Consolidar integralmente o escopo da Etapa 3 e auditar fontes atuais de saldos, títulos, baixas, transferências e extratos
+- [x] Definir regras puras para separar realizado, previsto, saldo atual e saldo projetado por conta e consolidado
+- [x] Implementar movimentos gerenciais por data de impacto sem duplicar baixas, títulos, transferências ou extratos conciliados
+- [x] Respeitar saldo em aberto de títulos parciais, títulos pagos e cancelados nas projeções
+- [x] Excluir transferências do consolidado e exibir seus efeitos apenas na visão individual de cada conta
+- [x] Criar filtros de período, conta e visão consolidada, incluindo intervalos rápidos e período personalizado
+- [x] Construir visão executiva, fluxo diário acumulado e detalhamento separado entre realizado e previsto
+- [x] Cobrir saldo inicial, parcialidade, cancelamentos, transferências, conta individual, consolidado e projeções com regressões
+- [x] Validar dados, TypeScript, suíte, build, auditoria e interface da Etapa 3 antes de publicar

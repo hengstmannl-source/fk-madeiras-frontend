@@ -242,6 +242,18 @@ export const financeiroRouter = router({
     previsaoSemanal: protectedProcedure.input(z.object({
       semanas: z.number().int().min(1).max(26).default(8),
     }).default({ semanas: 8 })).query(({ input }) => db.getPrevisaoSemanalCaixa(input.semanas)),
+    fluxoGerencial: protectedProcedure.input(z.object({
+      dataInicio: DataFinanceiraSchema,
+      dataFim: DataFinanceiraSchema,
+      contaFinanceiraId: z.number().int().positive().optional(),
+    }).refine((periodo) => periodo.dataInicio <= periodo.dataFim, {
+      message: "A data inicial não pode ser posterior à data final",
+      path: ["dataFim"],
+    })).query(({ input }) => db.getFluxoCaixaGerencial({
+      dataInicio: dataLocal(input.dataInicio),
+      dataFim: fimDoDiaLocal(input.dataFim),
+      contaFinanceiraId: input.contaFinanceiraId,
+    })),
   }),
 
   intercambios: router({

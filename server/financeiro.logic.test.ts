@@ -22,6 +22,7 @@ import {
   validarValorDosCheques,
   calcularSaldoContaComTransferencias,
 } from "./financeiro.logic";
+import { montarFluxoCaixaGerencial } from "./fluxo-caixa.logic";
 
 describe("regras financeiras", () => {
   it("calcula os estados aberto, parcial, quitado e vencido", () => {
@@ -312,5 +313,93 @@ describe("regras financeiras", () => {
     expect(planejarAtualizacaoAlertas("vence_em_breve", ["vence_em_breve"])).toEqual({ criar: null, resolver: [] });
     expect(planejarAtualizacaoAlertas("vencido", ["vence_em_breve"])).toEqual({ criar: "vencido", resolver: ["vence_em_breve"] });
     expect(planejarAtualizacaoAlertas(null, ["vence_em_breve", "vencido"])).toEqual({ criar: null, resolver: ["vence_em_breve", "vencido"] });
+  });
+
+  it("compõe realizado e saldo residual de título parcial sem duplicar transferências no consolidado", () => {
+    const base = {
+      contas: [
+        { id: 1, nome: "Banco", saldoInicial: "100.00" },
+        { id: 2, nome: "Caixa", saldoInicial: "50.00" },
+      ],
+      titulos: [{
+        id: 9,
+        tipo: "pagar" as const,
+        descricao: "Fornecedor de madeira",
+        origem: "manual",
+        categoria: "Matéria-prima",
+        valorOriginal: "100.00",
+        desconto: "0.00",
+        juros: "0.00",
+        dataVencimento: new Date(2026, 7, 16, 12),
+        estado: "parcial" as const,
+      }],
+      baixas: [{
+        id: 4,
+        tituloId: 9,
+        contaFinanceiraId: 1,
+        tipo: "pagar" as const,
+        valor: "25.00",
+        dataBaixa: new Date(2026, 7, 13, 12),
+        descricao: "Fornecedor de madeira",
+        origem: "manual",
+      }],
+      transferencias: [
+        { id: 22, contaFinanceiraId: 1, tipo: "entrada" as const, valor: "30.00", dataMovimento: new Date(2026, 7, 15, 12), descricao: "Caixa para banco" },
+        { id: 23, contaFinanceiraId: 2, tipo: "saida" as const, valor: "30.00", dataMovimento: new Date(2026, 7, 15, 12), descricao: "Caixa para banco" },
+      ],
+      dataInicio: new Date(2026, 7, 14, 12),
+      dataFim: new Date(2026, 7, 17, 12),
+      dataReferencia: new Date(2026, 7, 14, 12),
+    };
+
+    const consolidado = montarFluxoCaixaGerencial(base);
+    expect(consolidado.saldoAtual).toBe(125);
+    expect(consolidado.saidasPrevistas).toBe(75);
+    expect(consolidado.saldoProjetado).toBe(50);
+    expect(consolidado.itensTransferencias).toEqual([]);
+    expect(consolidado.porCategoria).toEqual([expect.objectContaining({ nome: "Matéria-prima", saidas: 75, saldo: -75 })]);
+
+    const banco = montarFluxoCaixaGerencial({ ...base, contaFinanceiraId: 1 });
+    expect(banco.saldoAtual).toBe(75);
+    expect(banco.saldoProjetado).toBe(105);
+    expect(banco.itensPrevistos).toEqual([]);
+    expect(banco.itensTransferencias).toEqual([expect.objectContaining({ natureza: "entrada", valor: 30 })]);
+  });
+
+  it("desconsidera títulos cancelados, baixas estornadas e sinaliza pendências de extrato", () => {
+    const fluxo = montarFluxoCaixaGerencial({
+      contas: [{ id: 1, nome: "Banco", saldoInicial: "10.00" }],
+      titulos: [{
+        id: 2,
+        tipo: "receber",
+        descricao: "Venda cancelada",
+        origem: "orcamento",
+        valorOriginal: "500.00",
+        desconto: "0.00",
+        juros: "0.00",
+        dataVencimento: new Date(2026, 7, 16, 12),
+        estado: "cancelado",
+      }],
+      baixas: [{
+        id: 3,
+        tituloId: 2,
+        contaFinanceiraId: 1,
+        tipo: "receber",
+        valor: "500.00",
+        dataBaixa: new Date(2026, 7, 14, 12),
+        descricao: "Venda cancelada",
+        origem: "orcamento",
+        estornada: true,
+      }],
+      transferencias: [],
+      dataInicio: new Date(2026, 7, 14, 12),
+      dataFim: new Date(2026, 7, 17, 12),
+      dataReferencia: new Date(2026, 7, 14, 12),
+      movimentosBancariosNaoConciliados: 2,
+    });
+    expect(fluxo.saldoAtual).toBe(10);
+    expect(fluxo.entradasRealizadas).toBe(0);
+    expect(fluxo.entradasPrevistas).toBe(0);
+    expect(fluxo.movimentosBancariosNaoConciliados).toBe(2);
   });
 });

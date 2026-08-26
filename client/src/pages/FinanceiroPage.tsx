@@ -97,6 +97,7 @@ type TituloFinanceiro = RouterOutputs["financeiro"]["titulos"]["list"][number];
 type FornecedorFinanceiro = RouterOutputs["financeiro"]["fornecedores"]["list"][number];
 type ContaFinanceira = RouterOutputs["financeiro"]["contas"]["list"][number];
 type ChequeDisponivel = RouterOutputs["financeiro"]["cheques"]["list"][number];
+type FluxoGerencial = RouterOutputs["financeiro"]["relatorios"]["fluxoGerencial"];
 
 const opcoesVisaoFinanceira: Array<{ id: VisaoFinanceira; label: string; descricao: string }> = [
   { id: "pagar", label: "Contas a pagar", descricao: "Compromissos em aberto e em atraso" },
@@ -149,6 +150,68 @@ function StatusBadge({ estado }: { estado: string }) {
   return <Badge variant="outline" className={styles[estado] ?? ""}>{estadoLabels[estado] ?? estado}</Badge>;
 }
 
+function FluxoGerencialPainel({
+  fluxo,
+  carregando,
+  atualizando,
+  periodo,
+  contaSelecionada,
+  contas,
+  onPeriodo,
+  onConta,
+  onAtualizar,
+}: {
+  fluxo?: FluxoGerencial;
+  carregando: boolean;
+  atualizando: boolean;
+  periodo: { dataInicio: string; dataFim: string };
+  contaSelecionada: string;
+  contas: ContaFinanceira[];
+  onPeriodo: (periodo: { dataInicio: string; dataFim: string }) => void;
+  onConta: (contaId: string) => void;
+  onAtualizar: () => void;
+}) {
+  const aplicarPeriodo = (dias: number | "mes" | "hoje") => {
+    const agora = new Date();
+    const fim = agora.toISOString().slice(0, 10);
+    if (dias === "hoje") return onPeriodo({ dataInicio: fim, dataFim: fim });
+    if (dias === "mes") {
+      const inicio = new Date(agora.getFullYear(), agora.getMonth(), 1).toISOString().slice(0, 10);
+      return onPeriodo({ dataInicio: inicio, dataFim: fim });
+    }
+    const inicio = new Date(agora);
+    inicio.setDate(agora.getDate() - dias + 1);
+    onPeriodo({ dataInicio: inicio.toISOString().slice(0, 10), dataFim: fim });
+  };
+  const cartoes = fluxo ? [
+    { titulo: "Saldo atual", valor: fluxo.saldoAtual, texto: "Posição patrimonial até hoje", classe: "text-slate-700 bg-slate-100", icone: <Landmark className="h-4 w-4" /> },
+    { titulo: "Entradas realizadas", valor: fluxo.entradasRealizadas, texto: "Baixas efetivadas no período", classe: "text-emerald-700 bg-emerald-50", icone: <ArrowDownToLine className="h-4 w-4" /> },
+    { titulo: "Saídas realizadas", valor: fluxo.saidasRealizadas, texto: "Pagamentos efetivados no período", classe: "text-rose-700 bg-rose-50", icone: <ArrowUpFromLine className="h-4 w-4" /> },
+    { titulo: "Previsto líquido", valor: fluxo.entradasPrevistas - fluxo.saidasPrevistas, texto: "Saldos em aberto e baixas agendadas", classe: "text-amber-700 bg-amber-50", icone: <CalendarClock className="h-4 w-4" /> },
+    { titulo: "Saldo projetado", valor: fluxo.saldoProjetado, texto: "Ao final do período selecionado", classe: fluxo.saldoProjetado < 0 ? "text-rose-700 bg-rose-50" : "text-primary bg-primary/10", icone: <WalletCards className="h-4 w-4" /> },
+  ] : [];
+  return (
+    <section className="mx-5 mt-5 overflow-hidden rounded-xl border border-primary/20 bg-primary/[0.025]">
+      <div className="flex flex-col gap-4 border-b border-primary/15 px-5 py-4 xl:flex-row xl:items-end xl:justify-between">
+        <div><div className="flex items-center gap-2"><h2 className="font-semibold">Fluxo de caixa gerencial</h2><Badge variant="outline" className="border-primary/30 text-primary">Realizado + previsto</Badge></div><p className="mt-1 max-w-2xl text-xs text-muted-foreground">As baixas formam o realizado; apenas o saldo residual de títulos em aberto entra na previsão. Transferências aparecem somente na visão de cada conta.</p></div>
+          <div className="grid gap-2 sm:grid-cols-2 xl:flex xl:items-end">
+            <div className="space-y-1"><Label className="text-xs">Conta</Label><Select value={contaSelecionada} onValueChange={onConta}><SelectTrigger className="h-9 w-full min-w-48 bg-white"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="todas">Consolidado — todas as contas</SelectItem>{contas.map((conta) => <SelectItem key={conta.id} value={String(conta.id)}>{conta.nome}</SelectItem>)}</SelectContent></Select></div>
+          <div className="grid shrink-0 grid-cols-2 gap-2"><div className="space-y-1"><Label className="text-xs">Início</Label><Input className="h-9 min-w-[132px] bg-white" type="date" value={periodo.dataInicio} onChange={(event) => onPeriodo({ ...periodo, dataInicio: event.target.value })} /></div><div className="space-y-1"><Label className="text-xs">Fim</Label><Input className="h-9 min-w-[132px] bg-white" type="date" value={periodo.dataFim} onChange={(event) => onPeriodo({ ...periodo, dataFim: event.target.value })} /></div></div>
+          <div className="flex flex-wrap gap-1.5"><Button size="sm" variant="outline" onClick={() => aplicarPeriodo("hoje")}>Hoje</Button><Button size="sm" variant="outline" onClick={() => aplicarPeriodo(7)}>7 dias</Button><Button size="sm" variant="outline" onClick={() => aplicarPeriodo("mes")}>Este mês</Button><Button size="sm" onClick={onAtualizar} disabled={atualizando}>{atualizando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}</Button></div>
+        </div>
+      </div>
+      {carregando ? <div className="p-10 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Compondo visão gerencial...</div> : fluxo ? <div className="space-y-5 p-5">
+        {(fluxo.possuiAlertaSaldoNegativo || fluxo.movimentosBancariosNaoConciliados > 0) && <div className="grid gap-2 md:grid-cols-2">{fluxo.possuiAlertaSaldoNegativo && <div className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800"><CircleAlert className="mr-1 inline h-4 w-4" />Projeção negativa: {formatCurrency(fluxo.menorSaldoProjetado)}{fluxo.dataMenorSaldoProjetado ? ` em ${formatarDataFinanceira(fluxo.dataMenorSaldoProjetado)}` : ""}.</div>}{fluxo.movimentosBancariosNaoConciliados > 0 && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"><CircleAlert className="mr-1 inline h-4 w-4" />{fluxo.movimentosBancariosNaoConciliados} movimento(s) bancário(s) aguardam conciliação.</div>}</div>}
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">{cartoes.map((cartao) => <div key={cartao.titulo} className="rounded-lg border bg-white p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs text-muted-foreground">{cartao.titulo}</p><p className={`mt-1 text-xl font-bold ${cartao.valor < 0 ? "text-rose-700" : ""}`}>{formatCurrency(cartao.valor)}</p><p className="mt-1 text-[11px] text-muted-foreground">{cartao.texto}</p></div><span className={`rounded-md p-2 ${cartao.classe}`}>{cartao.icone}</span></div></div>)}</div>
+        <div className="grid gap-4 xl:grid-cols-[1.35fr_0.65fr]">
+          <div className="overflow-hidden rounded-lg border bg-white"><div className="border-b bg-muted/20 px-4 py-3"><h3 className="text-sm font-semibold">Fluxo diário e saldo acumulado</h3><p className="text-xs text-muted-foreground">Realizado e previsto ficam separados; transferências não alteram o consolidado.</p></div><div className="max-h-[360px] overflow-auto"><Table><TableHeader className="sticky top-0 bg-white"><TableRow><TableHead>Data</TableHead><TableHead className="text-right">Realizado</TableHead><TableHead className="text-right">Previsto</TableHead>{contaSelecionada !== "todas" && <TableHead className="text-right">Transferências</TableHead>}<TableHead className="text-right">Saldo</TableHead></TableRow></TableHeader><TableBody>{fluxo.dias.map((dia) => { const realizado = dia.entradasRealizadas - dia.saidasRealizadas; const previsto = dia.entradasPrevistas - dia.saidasPrevistas; const transferencia = dia.transferenciasEntrada - dia.transferenciasSaida; return <TableRow key={String(dia.data)} className={dia.saldoProjetado < 0 ? "bg-rose-50/50" : ""}><TableCell className="whitespace-nowrap text-xs">{formatarDataFinanceira(dia.data)}</TableCell><TableCell className={`text-right text-sm ${realizado < 0 ? "text-rose-700" : "text-emerald-700"}`}>{realizado === 0 ? "—" : `${realizado > 0 ? "+" : ""}${formatCurrency(realizado)}`}</TableCell><TableCell className={`text-right text-sm ${previsto < 0 ? "text-rose-700" : "text-amber-700"}`}>{previsto === 0 ? "—" : `${previsto > 0 ? "+" : ""}${formatCurrency(previsto)}`}</TableCell>{contaSelecionada !== "todas" && <TableCell className="text-right text-sm text-muted-foreground">{transferencia === 0 ? "—" : `${transferencia > 0 ? "+" : ""}${formatCurrency(transferencia)}`}</TableCell>}<TableCell className={`text-right font-semibold ${dia.saldoProjetado < 0 ? "text-rose-700" : "text-primary"}`}>{formatCurrency(dia.saldoProjetado)}</TableCell></TableRow>; })}</TableBody></Table></div></div>
+          <div className="overflow-hidden rounded-lg border bg-white"><div className="border-b bg-muted/20 px-4 py-3"><h3 className="text-sm font-semibold">Por categoria e origem</h3><p className="text-xs text-muted-foreground">Transferências são excluídas deste resumo.</p></div>{fluxo.porCategoria.length ? <Table><TableHeader><TableRow><TableHead>Categoria</TableHead><TableHead className="text-right">Entradas</TableHead><TableHead className="text-right">Saídas</TableHead></TableRow></TableHeader><TableBody>{fluxo.porCategoria.slice(0, 8).map((categoria) => <TableRow key={categoria.nome}><TableCell><p className="text-sm font-medium">{categoria.nome}</p><p className="text-xs text-muted-foreground">{categoria.quantidade} item(ns)</p></TableCell><TableCell className="text-right text-sm text-emerald-700">{formatCurrency(categoria.entradas)}</TableCell><TableCell className="text-right text-sm text-rose-700">{formatCurrency(categoria.saidas)}</TableCell></TableRow>)}</TableBody></Table> : <p className="px-4 py-10 text-center text-sm text-muted-foreground">Sem movimentos para classificar neste período.</p>}</div>
+        </div>
+      </div> : null}
+    </section>
+  );
+}
+
 export default function FinanceiroPage() {
   const utils = trpc.useUtils();
   const search = useSearch();
@@ -182,6 +245,7 @@ export default function FinanceiroPage() {
   const [contaParaExcluir, setContaParaExcluir] = useState<ContaFinanceira | null>(null);
   const [motivoEstorno, setMotivoEstorno] = useState("");
   const [periodoFluxo, setPeriodoFluxo] = useState({ dataInicio: primeiroDiaDoMes(), dataFim: hoje() });
+  const [contaFluxoGerencial, setContaFluxoGerencial] = useState("todas");
   const [importacaoAberta, setImportacaoAberta] = useState(false);
   const [arquivoImportacao, setArquivoImportacao] = useState<File | null>(null);
   const [errosImportacao, setErrosImportacao] = useState<string[]>([]);
@@ -248,6 +312,10 @@ export default function FinanceiroPage() {
   const recorrencias = trpc.financeiro.recorrencias.list.useQuery();
   const alertas = trpc.financeiro.alertas.list.useQuery();
   const fluxoCaixa = trpc.financeiro.relatorios.fluxoCaixa.useQuery(periodoFluxo);
+  const fluxoGerencial = trpc.financeiro.relatorios.fluxoGerencial.useQuery({
+    ...periodoFluxo,
+    ...(contaFluxoGerencial === "todas" ? {} : { contaFinanceiraId: Number(contaFluxoGerencial) }),
+  });
   const previsaoSemanal = trpc.financeiro.relatorios.previsaoSemanal.useQuery({ semanas: 8 });
   const modeloImportacao = trpc.financeiro.intercambios.modeloLancamentosCsv.useQuery(undefined, { enabled: false });
   const modeloFornecedores = trpc.financeiro.fornecedores.modeloCsv.useQuery(undefined, { enabled: false });
@@ -968,6 +1036,18 @@ export default function FinanceiroPage() {
       )}
 
       {aba === "fluxo" && (
+        <>
+        <FluxoGerencialPainel
+          fluxo={fluxoGerencial.data}
+          carregando={fluxoGerencial.isLoading}
+          atualizando={fluxoGerencial.isFetching}
+          periodo={periodoFluxo}
+          contaSelecionada={contaFluxoGerencial}
+          contas={contas.data ?? []}
+          onPeriodo={setPeriodoFluxo}
+          onConta={setContaFluxoGerencial}
+          onAtualizar={() => fluxoGerencial.refetch()}
+        />
         <section className="overflow-hidden rounded-xl border border-border/60 bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b bg-muted/20 px-5 py-4 md:flex-row md:items-end md:justify-between">
             <div><h2 className="font-semibold">Relatório de fluxo de caixa</h2><p className="mt-0.5 text-xs text-muted-foreground">Movimentações efetivadas por baixas, organizadas pelo período selecionado.</p><p className="mt-1 text-xs text-muted-foreground">O saldo de abertura incorpora o saldo inicial e as movimentações efetivadas antes da data inicial.</p></div>
@@ -975,6 +1055,7 @@ export default function FinanceiroPage() {
           </div>
           {fluxoCaixa.isLoading ? <div className="p-12 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />Calculando fluxo de caixa...</div> : fluxoCaixa.data ? <div className="space-y-6 p-5"><section className="overflow-hidden rounded-lg border border-primary/20 bg-primary/[0.03]"><div className="flex flex-col gap-3 border-b border-primary/15 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"><div><h3 className="text-sm font-semibold">Previsão semanal de caixa</h3><p className="text-xs text-muted-foreground">Projeção dos próximos 8 períodos baseada apenas nos títulos ainda em aberto.</p></div><Badge variant="outline" className="w-fit border-primary/30 text-primary">Títulos projetados</Badge></div>{previsaoSemanal.isLoading ? <div className="p-8 text-center text-sm text-muted-foreground"><Loader2 className="mx-auto mb-2 h-5 w-5 animate-spin" />Calculando previsão semanal...</div> : previsaoSemanal.data?.length ? <div className="overflow-x-auto"><Table><TableHeader><TableRow className="bg-primary/5"><TableHead>Semana</TableHead><TableHead className="text-right text-emerald-700">Entradas</TableHead><TableHead className="text-right text-rose-700">Saídas</TableHead><TableHead className="text-right">Resultado</TableHead><TableHead className="text-right">Saldo projetado</TableHead></TableRow></TableHeader><TableBody>{previsaoSemanal.data.map((semana: any) => <TableRow key={semana.inicioSemana} className={semana.saldoProjetado < 0 ? "bg-rose-50/60" : ""}><TableCell><p className="font-medium text-sm">{formatarDataFinanceira(semana.inicioSemana)} – {formatarDataFinanceira(semana.fimSemana)}</p><p className="text-xs text-muted-foreground">{semana.quantidadeTitulos} título(s) previsto(s)</p></TableCell><TableCell className="text-right font-medium text-emerald-700">{formatCurrency(semana.entradas)}</TableCell><TableCell className="text-right font-medium text-rose-700">{formatCurrency(semana.saidas)}</TableCell><TableCell className={`text-right font-semibold ${semana.saldoLiquido >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{semana.saldoLiquido >= 0 ? "+" : ""}{formatCurrency(semana.saldoLiquido)}</TableCell><TableCell className={`text-right font-bold ${semana.saldoProjetado >= 0 ? "text-primary" : "text-rose-700"}`}>{formatCurrency(semana.saldoProjetado)}</TableCell></TableRow>)}</TableBody></Table></div> : <p className="p-8 text-center text-sm text-muted-foreground">Não há títulos em aberto para projetar nas próximas semanas.</p>}</section><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><ResumoCard label="Saldo de abertura" valor={fluxoCaixa.data.saldoAbertura} icon={<Landmark className="h-5 w-5" />} color="text-slate-700 bg-slate-100" descricao="Antes do período, com histórico anterior" /><ResumoCard label="Entradas" valor={fluxoCaixa.data.entradas} icon={<ArrowDownToLine className="h-5 w-5" />} color="text-emerald-700 bg-emerald-50" descricao="Recebimentos efetivados" /><ResumoCard label="Saídas" valor={fluxoCaixa.data.saidas} icon={<ArrowUpFromLine className="h-5 w-5" />} color="text-rose-700 bg-rose-50" descricao="Pagamentos efetivados" /><ResumoCard label="Resultado líquido" valor={fluxoCaixa.data.saldoLiquido} icon={<CircleDollarSign className="h-5 w-5" />} color={fluxoCaixa.data.saldoLiquido >= 0 ? "text-primary bg-primary/10" : "text-rose-700 bg-rose-50"} descricao="Entradas menos saídas" /><ResumoCard label="Saldo final" valor={fluxoCaixa.data.saldoFinal} icon={<WalletCards className="h-5 w-5" />} color="text-primary bg-primary/10" descricao="Após as movimentações" /></div><div className="grid gap-5 xl:grid-cols-[1fr_1.1fr]"><div className="rounded-lg border bg-muted/10 p-4"><div className="mb-4 flex items-center justify-between"><div><h3 className="text-sm font-semibold">Evolução diária</h3><p className="text-xs text-muted-foreground">Entradas e saídas efetivadas a cada dia.</p></div><Badge variant="outline">{fluxoCaixa.data.quantidadeMovimentos} movimentações</Badge></div><div className="space-y-3">{fluxoCaixa.data.dias.map((dia: any) => <div key={dia.data} className="grid grid-cols-[74px_1fr_96px] items-center gap-3 text-xs"><span className="text-muted-foreground">{formatarDataFinanceira(dia.data)}</span><div className="space-y-1"><div className="h-1.5 overflow-hidden rounded-full bg-emerald-100"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${(Number(dia.entradas) / maiorFluxoDiario) * 100}%` }} /></div><div className="h-1.5 overflow-hidden rounded-full bg-rose-100"><div className="h-full rounded-full bg-rose-500" style={{ width: `${(Number(dia.saidas) / maiorFluxoDiario) * 100}%` }} /></div></div><span className={`text-right font-medium ${dia.saldoLiquido >= 0 ? "text-emerald-700" : "text-rose-700"}`}>{dia.saldoLiquido >= 0 ? "+" : ""}{formatCurrency(dia.saldoLiquido)}</span></div>)}</div></div><div className="overflow-hidden rounded-lg border"><div className="border-b bg-muted/30 px-4 py-3"><h3 className="text-sm font-semibold">Movimentações do período</h3></div>{fluxoCaixa.data.movimentos.length ? <Table><TableHeader><TableRow className="bg-muted/20"><TableHead>Data</TableHead><TableHead>Descrição</TableHead><TableHead>Conta</TableHead><TableHead className="text-right">Valor</TableHead></TableRow></TableHeader><TableBody>{fluxoCaixa.data.movimentos.map((movimento: any) => <TableRow key={movimento.id}><TableCell className="whitespace-nowrap text-xs">{formatarDataFinanceira(movimento.dataBaixa)}</TableCell><TableCell><p className="text-sm font-medium">{movimento.descricao}</p><p className="text-xs text-muted-foreground">{movimento.formaPagamento}</p>{movimento.origem === "nota_diesel" && <p className="mt-1 text-xs font-medium text-sky-700">Compra para estoque do tanque — saída de caixa; o custo é apropriado nos abastecimentos.</p>}</TableCell><TableCell className="text-sm text-muted-foreground">{movimento.contaNome ?? "—"}</TableCell><TableCell className={`text-right font-semibold ${movimento.tipo === "receber" ? "text-emerald-700" : "text-rose-700"}`}>{movimento.tipo === "receber" ? "+" : "−"}{formatCurrency(movimento.valor)}</TableCell></TableRow>)}</TableBody></Table> : <p className="px-4 py-10 text-center text-sm text-muted-foreground">Nenhuma baixa efetivada no período selecionado.</p>}</div></div></div> : null}
         </section>
+        </>
       )}
 
       {aba === "recorrencias" && (
