@@ -813,3 +813,7 @@
 - [x] Auditar em leitura as fontes de custo de diesel, RH, frete, financeiro e vendas para a Etapa 6E
 - [x] Mapear origem, competência, critério de apropriação, limites e risco de dupla apropriação de cada fonte
 - [x] Documentar a proposta de integração auditável à Rentabilidade da Madeira sem implementar lançamentos automáticos
+- [x] Diagnosticar a arquitetura atual da Rentabilidade da Madeira, suas tabelas gerenciais e os vínculos possíveis com títulos financeiros
+- [x] Mapear uma migração segura para Centros de Custo financeiros, preservando históricos, importações, recorrências e origens automáticas
+- [x] Documentar as mudanças previstas de frontend e backend sem executar migration, apagar dados ou modificar a interface
+- [ ] Aguardar aprovação explícita do diagnóstico revisado antes de implementar a simplificação da Etapa 6E
