@@ -43,7 +43,7 @@ function dataParaCsv(valor: Date | string | null | undefined): string {
   if (!valor) return "";
   const data = new Date(valor);
   if (Number.isNaN(data.getTime())) return "";
-  return `${data.getUTCFullYear()}-${String(data.getUTCMonth() + 1).padStart(2, "0")}-${String(data.getUTCDate()).padStart(2, "0")}`;
+  return `${String(data.getUTCDate()).padStart(2, "0")}/${String(data.getUTCMonth() + 1).padStart(2, "0")}/${data.getUTCFullYear()}`;
 }
 
 function moedaParaCsv(valor: string | number): string {
@@ -73,11 +73,17 @@ function lerLinhasCsv(conteudo: string): string[][] {
   return linhas;
 }
 
-function dataValida(valor: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(valor)) return false;
-  const [ano, mes, dia] = valor.split("-").map(Number);
+function normalizarDataCsv(valor: string): string | null {
+  const brasileira = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(valor);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(valor);
+  if (!brasileira && !iso) return null;
+  const [, primeiro, segundo, terceiro] = brasileira ?? iso!;
+  const [ano, mes, dia] = brasileira
+    ? [Number(terceiro), Number(segundo), Number(primeiro)]
+    : [Number(primeiro), Number(segundo), Number(terceiro)];
   const data = new Date(ano, mes - 1, dia, 12);
-  return data.getFullYear() === ano && data.getMonth() === mes - 1 && data.getDate() === dia;
+  if (data.getFullYear() !== ano || data.getMonth() !== mes - 1 || data.getDate() !== dia) return null;
+  return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
 }
 
 function normalizarValor(valor: string): string | null {
@@ -90,7 +96,7 @@ function normalizarValor(valor: string): string | null {
 }
 
 export function criarModeloCsvLancamentos(): string {
-  return `\uFEFF${CABECALHOS_CSV_LANCAMENTOS.join(";")}\nEXEMPLO-001;receber;Venda avulsa;Receitas;1250,00;2026-08-01;2026-08-15;2026-08-01;Cliente exemplo;Preencha esta linha como referência`;
+  return `\uFEFF${CABECALHOS_CSV_LANCAMENTOS.join(";")}\nEXEMPLO-001;receber;Venda avulsa;Receitas;1250,00;01/08/2026;15/08/2026;01/08/2026;Cliente exemplo;Preencha esta linha como referência`;
 }
 
 export function exportarLancamentosCsv(lancamentos: LinhaExportacaoLancamento[]): string {
@@ -131,9 +137,10 @@ export function validarCsvLancamentos(conteudo: string, maximoLinhas = 1000): { 
     const descricao = valor("descricao");
     const categoria = valor("categoria");
     const valorOriginal = normalizarValor(valor("valor"));
-    const dataEmissao = valor("data_emissao");
-    const dataVencimento = valor("data_vencimento");
-    const competencia = valor("competencia");
+    const dataEmissao = normalizarDataCsv(valor("data_emissao"));
+    const dataVencimento = normalizarDataCsv(valor("data_vencimento"));
+    const competenciaOriginal = valor("competencia");
+    const competencia = competenciaOriginal ? normalizarDataCsv(competenciaOriginal) : null;
     const problemas: string[] = [];
     if (!referencia || referencia.length > 120) problemas.push("referência obrigatória de até 120 caracteres");
     if (referencias.has(referencia)) problemas.push("referência duplicada no arquivo");
@@ -142,13 +149,13 @@ export function validarCsvLancamentos(conteudo: string, maximoLinhas = 1000): { 
     if (descricao.length < 2 || descricao.length > 300) problemas.push("descrição deve ter entre 2 e 300 caracteres");
     if (!categoria || categoria.length > 150) problemas.push("categoria obrigatória de até 150 caracteres");
     if (!valorOriginal) problemas.push("valor deve ser positivo, com no máximo duas casas decimais");
-    if (!dataValida(dataEmissao)) problemas.push("data_emissao inválida (AAAA-MM-DD)");
-    if (!dataValida(dataVencimento)) problemas.push("data_vencimento inválida (AAAA-MM-DD)");
-    if (competencia && !dataValida(competencia)) problemas.push("competencia inválida (AAAA-MM-DD)");
+    if (!dataEmissao) problemas.push("data_emissao inválida (DD/MM/AAAA)");
+    if (!dataVencimento) problemas.push("data_vencimento inválida (DD/MM/AAAA)");
+    if (competenciaOriginal && !competencia) problemas.push("competencia inválida (DD/MM/AAAA)");
     if (valor("contraparte").length > 300) problemas.push("contraparte excede 300 caracteres");
     if (valor("observacoes").length > 4000) problemas.push("observações excedem 4000 caracteres");
     if (problemas.length) { erros.push(`Linha ${numeroLinha}: ${problemas.join("; ")}`); return; }
-    linhas.push({ numeroLinha, referencia, tipo: tipo as "receber" | "pagar", descricao, categoria, valor: valorOriginal!, dataEmissao, dataVencimento, competencia: competencia || null, contraparte: valor("contraparte") || null, observacoes: valor("observacoes") || null });
+    linhas.push({ numeroLinha, referencia, tipo: tipo as "receber" | "pagar", descricao, categoria, valor: valorOriginal!, dataEmissao: dataEmissao!, dataVencimento: dataVencimento!, competencia, contraparte: valor("contraparte") || null, observacoes: valor("observacoes") || null });
   });
   return { linhas, erros };
 }

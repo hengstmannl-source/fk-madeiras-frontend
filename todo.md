@@ -807,3 +807,6 @@
 - [x] Auditar a sobreposição entre Margem por venda e Rentabilidade da madeira, comparando fontes, fórmulas e ações disponíveis
 - [x] Separar com clareza a margem comercial da rentabilidade por custo, ajustando nomenclatura, navegação e conteúdo quando necessário
 - [x] Atualizar regressões, validar visualmente e publicar o ajuste de navegação financeira
+- [x] Auditar o parser, modelo CSV e mensagens de validação da importação financeira para datas
+- [x] Aceitar datas DD/MM/AAAA na importação financeira sem ambiguidades e preservar a compatibilidade necessária
+- [x] Atualizar o modelo, as regressões e publicar o ajuste de formato brasileiro
