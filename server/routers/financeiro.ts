@@ -2,7 +2,7 @@ import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
 import * as centrosCusto from "../repositories/centrosCusto";
-import { obterResumoRentabilidadeFinanceira } from "../repositories/rentabilidadeFinanceira";
+import { obterRentabilidadeVendas, obterResumoRentabilidadeFinanceira } from "../repositories/rentabilidadeFinanceira";
 import { calcularParcelas } from "../financeiro.logic";
 import { storagePut } from "../storage";
 import { normalizarDadosBoleto } from "../../shared/boleto";
@@ -182,6 +182,8 @@ export const financeiroRouter = router({
   rentabilidade: router({
     resumo: protectedProcedure.input(z.object({ competencia: DataFinanceiraSchema }))
       .query(({ input }) => obterResumoRentabilidadeFinanceira(dataLocal(input.competencia))),
+    vendas: protectedProcedure.input(z.object({ competencia: DataFinanceiraSchema }))
+      .query(({ input }) => obterRentabilidadeVendas(dataLocal(input.competencia))),
   }),
 
   contas: router({

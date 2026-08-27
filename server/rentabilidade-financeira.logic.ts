@@ -104,6 +104,7 @@ export type ResumoMateriaPrimaRentabilidade = {
     custoTotalComEstimativa: number;
     custoRealPorM3: number | null;
     custoPorM3: number | null;
+    porEssencia: ResumoEssenciaMateriaPrimaRentabilidade[];
     toras: DetalheToraMateriaPrima[];
   }>;
   referenciasPorEssencia: Array<{
@@ -137,12 +138,77 @@ export type ResumoMateriaPrimaRentabilidade = {
   torasSemReferencia: DetalheToraMateriaPrima[];
 };
 
+export type ResumoEssenciaMateriaPrimaRentabilidade = {
+  essencia: string;
+  volumePecasM3: number;
+  volumeAproveitamentoM3: number;
+  volumeElegivelM3: number;
+  totalToras: number;
+  volumeTorasConsumidasM3: number;
+  volumeRastreavelM3: number;
+  volumeEstimadoM3: number;
+  volumeSemReferenciaM3: number;
+  coberturaRastreavelPercentual: number;
+  coberturaComEstimativaPercentual: number;
+  custoTorasRastreavel: number;
+  freteEntradaRastreavel: number;
+  custoTorasEstimado: number;
+  freteEntradaEstimado: number;
+  custoTotalReal: number;
+  custoTotalComEstimativa: number;
+  custoRealPorM3: number | null;
+  custoPorM3: number | null;
+};
+
+type AcumuladoEssenciaMateriaPrima = Omit<ResumoEssenciaMateriaPrimaRentabilidade,
+  "volumeElegivelM3" | "coberturaRastreavelPercentual" | "coberturaComEstimativaPercentual" |
+  "custoTotalReal" | "custoTotalComEstimativa" | "custoRealPorM3" | "custoPorM3">;
+
 const numero = (valor: number | string | null | undefined) => {
   const convertido = Number(valor ?? 0);
   return Number.isFinite(convertido) ? convertido : 0;
 };
 
 const normalizarEssencia = (valor: string) => valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
+
+const criarAcumuladoEssencia = (essencia: string): AcumuladoEssenciaMateriaPrima => ({
+  essencia,
+  volumePecasM3: 0,
+  volumeAproveitamentoM3: 0,
+  totalToras: 0,
+  volumeTorasConsumidasM3: 0,
+  volumeRastreavelM3: 0,
+  volumeEstimadoM3: 0,
+  volumeSemReferenciaM3: 0,
+  custoTorasRastreavel: 0,
+  freteEntradaRastreavel: 0,
+  custoTorasEstimado: 0,
+  freteEntradaEstimado: 0,
+});
+
+const obterAcumuladoEssencia = (mapa: Map<string, AcumuladoEssenciaMateriaPrima>, essencia: string) => {
+  const nome = essencia.trim() || "Essência não informada";
+  const chave = normalizarEssencia(nome) || "essencia-nao-informada";
+  const atual = mapa.get(chave) ?? criarAcumuladoEssencia(nome);
+  mapa.set(chave, atual);
+  return atual;
+};
+
+const resumirAcumuladoEssencia = (item: AcumuladoEssenciaMateriaPrima): ResumoEssenciaMateriaPrimaRentabilidade => {
+  const volumeElegivelM3 = item.volumePecasM3 + item.volumeAproveitamentoM3;
+  const custoTotalReal = item.custoTorasRastreavel + item.freteEntradaRastreavel;
+  const custoTotalComEstimativa = custoTotalReal + item.custoTorasEstimado + item.freteEntradaEstimado;
+  return {
+    ...item,
+    volumeElegivelM3,
+    coberturaRastreavelPercentual: item.volumeTorasConsumidasM3 > 0 ? (item.volumeRastreavelM3 / item.volumeTorasConsumidasM3) * 100 : 0,
+    coberturaComEstimativaPercentual: item.volumeTorasConsumidasM3 > 0 ? ((item.volumeRastreavelM3 + item.volumeEstimadoM3) / item.volumeTorasConsumidasM3) * 100 : 0,
+    custoTotalReal,
+    custoTotalComEstimativa,
+    custoRealPorM3: volumeElegivelM3 > 0 ? custoTotalReal / volumeElegivelM3 : null,
+    custoPorM3: volumeElegivelM3 > 0 ? custoTotalComEstimativa / volumeElegivelM3 : null,
+  };
+};
 
 /**
  * Calcula o custo da matéria-prima pelo consumo físico. O custo real da tora e
@@ -172,50 +238,14 @@ export function calcularCusteioMateriaPrima(input: {
     referencias.set(chave, atual);
   }
 
-  const porEssencia = new Map<string, {
-    essencia: string;
-    volumePecasM3: number;
-    volumeAproveitamentoM3: number;
-    totalToras: number;
-    volumeTorasConsumidasM3: number;
-    volumeRastreavelM3: number;
-    volumeEstimadoM3: number;
-    volumeSemReferenciaM3: number;
-    custoTorasRastreavel: number;
-    freteEntradaRastreavel: number;
-    custoTorasEstimado: number;
-    freteEntradaEstimado: number;
-  }>();
-  const obterEssencia = (essencia: string) => {
-    const nome = essencia.trim() || "Essência não informada";
-    const chave = normalizarEssencia(nome) || "essencia-nao-informada";
-    const atual = porEssencia.get(chave) ?? {
-      essencia: nome,
-      volumePecasM3: 0,
-      volumeAproveitamentoM3: 0,
-      totalToras: 0,
-      volumeTorasConsumidasM3: 0,
-      volumeRastreavelM3: 0,
-      volumeEstimadoM3: 0,
-      volumeSemReferenciaM3: 0,
-      custoTorasRastreavel: 0,
-      freteEntradaRastreavel: 0,
-      custoTorasEstimado: 0,
-      freteEntradaEstimado: 0,
-    };
-    porEssencia.set(chave, atual);
-    return atual;
-  };
-  for (const item of input.volumesProduzidosPorEssencia ?? []) {
-    const essencia = obterEssencia(item.essencia);
-    essencia.volumePecasM3 += numero(item.volumePecas);
-    essencia.volumeAproveitamentoM3 += numero(item.volumeAproveitamento);
-  }
+  const porEssencia = new Map<string, AcumuladoEssenciaMateriaPrima>();
+  const porEssenciaPorProducao = new Map<number, Map<string, AcumuladoEssenciaMateriaPrima>>();
 
   const producoes = new Map<number, {
     id: number;
     numero: string;
     dataProducao: Date;
+    incluirAproveitamento: boolean;
     volumePecasM3: number;
     volumeAproveitamentoM3: number;
     volumeElegivelM3: number;
@@ -237,6 +267,7 @@ export function calcularCusteioMateriaPrima(input: {
       id: item.id,
       numero: item.numero,
       dataProducao: item.dataProducao,
+      incluirAproveitamento: item.incluirAproveitamento,
       volumePecasM3,
       volumeAproveitamentoM3,
       volumeElegivelM3: volumePecasM3 + volumeAproveitamentoM3,
@@ -251,6 +282,19 @@ export function calcularCusteioMateriaPrima(input: {
       freteEntradaEstimado: 0,
       toras: [],
     });
+    porEssenciaPorProducao.set(item.id, new Map());
+  }
+  for (const item of input.volumesProduzidosPorEssencia ?? []) {
+    const producao = producoes.get(item.producaoId);
+    if (!producao) continue;
+    const essenciaGeral = obterAcumuladoEssencia(porEssencia, item.essencia);
+    const essenciaDaProducao = obterAcumuladoEssencia(porEssenciaPorProducao.get(item.producaoId)!, item.essencia);
+    const volumePecas = numero(item.volumePecas);
+    const volumeAproveitamento = producao.incluirAproveitamento ? numero(item.volumeAproveitamento) : 0;
+    essenciaGeral.volumePecasM3 += volumePecas;
+    essenciaGeral.volumeAproveitamentoM3 += volumeAproveitamento;
+    essenciaDaProducao.volumePecasM3 += volumePecas;
+    essenciaDaProducao.volumeAproveitamentoM3 += volumeAproveitamento;
   }
 
   const torasSemReferencia: DetalheToraMateriaPrima[] = [];
@@ -290,9 +334,14 @@ export function calcularCusteioMateriaPrima(input: {
 
     producao.totalToras += 1;
     producao.volumeTorasConsumidasM3 += volumeM3;
-    const essencia = obterEssencia(item.essencia);
-    essencia.totalToras += 1;
-    essencia.volumeTorasConsumidasM3 += volumeM3;
+    const essencias = [
+      obterAcumuladoEssencia(porEssencia, item.essencia),
+      obterAcumuladoEssencia(porEssenciaPorProducao.get(item.producaoId)!, item.essencia),
+    ];
+    for (const essencia of essencias) {
+      essencia.totalToras += 1;
+      essencia.volumeTorasConsumidasM3 += volumeM3;
+    }
     if (possuiCustoRastreavel) {
       detalhe.situacao = "rastreavel";
       detalhe.valorMetroCubico = valorMetroCubico;
@@ -302,9 +351,11 @@ export function calcularCusteioMateriaPrima(input: {
       producao.volumeRastreavelM3 += volumeM3;
       producao.custoTorasRastreavel += detalhe.custoTora;
       producao.freteEntradaRastreavel += detalhe.freteEntrada;
-      essencia.volumeRastreavelM3 += volumeM3;
-      essencia.custoTorasRastreavel += detalhe.custoTora;
-      essencia.freteEntradaRastreavel += detalhe.freteEntrada;
+      for (const essencia of essencias) {
+        essencia.volumeRastreavelM3 += volumeM3;
+        essencia.custoTorasRastreavel += detalhe.custoTora;
+        essencia.freteEntradaRastreavel += detalhe.freteEntrada;
+      }
     } else if (referenciaEssencia) {
       detalhe.situacao = "estimado_por_essencia";
       detalhe.valorMetroCubico = referenciaEssencia.valorMetroCubicoMedio;
@@ -313,12 +364,14 @@ export function calcularCusteioMateriaPrima(input: {
       producao.volumeEstimadoM3 += volumeM3;
       producao.custoTorasEstimado += detalhe.custoEstimado;
       producao.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
-      essencia.volumeEstimadoM3 += volumeM3;
-      essencia.custoTorasEstimado += detalhe.custoEstimado;
-      essencia.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
+      for (const essencia of essencias) {
+        essencia.volumeEstimadoM3 += volumeM3;
+        essencia.custoTorasEstimado += detalhe.custoEstimado;
+        essencia.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
+      }
     } else {
       producao.volumeSemReferenciaM3 += volumeM3;
-      essencia.volumeSemReferenciaM3 += volumeM3;
+      for (const essencia of essencias) essencia.volumeSemReferenciaM3 += volumeM3;
       detalhe.motivoCustoIndisponivel = item.romaneioCargaId === null
         ? "Tora sem romaneio de entrada e sem referência da mesma essência."
         : "Romaneio de entrada sem custo identificável e sem referência da mesma essência.";
@@ -340,6 +393,9 @@ export function calcularCusteioMateriaPrima(input: {
       custoTotalComEstimativa,
       custoRealPorM3: item.volumeElegivelM3 > 0 ? custoTotalReal / item.volumeElegivelM3 : null,
       custoPorM3: item.volumeElegivelM3 > 0 ? custoTotalComEstimativa / item.volumeElegivelM3 : null,
+      porEssencia: Array.from(porEssenciaPorProducao.get(item.id)?.values() ?? [])
+        .map(resumirAcumuladoEssencia)
+        .sort((a, b) => a.essencia.localeCompare(b.essencia, "pt-BR")),
     };
   }).sort((a, b) => b.dataProducao.getTime() - a.dataProducao.getTime() || a.numero.localeCompare(b.numero));
 
@@ -357,21 +413,9 @@ export function calcularCusteioMateriaPrima(input: {
 
   const custoTotalConhecido = total.custoTorasRastreavel + total.freteEntradaRastreavel;
   const custoTotalComEstimativa = custoTotalConhecido + total.custoTorasEstimado + total.freteEntradaEstimado;
-  const resumoPorEssencia = Array.from(porEssencia.values()).map((item) => {
-    const volumeElegivelM3 = item.volumePecasM3 + item.volumeAproveitamentoM3;
-    const custoTotalReal = item.custoTorasRastreavel + item.freteEntradaRastreavel;
-    const custoTotalComEstimativa = custoTotalReal + item.custoTorasEstimado + item.freteEntradaEstimado;
-    return {
-      ...item,
-      volumeElegivelM3,
-      coberturaRastreavelPercentual: item.volumeTorasConsumidasM3 > 0 ? (item.volumeRastreavelM3 / item.volumeTorasConsumidasM3) * 100 : 0,
-      coberturaComEstimativaPercentual: item.volumeTorasConsumidasM3 > 0 ? ((item.volumeRastreavelM3 + item.volumeEstimadoM3) / item.volumeTorasConsumidasM3) * 100 : 0,
-      custoTotalReal,
-      custoTotalComEstimativa,
-      custoRealPorM3: volumeElegivelM3 > 0 ? custoTotalReal / volumeElegivelM3 : null,
-      custoPorM3: volumeElegivelM3 > 0 ? custoTotalComEstimativa / volumeElegivelM3 : null,
-    };
-  }).sort((a, b) => b.custoTotalComEstimativa - a.custoTotalComEstimativa || a.essencia.localeCompare(b.essencia, "pt-BR"));
+  const resumoPorEssencia = Array.from(porEssencia.values())
+    .map(resumirAcumuladoEssencia)
+    .sort((a, b) => b.custoTotalComEstimativa - a.custoTotalComEstimativa || a.essencia.localeCompare(b.essencia, "pt-BR"));
   return {
     ...total,
     coberturaRastreavelPercentual: total.volumeTorasConsumidasM3 > 0 ? (total.volumeRastreavelM3 / total.volumeTorasConsumidasM3) * 100 : 0,

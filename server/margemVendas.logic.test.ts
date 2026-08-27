@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { calcularIndicadoresMargemVenda } from "./margemVendas.logic";
+import { calcularIndicadoresMargemVenda, calcularReceitaLiquidaMadeiraVenda } from "./margemVendas.logic";
+
+describe("calcularReceitaLiquidaMadeiraVenda", () => {
+  it("compara o preço líquido da madeira após frete e comissão com base no volume vendido", () => {
+    const resultado = calcularReceitaLiquidaMadeiraVenda({
+      subtotal: "26000",
+      desconto: "0",
+      abatimentoFrete: "4000",
+      comissaoCalculada: "2000",
+      totalVolumeM3: "10",
+      taxas: [{ calculado: "1300" }],
+    });
+
+    expect(resultado.receitaBrutaMadeira).toBe(26000);
+    expect(resultado.deducoesDaReceitaMadeira).toBe(6000);
+    expect(resultado.receitaLiquidaMadeira).toBe(20000);
+    expect(resultado.precoLiquidoMadeiraPorM3).toBe(2000);
+    expect(resultado.taxasCobradasAoCliente).toBe(1300);
+  });
+
+  it("mantém o preço líquido indisponível sem volume vendido", () => {
+    const resultado = calcularReceitaLiquidaMadeiraVenda({
+      subtotal: "2600", desconto: "0", abatimentoFrete: "300", comissaoCalculada: "100", totalVolumeM3: "0",
+    });
+
+    expect(resultado.receitaLiquidaMadeira).toBe(2200);
+    expect(resultado.precoLiquidoMadeiraPorM3).toBeNull();
+  });
+});
 
 describe("calcularIndicadoresMargemVenda", () => {
   it("consolida todas as taxas e calcula a margem comercial sobre o subtotal", () => {

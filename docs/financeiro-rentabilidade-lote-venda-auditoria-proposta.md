@@ -1,7 +1,7 @@
 # Rentabilidade da Madeira — auditoria de essência, lote e venda
 
-**Status:** diagnóstico concluído; implementação aguardando confirmação.  
-**Escopo deste documento:** validar a cadeia já existente entre produção, lote, estoque e venda e propor uma leitura de rentabilidade que preserve fonte única, múltiplos lotes por venda e custos específicos de venda. Nenhum dado, schema, cálculo ou tela foi alterado por esta auditoria.
+**Status:** regra comercial confirmada; leitura implementada e validada localmente.
+**Escopo deste documento:** registrar a auditoria da cadeia existente entre produção, lote, estoque e venda e a implementação da leitura de rentabilidade que preserva fonte única, múltiplos lotes por venda e cobertura explícita de custo.
 
 > A rentabilidade por venda deve usar a saída física de estoque como evidência do lote consumido. Um item vendido pode ter várias saídas e, portanto, vários lotes; o custo não pode ser substituído por uma média global da essência.[1] [2]
 
@@ -21,7 +21,7 @@ Um mesmo item de venda pode possuir mais de uma movimentação de saída, com lo
 | Saída da venda | `movimentacoesEstoqueSerrado.loteId` e `itemVendaId`, com tipo `saida_entrega`. | A entrega pode ser ligada ao lote que reduziu o estoque. |
 | Item comercial | `itensOrcamento.orcamentoId`, espécie, medidas, quantidade e valor. | O item identifica o pedido comercial, mas não deve ser usado sozinho para inferir o custo de lote. |
 | Múltiplos lotes | Várias movimentações podem apontar ao mesmo item da venda. | A soma deve ocorrer por movimentação/lote, sem escolher um lote arbitrário. |
-| Volume da saída | A movimentação armazena quantidade e volume; o lote conserva quantidade produzida e volume. | O volume efetivo da saída deve priorizar `movimentacao.volume`; quando ausente, pode ser derivado do lote somente se a quantidade produzida for positiva. |
+| Volume da saída | A movimentação armazena quantidade e volume; o lote conserva quantidade produzida e volume. | Para peças, o volume é reconstituído pela quantidade líquida × volume do lote ÷ quantidade produzida, pois movimentos históricos podem registrar volume zero. Aproveitamento usa o volume líquido movimentado. |
 
 As consultas de leitura também confirmaram que há situações históricas sem um vínculo físico suficiente para custo por lote ou com dados de quantidade que não permitem derivação segura de volume. Esses registros não devem receber custo aproximado por regra geral. A interface futura deve classificá-los como **custo de madeira indisponível** e informar o motivo.[1]
 
@@ -45,21 +45,22 @@ custo de madeira da venda = Σ(custo da saída de cada lote vinculado)
 
 Lotes de terceiros e saídas de terceiro não entram no custo de madeira própria nem na margem de venda própria. Se uma venda futura puder consumir lote de terceiro, a leitura deverá mostrá-lo como **origem não própria**, sem atribuir a ele custo de matéria-prima da produção da FK Madeiras.[1]
 
-## 3. Receita líquida e custos específicos da venda
+## 3. Regra confirmada de receita líquida e custos da venda
 
-Os campos comerciais já registram subtotal, total, desconto, frete, abatimento de frete, comissão, taxa principal e taxas adicionais. Eles são suficientes para mostrar a composição comercial da venda, mas a auditoria identificou uma limitação semântica: uma taxa adicional pode ser uma cobrança repassada ao cliente, e um valor de frete pode atuar como abatimento comercial, não necessariamente como despesa paga pela empresa.[3]
+Os campos comerciais já registram subtotal, total, desconto, frete, abatimento de frete, comissão, taxa principal e taxas adicionais. A regra confirmada esclareceu que o preço informado para a madeira já contém o efeito comercial de frete e comissão: para conhecer o valor realmente disponível para cobrir os custos da madeira, estes componentes devem reduzir a receita bruta da madeira uma única vez.[3]
 
-Portanto, a implementação não deve pressupor que todo valor chamado de “taxa” ou “frete” é custo da venda. A proposta separa **receita líquida** de **custo específico** e só apropria como custo aquilo que estiver explicitamente identificado como custo da empresa.
+Consequentemente, frete comercial e comissão **não são novamente somados ao custo**. Eles são deduções da receita da madeira. Impostos e taxas acrescidos ao pedido e cobrados do cliente também não ampliam a receita da madeira; eventual despesa econômica da empresa continua dependente de título financeiro classificado no Centro de Custo adequado, sem inferência a partir da cobrança comercial.
 
 | Componente | Tratamento proposto | Condição de inclusão |
 |---|---|---|
-| Receita da venda | `total` comercial da venda. | Valor efetivamente negociado. |
-| Desconto e abatimento de frete | Reduzem a receita líquida quando já aplicados no acerto comercial. | Nunca subtrair novamente como custo. |
-| Frete comercial | Custo direto somente se for informado como despesa operacional da entrega. | Deve permanecer separado de frete de entrada da tora. |
-| Comissão | Custo direto somente quando a comissão calculada representa valor devido pelo vendedor. | Deve ser indicada como despesa da empresa, não como mero preço de referência. |
-| Impostos e taxas | Custo direto apenas quando houver marcação explícita de encargo da empresa. | Taxa cobrada do cliente ou repassada não reduz a margem. |
+| Receita bruta da madeira | `subtotal` da venda. | É a base do preço comercial da madeira, sem somar taxas cobradas ao cliente. |
+| Desconto comercial | `desconto`. | Reduz a receita líquida uma vez. |
+| Frete comercial | `abatimentoFrete`. | Reduz a receita líquida uma vez; permanece separado do frete de entrada da tora. |
+| Comissão | `comissaoCalculada`. | Reduz a receita líquida uma vez; não é adicionada novamente ao custo. |
+| Impostos e taxas cobrados | `taxaCalculada` e taxas adicionais. | Permanecem fora da receita da madeira e são apenas informativos até existir uma despesa financeira classificada. |
+| Custos comercial/administrativo | Títulos classificados por Centro de Custo na competência da produção de origem. | São aplicados por m³, separadamente de frete e comissão. |
 
-Como as taxas adicionais atuais não armazenam uma classificação explícita de **custo da empresa**, a alternativa segura é acrescentar esse atributo ao lançar/editar taxa no futuro, preservando o comportamento e os valores históricos. Valores históricos sem a classificação permanecem exibidos como **sem tratamento de custo definido**, em vez de serem reprocessados ou deduzidos automaticamente.[3]
+Assim, a comparação solicitada é expressa como: **preço líquido da madeira por m³ = (subtotal − desconto − frete comercial − comissão) ÷ volume negociado**. A margem só é considerada determinada quando todos os lotes físicos da venda têm volume e custo rastreáveis; do contrário, a tela mostra os custos conhecidos, a cobertura e a margem como parcial ou indisponível, sem média global.[1] [2]
 
 ## 4. Proposta de apresentação
 
@@ -85,13 +86,13 @@ Os custos industriais e comercial/administrativos de competência continuam como
 | 4 | Campo explícito para determinar se frete, comissão, imposto ou taxa adicional é custo da empresa. | Sem conversão automática de taxas históricas. |
 | 5 | Interface de rentabilidade, testes unitários/integrados, revisão visual e documentação. | Mantém fonte única, competência e estruturas existentes. |
 
-## 6. Confirmação solicitada
+## 6. Implementação e validação
 
-A auditoria confirma que a cadeia física está integrada para a leitura de custo por lote e por venda, inclusive para múltiplos lotes. A implementação depende de confirmação da regra comercial abaixo:
+Após a confirmação da regra comercial, a tela **Financeiro → Rentabilidade da madeira** passou a apresentar uma seção de margem por venda entregue. A leitura consulta exclusivamente vendas entregues no mês, saídas líquidas de estoque e lotes já existentes. Ela recupera matéria-prima por essência da produção de origem e aplica as taxas industrial e comercial/administrativa por m³ da competência da produção, sem criar tabela, rateio persistido, título ou alteração operacional.
 
-> **Confirmar que frete comercial, comissão, imposto e taxa só entram na margem da venda quando estiverem explicitamente marcados como custo da empresa; valores históricos sem essa marcação permanecerão fora da margem até revisão manual.**
+> **Regra aplicada: frete comercial e comissão reduzem uma única vez a receita bruta da madeira; a margem compara a receita líquida por m³ com matéria-prima, produção e comercial/administrativo rastreáveis.**
 
-Essa confirmação permite implementar a proposta sem supor que toda taxa cobrada do cliente, desconto ou abatimento comercial seja um custo interno.
+A validação automatizada cobriu a composição de receita líquida, a exclusão de frete e comissão do custo, lacunas de origem física e a reconstrução de volume para peça, estorno líquido e aproveitamento. A interface foi verificada em desktop e móvel; os testes de tipos, a suíte completa e a geração de produção concluíram sem erro. O aviso de tamanho de chunk do Vite permanece não bloqueante.
 
 ## Referências
 

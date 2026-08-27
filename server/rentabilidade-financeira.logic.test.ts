@@ -64,6 +64,17 @@ describe("calcularCusteioMateriaPrima", () => {
     expect(cambara).toMatchObject({ volumePecasM3: 3, volumeTorasConsumidasM3: 2, custoTotalReal: 220, custoPorM3: 220 / 3, coberturaRastreavelPercentual: 100 });
     expect(jatoba).toMatchObject({ volumePecasM3: 1, volumeTorasConsumidasM3: 1, custoTotalReal: 0, custoTotalComEstimativa: 220, custoPorM3: 220, coberturaRastreavelPercentual: 0, coberturaComEstimativaPercentual: 100 });
   });
+
+  it("mantém o custo unitário por essência indisponível quando não há volume de produção válido", () => {
+    const resultado = calcularCusteioMateriaPrima({
+      producoes: [{ ...producao, volumePecas: 0 }],
+      referenciasPrecoPorEssencia: [],
+      volumesProduzidosPorEssencia: [{ producaoId: 1, essencia: "Cambará", volumePecas: 0 }],
+      torasConsumidas: [{ producaoId: 1, plaquetaId: 30, plaquetaCodigo: "CAM-SEM-VOLUME", essencia: "Cambará", volume: 1, romaneioCargaId: 3, valorMetroCubico: 100, fretePorMetroCubico: 10, numeroRomaneioCarga: "RC-3" }],
+    });
+
+    expect(resultado.porEssencia).toContainEqual(expect.objectContaining({ essencia: "Cambará", volumePecasM3: 0, custoPorM3: null }));
+  });
 });
 
 describe("consolidarRentabilidadeFinanceira", () => {
