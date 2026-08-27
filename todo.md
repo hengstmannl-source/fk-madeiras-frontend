@@ -841,3 +841,13 @@
 - [x] Atualizar a tela de rentabilidade com cobertura por custo real, referência e indisponibilidade, incluindo a base e o período da referência
 - [x] Cobrir a hierarquia, a média ponderada com frete, a ausência de referência, a não duplicidade e a interface responsiva com testes
 - [x] Documentar e publicar a atualização aprovada sem reclassificar registros históricos
+- [ ] Mapear a essência da produção e do consumo de toras para o detalhamento de rentabilidade por espécie
+- [ ] Consolidar matéria-prima, volume produzido, cobertura e custo por m³ por essência sem duplicar consumos
+- [ ] Expor o resumo por essência no contrato atual de rentabilidade por competência
+- [ ] Criar na tela de Rentabilidade da Madeira uma visualização responsiva por essência com custo, volume, cobertura e custo por m³
+- [ ] Cobrir cálculos multiespécie, ausência de custo, produção sem volume e interface com testes e validação visual
+- [ ] Documentar e publicar o detalhamento por essência sem alterar registros históricos
+- [x] Auditar em leitura os vínculos existentes entre produção, lote, estoque, saída e item de venda
+- [x] Medir em leitura a cobertura de lote e volume nas vendas, incluindo vendas com múltiplos lotes
+- [x] Auditar os custos específicos de venda já registrados, como frete comercial, comissão, impostos e taxas
+- [x] Documentar e apresentar a proposta de rentabilidade por essência, lote e venda, aguardando confirmação antes de implementar

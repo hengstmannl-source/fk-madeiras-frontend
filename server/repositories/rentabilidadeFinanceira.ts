@@ -1,6 +1,7 @@
 import { and, eq, gte, isNotNull, isNull, lt, ne, sql } from "drizzle-orm";
 import {
   abastecimentosDiesel,
+  aproveitamentosRomaneioProducao,
   categoriasFinanceiras,
   centrosCustosGerenciais,
   itensRomaneioProducao,
@@ -39,7 +40,7 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
   const fim = adicionarMes(inicio);
   const inicioReferencia = inicioJanelaDozeMeses(inicio);
 
-  const [titulos, abastecimentos, producoes, torasConsumidas, referenciasPreco, semCentro, semCompetencia, notasDieselExcluidas, titulosRomaneioExcluidos] = await Promise.all([
+  const [titulos, abastecimentos, producoes, volumesPecasPorEssencia, aproveitamentosPorEssencia, torasConsumidas, referenciasPreco, semCentro, semCompetencia, notasDieselExcluidas, titulosRomaneioExcluidos] = await Promise.all([
     db.select({ titulo: titulosFinanceiros, centro: centrosCustosGerenciais, categoria: categoriasFinanceiras })
       .from(titulosFinanceiros)
       .innerJoin(centrosCustosGerenciais, eq(titulosFinanceiros.centroCustoId, centrosCustosGerenciais.id))
@@ -75,6 +76,41 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
         lt(romaneiosProducao.dataProducao, fim),
       ))
       .groupBy(romaneiosProducao.id),
+    db.select({
+      producaoId: itensRomaneioProducao.romaneioId,
+      essencia: itensRomaneioProducao.madeiraNome,
+      volumePecas: sql<string>`coalesce(sum(${itensRomaneioProducao.volume}), 0)`,
+    })
+      .from(itensRomaneioProducao)
+      .innerJoin(romaneiosProducao, and(
+        eq(itensRomaneioProducao.romaneioId, romaneiosProducao.id),
+        eq(itensRomaneioProducao.empresaId, romaneiosProducao.empresaId),
+      ))
+      .where(and(
+        eq(itensRomaneioProducao.empresaId, empresaId),
+        eq(romaneiosProducao.estado, "confirmado"),
+        gte(romaneiosProducao.dataProducao, inicio),
+        lt(romaneiosProducao.dataProducao, fim),
+      ))
+      .groupBy(itensRomaneioProducao.romaneioId, itensRomaneioProducao.madeiraNome),
+    db.select({
+      producaoId: aproveitamentosRomaneioProducao.romaneioId,
+      essencia: aproveitamentosRomaneioProducao.madeiraNome,
+      volumeAproveitamento: sql<string>`coalesce(sum(${aproveitamentosRomaneioProducao.volume}), 0)`,
+      incluirAproveitamento: romaneiosProducao.incluirAproveitamentoNoRendimento,
+    })
+      .from(aproveitamentosRomaneioProducao)
+      .innerJoin(romaneiosProducao, and(
+        eq(aproveitamentosRomaneioProducao.romaneioId, romaneiosProducao.id),
+        eq(aproveitamentosRomaneioProducao.empresaId, romaneiosProducao.empresaId),
+      ))
+      .where(and(
+        eq(aproveitamentosRomaneioProducao.empresaId, empresaId),
+        eq(romaneiosProducao.estado, "confirmado"),
+        gte(romaneiosProducao.dataProducao, inicio),
+        lt(romaneiosProducao.dataProducao, fim),
+      ))
+      .groupBy(aproveitamentosRomaneioProducao.romaneioId, aproveitamentosRomaneioProducao.madeiraNome, romaneiosProducao.incluirAproveitamentoNoRendimento),
     db.select({
       producaoId: itensRomaneioToras.romaneioId,
       plaquetaId: plaquetas.id,
@@ -155,6 +191,21 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
       numeroRomaneioCarga: item.numeroRomaneioCarga ?? null,
     })),
     referenciasPrecoPorEssencia: referenciasPreco,
+    volumesProduzidosPorEssencia: [
+      ...volumesPecasPorEssencia.map((item) => ({
+        producaoId: item.producaoId,
+        essencia: item.essencia,
+        volumePecas: item.volumePecas,
+      })),
+      ...aproveitamentosPorEssencia
+        .filter((item) => item.incluirAproveitamento)
+        .map((item) => ({
+          producaoId: item.producaoId,
+          essencia: item.essencia,
+          volumePecas: 0,
+          volumeAproveitamento: item.volumeAproveitamento,
+        })),
+    ],
     periodoReferencia: { inicio: inicioReferencia, fimExclusivo: fim },
   });
 

@@ -28,6 +28,13 @@ export type ProducaoParaCusteioMateriaPrima = {
   incluirAproveitamento: boolean;
 };
 
+export type VolumeProduzidoPorEssencia = {
+  producaoId: number;
+  essencia: string;
+  volumePecas: number | string;
+  volumeAproveitamento?: number | string;
+};
+
 export type ToraConsumidaParaCusteioMateriaPrima = {
   producaoId: number;
   plaquetaId: number;
@@ -106,6 +113,27 @@ export type ResumoMateriaPrimaRentabilidade = {
     quantidadePlaquetas: number;
     volumeBaseM3: number;
   }>;
+  porEssencia: Array<{
+    essencia: string;
+    volumePecasM3: number;
+    volumeAproveitamentoM3: number;
+    volumeElegivelM3: number;
+    totalToras: number;
+    volumeTorasConsumidasM3: number;
+    volumeRastreavelM3: number;
+    volumeEstimadoM3: number;
+    volumeSemReferenciaM3: number;
+    coberturaRastreavelPercentual: number;
+    coberturaComEstimativaPercentual: number;
+    custoTorasRastreavel: number;
+    freteEntradaRastreavel: number;
+    custoTorasEstimado: number;
+    freteEntradaEstimado: number;
+    custoTotalReal: number;
+    custoTotalComEstimativa: number;
+    custoRealPorM3: number | null;
+    custoPorM3: number | null;
+  }>;
   torasSemReferencia: DetalheToraMateriaPrima[];
 };
 
@@ -126,6 +154,7 @@ export function calcularCusteioMateriaPrima(input: {
   producoes: ProducaoParaCusteioMateriaPrima[];
   torasConsumidas: ToraConsumidaParaCusteioMateriaPrima[];
   referenciasPrecoPorEssencia: ReferenciaPrecoEssencia[];
+  volumesProduzidosPorEssencia?: VolumeProduzidoPorEssencia[];
   periodoReferencia?: { inicio: Date; fimExclusivo: Date } | null;
 }): ResumoMateriaPrimaRentabilidade {
   const referencias = new Map<string, { essencia: string; valorTotalPonderado: number; freteTotalPonderado: number; volumeBaseM3: number; quantidadePlaquetas: number }>();
@@ -141,6 +170,46 @@ export function calcularCusteioMateriaPrima(input: {
     atual.volumeBaseM3 += volumeBaseM3;
     atual.quantidadePlaquetas += 1;
     referencias.set(chave, atual);
+  }
+
+  const porEssencia = new Map<string, {
+    essencia: string;
+    volumePecasM3: number;
+    volumeAproveitamentoM3: number;
+    totalToras: number;
+    volumeTorasConsumidasM3: number;
+    volumeRastreavelM3: number;
+    volumeEstimadoM3: number;
+    volumeSemReferenciaM3: number;
+    custoTorasRastreavel: number;
+    freteEntradaRastreavel: number;
+    custoTorasEstimado: number;
+    freteEntradaEstimado: number;
+  }>();
+  const obterEssencia = (essencia: string) => {
+    const nome = essencia.trim() || "Essência não informada";
+    const chave = normalizarEssencia(nome) || "essencia-nao-informada";
+    const atual = porEssencia.get(chave) ?? {
+      essencia: nome,
+      volumePecasM3: 0,
+      volumeAproveitamentoM3: 0,
+      totalToras: 0,
+      volumeTorasConsumidasM3: 0,
+      volumeRastreavelM3: 0,
+      volumeEstimadoM3: 0,
+      volumeSemReferenciaM3: 0,
+      custoTorasRastreavel: 0,
+      freteEntradaRastreavel: 0,
+      custoTorasEstimado: 0,
+      freteEntradaEstimado: 0,
+    };
+    porEssencia.set(chave, atual);
+    return atual;
+  };
+  for (const item of input.volumesProduzidosPorEssencia ?? []) {
+    const essencia = obterEssencia(item.essencia);
+    essencia.volumePecasM3 += numero(item.volumePecas);
+    essencia.volumeAproveitamentoM3 += numero(item.volumeAproveitamento);
   }
 
   const producoes = new Map<number, {
@@ -221,6 +290,9 @@ export function calcularCusteioMateriaPrima(input: {
 
     producao.totalToras += 1;
     producao.volumeTorasConsumidasM3 += volumeM3;
+    const essencia = obterEssencia(item.essencia);
+    essencia.totalToras += 1;
+    essencia.volumeTorasConsumidasM3 += volumeM3;
     if (possuiCustoRastreavel) {
       detalhe.situacao = "rastreavel";
       detalhe.valorMetroCubico = valorMetroCubico;
@@ -230,6 +302,9 @@ export function calcularCusteioMateriaPrima(input: {
       producao.volumeRastreavelM3 += volumeM3;
       producao.custoTorasRastreavel += detalhe.custoTora;
       producao.freteEntradaRastreavel += detalhe.freteEntrada;
+      essencia.volumeRastreavelM3 += volumeM3;
+      essencia.custoTorasRastreavel += detalhe.custoTora;
+      essencia.freteEntradaRastreavel += detalhe.freteEntrada;
     } else if (referenciaEssencia) {
       detalhe.situacao = "estimado_por_essencia";
       detalhe.valorMetroCubico = referenciaEssencia.valorMetroCubicoMedio;
@@ -238,8 +313,12 @@ export function calcularCusteioMateriaPrima(input: {
       producao.volumeEstimadoM3 += volumeM3;
       producao.custoTorasEstimado += detalhe.custoEstimado;
       producao.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
+      essencia.volumeEstimadoM3 += volumeM3;
+      essencia.custoTorasEstimado += detalhe.custoEstimado;
+      essencia.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
     } else {
       producao.volumeSemReferenciaM3 += volumeM3;
+      essencia.volumeSemReferenciaM3 += volumeM3;
       detalhe.motivoCustoIndisponivel = item.romaneioCargaId === null
         ? "Tora sem romaneio de entrada e sem referência da mesma essência."
         : "Romaneio de entrada sem custo identificável e sem referência da mesma essência.";
@@ -278,6 +357,21 @@ export function calcularCusteioMateriaPrima(input: {
 
   const custoTotalConhecido = total.custoTorasRastreavel + total.freteEntradaRastreavel;
   const custoTotalComEstimativa = custoTotalConhecido + total.custoTorasEstimado + total.freteEntradaEstimado;
+  const resumoPorEssencia = Array.from(porEssencia.values()).map((item) => {
+    const volumeElegivelM3 = item.volumePecasM3 + item.volumeAproveitamentoM3;
+    const custoTotalReal = item.custoTorasRastreavel + item.freteEntradaRastreavel;
+    const custoTotalComEstimativa = custoTotalReal + item.custoTorasEstimado + item.freteEntradaEstimado;
+    return {
+      ...item,
+      volumeElegivelM3,
+      coberturaRastreavelPercentual: item.volumeTorasConsumidasM3 > 0 ? (item.volumeRastreavelM3 / item.volumeTorasConsumidasM3) * 100 : 0,
+      coberturaComEstimativaPercentual: item.volumeTorasConsumidasM3 > 0 ? ((item.volumeRastreavelM3 + item.volumeEstimadoM3) / item.volumeTorasConsumidasM3) * 100 : 0,
+      custoTotalReal,
+      custoTotalComEstimativa,
+      custoRealPorM3: volumeElegivelM3 > 0 ? custoTotalReal / volumeElegivelM3 : null,
+      custoPorM3: volumeElegivelM3 > 0 ? custoTotalComEstimativa / volumeElegivelM3 : null,
+    };
+  }).sort((a, b) => b.custoTotalComEstimativa - a.custoTotalComEstimativa || a.essencia.localeCompare(b.essencia, "pt-BR"));
   return {
     ...total,
     coberturaRastreavelPercentual: total.volumeTorasConsumidasM3 > 0 ? (total.volumeRastreavelM3 / total.volumeTorasConsumidasM3) * 100 : 0,
@@ -295,6 +389,7 @@ export function calcularCusteioMateriaPrima(input: {
       quantidadePlaquetas: item.quantidadePlaquetas,
       volumeBaseM3: item.volumeBaseM3,
     })).sort((a, b) => a.essencia.localeCompare(b.essencia)),
+    porEssencia: resumoPorEssencia,
     torasSemReferencia,
   };
 }

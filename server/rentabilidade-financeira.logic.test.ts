@@ -44,6 +44,26 @@ describe("calcularCusteioMateriaPrima", () => {
     expect(resultado.torasSemReferencia).toHaveLength(1);
     expect(resultado.producoes[0]?.volumeElegivelM3).toBe(4);
   });
+
+  it("consolida custo, volume, cobertura e custo por m³ por essência sem ratear custos entre espécies", () => {
+    const resultado = calcularCusteioMateriaPrima({
+      producoes: [producao],
+      referenciasPrecoPorEssencia: [{ essencia: "Jatobá", volumeBase: 2, valorMetroCubico: 200, fretePorMetroCubico: 20 }],
+      volumesProduzidosPorEssencia: [
+        { producaoId: 1, essencia: "Cambará", volumePecas: 3 },
+        { producaoId: 1, essencia: "Jatobá", volumePecas: 1 },
+      ],
+      torasConsumidas: [
+        { producaoId: 1, plaquetaId: 20, plaquetaCodigo: "CAM-1", essencia: "Cambará", volume: 2, romaneioCargaId: 2, valorMetroCubico: 100, fretePorMetroCubico: 10, numeroRomaneioCarga: "RC-2" },
+        { producaoId: 1, plaquetaId: 21, plaquetaCodigo: "JAT-1", essencia: "Jatobá", volume: 1, romaneioCargaId: null, valorMetroCubico: null, fretePorMetroCubico: null, numeroRomaneioCarga: null },
+      ],
+    });
+
+    const cambara = resultado.porEssencia.find((item) => item.essencia === "Cambará");
+    const jatoba = resultado.porEssencia.find((item) => item.essencia === "Jatobá");
+    expect(cambara).toMatchObject({ volumePecasM3: 3, volumeTorasConsumidasM3: 2, custoTotalReal: 220, custoPorM3: 220 / 3, coberturaRastreavelPercentual: 100 });
+    expect(jatoba).toMatchObject({ volumePecasM3: 1, volumeTorasConsumidasM3: 1, custoTotalReal: 0, custoTotalComEstimativa: 220, custoPorM3: 220, coberturaRastreavelPercentual: 0, coberturaComEstimativaPercentual: 100 });
+  });
 });
 
 describe("consolidarRentabilidadeFinanceira", () => {
