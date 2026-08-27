@@ -823,3 +823,6 @@
 - [x] Simplificar a interface de Centros de Custo e Rentabilidade, removendo o lançamento paralelo e exibindo custos por competência e centro
 - [x] Cobrir migration, históricos sem classificação, competências, origens, cálculos e interface com testes e revisão visual
 - [x] Atualizar a documentação operacional e publicar a simplificação aprovada da Etapa 6E
+- [x] Auditar em leitura a cadeia existente de romaneio de entrada, plaqueta, tora, consumo, produção, lote e estoque para a Etapa 6F
+- [x] Medir a cobertura histórica de custo rastreável de toras e frete de entrada por produção própria, sem estimar valores ausentes
+- [x] Documentar e apresentar proposta técnica de leitura da matéria-prima por produção e competência, aguardando aprovação antes de implementar
