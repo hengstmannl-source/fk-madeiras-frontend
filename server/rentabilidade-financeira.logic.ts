@@ -16,6 +16,7 @@ export type ReferenciaPrecoEssencia = {
   essencia: string;
   volumeBase: number | string;
   valorMetroCubico: number | string;
+  fretePorMetroCubico: number | string;
 };
 
 export type ProducaoParaCusteioMateriaPrima = {
@@ -53,7 +54,8 @@ type DetalheToraMateriaPrima = {
   custoTora: number;
   freteEntrada: number;
   custoEstimado: number;
-  referenciaEssencia: { valorMetroCubicoMedio: number; quantidadePlaquetas: number; volumeBaseM3: number } | null;
+  referenciaEssencia: { valorMetroCubicoMedio: number; fretePorMetroCubicoMedio: number; quantidadePlaquetas: number; volumeBaseM3: number } | null;
+  motivoCustoIndisponivel: string | null;
 };
 
 export type ResumoMateriaPrimaRentabilidade = {
@@ -67,8 +69,12 @@ export type ResumoMateriaPrimaRentabilidade = {
   custoTorasRastreavel: number;
   freteEntradaRastreavel: number;
   custoTorasEstimado: number;
+  freteEntradaEstimado: number;
   custoTotalConhecido: number;
   custoTotalComEstimativa: number;
+  custoTotalReal: number;
+  custoTotalReferencia: number;
+  periodoReferencia: { inicio: Date; fimExclusivo: Date } | null;
   producoes: Array<{
     id: number;
     numero: string;
@@ -86,13 +92,17 @@ export type ResumoMateriaPrimaRentabilidade = {
     custoTorasRastreavel: number;
     freteEntradaRastreavel: number;
     custoTorasEstimado: number;
+    freteEntradaEstimado: number;
+    custoTotalReal: number;
     custoTotalComEstimativa: number;
+    custoRealPorM3: number | null;
     custoPorM3: number | null;
     toras: DetalheToraMateriaPrima[];
   }>;
   referenciasPorEssencia: Array<{
     essencia: string;
     valorMetroCubicoMedio: number;
+    fretePorMetroCubicoMedio: number;
     quantidadePlaquetas: number;
     volumeBaseM3: number;
   }>;
@@ -107,23 +117,27 @@ const numero = (valor: number | string | null | undefined) => {
 const normalizarEssencia = (valor: string) => valor.normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim().replace(/\s+/g, " ").toLocaleLowerCase("pt-BR");
 
 /**
- * Calcula o custo da matéria-prima pelo consumo físico. Só estima o valor da
- * tora quando a plaqueta consumida não possui romaneio de entrada e existe uma
- * referência de preço por m³ para a mesma essência. O frete nunca é estimado.
+ * Calcula o custo da matéria-prima pelo consumo físico. O custo real da tora e
+ * do frete de entrada tem prioridade. Na ausência de custo identificável, usa
+ * apenas uma referência ponderada da mesma essência (valor e frete por m³).
+ * Sem referência comparável, o custo permanece indisponível e não é inventado.
  */
 export function calcularCusteioMateriaPrima(input: {
   producoes: ProducaoParaCusteioMateriaPrima[];
   torasConsumidas: ToraConsumidaParaCusteioMateriaPrima[];
   referenciasPrecoPorEssencia: ReferenciaPrecoEssencia[];
+  periodoReferencia?: { inicio: Date; fimExclusivo: Date } | null;
 }): ResumoMateriaPrimaRentabilidade {
-  const referencias = new Map<string, { essencia: string; valorTotalPonderado: number; volumeBaseM3: number; quantidadePlaquetas: number }>();
+  const referencias = new Map<string, { essencia: string; valorTotalPonderado: number; freteTotalPonderado: number; volumeBaseM3: number; quantidadePlaquetas: number }>();
   for (const item of input.referenciasPrecoPorEssencia) {
     const volumeBaseM3 = numero(item.volumeBase);
     const valorMetroCubico = numero(item.valorMetroCubico);
+    const fretePorMetroCubico = numero(item.fretePorMetroCubico);
     const chave = normalizarEssencia(item.essencia);
     if (!chave || volumeBaseM3 <= 0 || valorMetroCubico <= 0) continue;
-    const atual = referencias.get(chave) ?? { essencia: item.essencia.trim(), valorTotalPonderado: 0, volumeBaseM3: 0, quantidadePlaquetas: 0 };
+    const atual = referencias.get(chave) ?? { essencia: item.essencia.trim(), valorTotalPonderado: 0, freteTotalPonderado: 0, volumeBaseM3: 0, quantidadePlaquetas: 0 };
     atual.valorTotalPonderado += volumeBaseM3 * valorMetroCubico;
+    atual.freteTotalPonderado += volumeBaseM3 * fretePorMetroCubico;
     atual.volumeBaseM3 += volumeBaseM3;
     atual.quantidadePlaquetas += 1;
     referencias.set(chave, atual);
@@ -144,6 +158,7 @@ export function calcularCusteioMateriaPrima(input: {
     custoTorasRastreavel: number;
     freteEntradaRastreavel: number;
     custoTorasEstimado: number;
+    freteEntradaEstimado: number;
     toras: DetalheToraMateriaPrima[];
   }>();
   for (const item of input.producoes) {
@@ -164,6 +179,7 @@ export function calcularCusteioMateriaPrima(input: {
       custoTorasRastreavel: 0,
       freteEntradaRastreavel: 0,
       custoTorasEstimado: 0,
+      freteEntradaEstimado: 0,
       toras: [],
     });
   }
@@ -179,7 +195,12 @@ export function calcularCusteioMateriaPrima(input: {
     const referencia = referencias.get(normalizarEssencia(item.essencia));
     const possuiCustoRastreavel = item.romaneioCargaId !== null && valorMetroCubico > 0;
     const referenciaEssencia = referencia && referencia.volumeBaseM3 > 0
-      ? { valorMetroCubicoMedio: referencia.valorTotalPonderado / referencia.volumeBaseM3, quantidadePlaquetas: referencia.quantidadePlaquetas, volumeBaseM3: referencia.volumeBaseM3 }
+      ? {
+        valorMetroCubicoMedio: referencia.valorTotalPonderado / referencia.volumeBaseM3,
+        fretePorMetroCubicoMedio: referencia.freteTotalPonderado / referencia.volumeBaseM3,
+        quantidadePlaquetas: referencia.quantidadePlaquetas,
+        volumeBaseM3: referencia.volumeBaseM3,
+      }
       : null;
 
     const detalhe: DetalheToraMateriaPrima = {
@@ -195,6 +216,7 @@ export function calcularCusteioMateriaPrima(input: {
       freteEntrada: 0,
       custoEstimado: 0,
       referenciaEssencia,
+      motivoCustoIndisponivel: null,
     };
 
     producao.totalToras += 1;
@@ -211,11 +233,16 @@ export function calcularCusteioMateriaPrima(input: {
     } else if (referenciaEssencia) {
       detalhe.situacao = "estimado_por_essencia";
       detalhe.valorMetroCubico = referenciaEssencia.valorMetroCubicoMedio;
+      detalhe.fretePorMetroCubico = referenciaEssencia.fretePorMetroCubicoMedio;
       detalhe.custoEstimado = volumeM3 * referenciaEssencia.valorMetroCubicoMedio;
       producao.volumeEstimadoM3 += volumeM3;
       producao.custoTorasEstimado += detalhe.custoEstimado;
+      producao.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
     } else {
       producao.volumeSemReferenciaM3 += volumeM3;
+      detalhe.motivoCustoIndisponivel = item.romaneioCargaId === null
+        ? "Tora sem romaneio de entrada e sem referência da mesma essência."
+        : "Romaneio de entrada sem custo identificável e sem referência da mesma essência.";
       torasSemReferencia.push(detalhe);
     }
     producao.toras.push(detalhe);
@@ -224,12 +251,15 @@ export function calcularCusteioMateriaPrima(input: {
   const producoesOrdenadas = Array.from(producoes.values()).map((item) => {
     const coberturaRastreavelPercentual = item.volumeTorasConsumidasM3 > 0 ? (item.volumeRastreavelM3 / item.volumeTorasConsumidasM3) * 100 : 0;
     const coberturaComEstimativaPercentual = item.volumeTorasConsumidasM3 > 0 ? ((item.volumeRastreavelM3 + item.volumeEstimadoM3) / item.volumeTorasConsumidasM3) * 100 : 0;
-    const custoTotalComEstimativa = item.custoTorasRastreavel + item.freteEntradaRastreavel + item.custoTorasEstimado;
+    const custoTotalReal = item.custoTorasRastreavel + item.freteEntradaRastreavel;
+    const custoTotalComEstimativa = custoTotalReal + item.custoTorasEstimado + item.freteEntradaEstimado;
     return {
       ...item,
       coberturaRastreavelPercentual,
       coberturaComEstimativaPercentual,
+      custoTotalReal,
       custoTotalComEstimativa,
+      custoRealPorM3: item.volumeElegivelM3 > 0 ? custoTotalReal / item.volumeElegivelM3 : null,
       custoPorM3: item.volumeElegivelM3 > 0 ? custoTotalComEstimativa / item.volumeElegivelM3 : null,
     };
   }).sort((a, b) => b.dataProducao.getTime() - a.dataProducao.getTime() || a.numero.localeCompare(b.numero));
@@ -243,20 +273,25 @@ export function calcularCusteioMateriaPrima(input: {
     custoTorasRastreavel: acumulado.custoTorasRastreavel + item.custoTorasRastreavel,
     freteEntradaRastreavel: acumulado.freteEntradaRastreavel + item.freteEntradaRastreavel,
     custoTorasEstimado: acumulado.custoTorasEstimado + item.custoTorasEstimado,
-  }), { totalTorasConsumidas: 0, volumeTorasConsumidasM3: 0, volumeRastreavelM3: 0, volumeEstimadoM3: 0, volumeSemReferenciaM3: 0, custoTorasRastreavel: 0, freteEntradaRastreavel: 0, custoTorasEstimado: 0 });
+    freteEntradaEstimado: acumulado.freteEntradaEstimado + item.freteEntradaEstimado,
+  }), { totalTorasConsumidas: 0, volumeTorasConsumidasM3: 0, volumeRastreavelM3: 0, volumeEstimadoM3: 0, volumeSemReferenciaM3: 0, custoTorasRastreavel: 0, freteEntradaRastreavel: 0, custoTorasEstimado: 0, freteEntradaEstimado: 0 });
 
   const custoTotalConhecido = total.custoTorasRastreavel + total.freteEntradaRastreavel;
-  const custoTotalComEstimativa = custoTotalConhecido + total.custoTorasEstimado;
+  const custoTotalComEstimativa = custoTotalConhecido + total.custoTorasEstimado + total.freteEntradaEstimado;
   return {
     ...total,
     coberturaRastreavelPercentual: total.volumeTorasConsumidasM3 > 0 ? (total.volumeRastreavelM3 / total.volumeTorasConsumidasM3) * 100 : 0,
     coberturaComEstimativaPercentual: total.volumeTorasConsumidasM3 > 0 ? ((total.volumeRastreavelM3 + total.volumeEstimadoM3) / total.volumeTorasConsumidasM3) * 100 : 0,
     custoTotalConhecido,
     custoTotalComEstimativa,
+    custoTotalReal: custoTotalConhecido,
+    custoTotalReferencia: total.custoTorasEstimado + total.freteEntradaEstimado,
+    periodoReferencia: input.periodoReferencia ?? null,
     producoes: producoesOrdenadas,
     referenciasPorEssencia: Array.from(referencias.values()).map((item) => ({
       essencia: item.essencia,
       valorMetroCubicoMedio: item.valorTotalPonderado / item.volumeBaseM3,
+      fretePorMetroCubicoMedio: item.freteTotalPonderado / item.volumeBaseM3,
       quantidadePlaquetas: item.quantidadePlaquetas,
       volumeBaseM3: item.volumeBaseM3,
     })).sort((a, b) => a.essencia.localeCompare(b.essencia)),
@@ -305,10 +340,15 @@ export function consolidarRentabilidadeFinanceira(input: {
       custosMateriaPrima: input.materiaPrima.custoTotalComEstimativa,
       custosMateriaPrimaRastreaveis: input.materiaPrima.custoTotalConhecido,
       custosMateriaPrimaEstimados: input.materiaPrima.custoTorasEstimado,
+      custosMateriaPrimaReferenciados: input.materiaPrima.custoTotalReferencia,
       custoIndustrialComMateriaPrima,
       custoTotalApropriado,
       volumeProprioM3,
+      custosMateriaPrimaPorM3: volumeProprioM3 > 0 ? input.materiaPrima.custoTotalComEstimativa / volumeProprioM3 : null,
+      custosIndustriaisPorM3: volumeProprioM3 > 0 ? industrialSemMateriaPrima / volumeProprioM3 : null,
+      custosComerciaisAdministrativosPorM3: volumeProprioM3 > 0 ? comercialAdministrativo / volumeProprioM3 : null,
       custoIndustrialPorM3: volumeProprioM3 > 0 ? custoIndustrialComMateriaPrima / volumeProprioM3 : null,
+      custoCompletoPorM3: volumeProprioM3 > 0 ? custoTotalApropriado / volumeProprioM3 : null,
       custoTotalPorM3: volumeProprioM3 > 0 ? custoTotalApropriado / volumeProprioM3 : null,
     },
     materiaPrima: input.materiaPrima,

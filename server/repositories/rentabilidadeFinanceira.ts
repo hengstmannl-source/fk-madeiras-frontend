@@ -19,6 +19,7 @@ import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 
 const adicionarMes = (data: Date) => new Date(data.getFullYear(), data.getMonth() + 1, 1, 12, 0, 0, 0);
+const inicioJanelaDozeMeses = (data: Date) => new Date(data.getFullYear(), data.getMonth() - 11, 1, 12, 0, 0, 0);
 const numero = (valor: unknown) => {
   const convertido = Number(valor ?? 0);
   return Number.isFinite(convertido) ? convertido : 0;
@@ -36,6 +37,7 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
   const empresaId = (await getEmpresaUnica()).id;
   const inicio = new Date(competencia.getFullYear(), competencia.getMonth(), 1, 12, 0, 0, 0);
   const fim = adicionarMes(inicio);
+  const inicioReferencia = inicioJanelaDozeMeses(inicio);
 
   const [titulos, abastecimentos, producoes, torasConsumidas, referenciasPreco, semCentro, semCompetencia, notasDieselExcluidas, titulosRomaneioExcluidos] = await Promise.all([
     db.select({ titulo: titulosFinanceiros, centro: centrosCustosGerenciais, categoria: categoriasFinanceiras })
@@ -107,11 +109,18 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
       essencia: plaquetas.madeiraNome,
       volumeBase: plaquetas.volumeInicial,
       valorMetroCubico: plaquetas.valorMetroCubico,
+      fretePorMetroCubico: romaneiosCargaToras.fretePorMetroCubico,
     })
       .from(plaquetas)
+      .innerJoin(romaneiosCargaToras, and(
+        eq(plaquetas.romaneioCargaId, romaneiosCargaToras.id),
+        eq(plaquetas.empresaId, romaneiosCargaToras.empresaId),
+      ))
       .where(and(
         eq(plaquetas.empresaId, empresaId),
         isNotNull(plaquetas.romaneioCargaId),
+        gte(romaneiosCargaToras.dataCarga, inicioReferencia),
+        lt(romaneiosCargaToras.dataCarga, fim),
       )),
     db.select({ quantidade: sql<number>`count(*)`, valor: sql<string>`coalesce(sum(${titulosFinanceiros.valorOriginal}), 0)` })
       .from(titulosFinanceiros)
@@ -146,6 +155,7 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
       numeroRomaneioCarga: item.numeroRomaneioCarga ?? null,
     })),
     referenciasPrecoPorEssencia: referenciasPreco,
+    periodoReferencia: { inicio: inicioReferencia, fimExclusivo: fim },
   });
 
   const componentes: ComponenteRentabilidadeFinanceira[] = [];

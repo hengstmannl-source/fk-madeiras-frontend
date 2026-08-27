@@ -1,92 +1,85 @@
-# FINANCEIRO V2 — Etapa 6F: matéria-prima por consumo físico e estimativa identificada
+# FINANCEIRO V2 — Etapa 6F: custo real prioritário e referência por essência
 
-**Status:** implementado após aprovação explícita.  
-**Escopo:** leitura de custo da matéria-prima pela tora efetivamente consumida na produção própria, com estimativa documentada por essência somente para tora sem romaneio de entrada.  
-**Preservação:** nenhum dado histórico, valor de plaqueta, romaneio, título financeiro, baixa, conciliação, estoque ou schema foi modificado por esta etapa.
+**Status:** implementado após confirmação explícita.  
+**Escopo:** leitura do custo da matéria-prima pela tora consumida na produção própria, com custo real prioritário e referência ponderada por essência somente quando a origem ou o custo real não estiver disponível.  
+**Preservação:** não houve migration, reclassificação ou escrita em plaquetas, romaneios, títulos, baixas, conciliações, estoque ou qualquer histórico.
 
-> Esta leitura é gerencial e auditável. Uma estimativa melhora a cobertura do indicador, mas não transforma a origem em custo histórico rastreável nem substitui uma conferência contábil quando aplicável.
+> A rentabilidade é uma leitura gerencial auditável. O custo de referência não substitui o custo real: ele é uma exceção identificada e exibida separadamente da origem rastreável.
 
-## 1. Regra econômica implantada
+## 1. Hierarquia de custo implantada
 
-A fonte econômica exclusiva da matéria-prima passou a ser a cadeia física `romaneio de entrada → plaqueta → consumo em produção própria`. Cada tora consumida apropria seu próprio custo de origem pela multiplicação do volume consumido pelo valor por metro cúbico da plaqueta. O frete de entrada segue a mesma tora e usa o frete por metro cúbico do respectivo romaneio de entrada.[1] [2]
+A fonte econômica exclusiva de matéria-prima é a cadeia `romaneio de entrada → plaqueta → consumo em produção própria`. O título financeiro derivado de `romaneio_carga` continua válido em Contas a Pagar, baixas, conciliação e Fluxo de Caixa, porém é excluído da Rentabilidade da Madeira para não representar a mesma compra duas vezes.[1] [2]
 
-O título financeiro derivado do romaneio de carga continua sendo o documento de Contas a Pagar, baixas, conciliação e Fluxo de Caixa. Ele é explicitamente excluído da Rentabilidade da Madeira para que uma compra de tora não seja somada novamente quando a tora for consumida.[3]
+| Prioridade | Situação da tora consumida | Custo utilizado | Transparência |
+|---:|---|---|---|
+| 1 | Possui romaneio de entrada e custo identificado | Valor real da tora por m³ + frete real de entrada por m³. | `Custo real rastreado`, com romaneio de origem. |
+| 2 | Não possui romaneio ou custo de origem identificável, mas há referência suficiente da mesma essência | Média ponderada por volume das entradas reais de mesma essência, incluindo tora e frete. | `Custo de referência por essência`, com média, quantidade de plaquetas e período. |
+| 3 | Não há custo real nem referência adequada da mesma essência | Nenhum valor é apropriado. | `Custo indisponível`, com volume destacado. |
 
-| Elemento | Fonte usada na rentabilidade | Tratamento |
-|---|---|---|
-| Valor da tora com origem | Plaqueta consumida, com `romaneioCargaId` e `valorMetroCubico` válido. | Rastreável: `volume consumido × valor/m³`. |
-| Frete de entrada | Romaneio de entrada da mesma plaqueta. | Rastreável: `volume consumido × frete/m³`. |
-| Tora sem romaneio de entrada | Média ponderada por volume das plaquetas de **mesma essência** que possuem preço de origem. | Estimativa identificada; não altera a plaqueta nem gera título. |
-| Frete de tora sem romaneio | Não é estimado. | Permanece R$ 0,00 no componente estimado e é exposto no detalhe. |
-| Tora sem referência da mesma essência | Nenhuma apropriação monetária. | Permanece sem referência e fora do custo até existir base documental. |
-| Título de romaneio de carga | Nunca é componente adicional de matéria-prima. | Excluído, preservado como documento financeiro. |
+Não é usada referência de outra essência, média global de madeiras, fornecedor genérico, categoria, texto livre ou valor aleatório. A referência é uma leitura da consulta e não é gravada na plaqueta, no romaneio ou em qualquer documento financeiro.[1] [4]
 
-## 2. Estimativa por essência e volume
+## 2. Referência ponderada por volume
 
-A regra solicitada usa a essência normalizada — sem acento, com espaços normalizados e sem distinção de maiúsculas/minúsculas — para localizar uma base comparável. O preço de referência é uma média **ponderada pelo volume físico da plaqueta de origem**, evitando que uma tora pequena tenha o mesmo peso de uma tora de maior volume.[2]
+A referência compara entradas reais da mesma essência em uma janela transparente de **doze meses completos**, incluindo a competência consultada. Para agosto de 2026, a tela apresenta o período de **01/09/2025 a 31/08/2026**. Essa limitação reduz o efeito de compras antigas e deixa a base verificável na própria interface.[1] [3]
 
 ```text
-preço médio estimado da essência = Σ(volume da plaqueta de origem × valor/m³) ÷ Σ(volume da plaqueta de origem)
+custo real por m³ = valor real da tora por m³ + frete real de entrada por m³
 
-valor estimado da tora consumida = volume consumido × preço médio estimado da mesma essência
+custo de referência por m³ da essência
+= Σ(volume da plaqueta de entrada × (valor da tora por m³ + frete de entrada por m³))
+  ÷ Σ(volume da plaqueta de entrada)
+
+custo de referência da tora consumida = volume consumido × custo de referência por m³
 ```
 
-A condição para estimar é restrita: a tora deve não possuir romaneio de entrada e deve existir ao menos uma referência de preço com volume e valor positivos para sua essência. Se a tora possui romaneio, mas o preço de origem está inválido, ou se não há referência da mesma essência, ela não recebe média substitutiva. Dessa forma, o sistema não mascara lacunas de origem nem cria estimativas amplas por fornecedor, data, categoria ou texto livre.[2]
+O peso é o volume da plaqueta de entrada, e não a quantidade de registros. Uma compra pequena e cara, portanto, não possui o mesmo peso de uma compra volumosa. A tora com origem não é substituída por média, ainda que exista referência mais recente.[1]
 
-## 3. Competência, produção própria e aproveitamento
+## 3. Competência, volume e custos unitários
 
-A competência da matéria-prima é a data do romaneio de **produção confirmada**, que representa o consumo físico da tora. A data de entrada, o vencimento, o pagamento e a baixa do título não deslocam esse custo entre competências. A consulta considera apenas produções próprias confirmadas; serragem de terceiros, lotes de terceiros e volumes de terceiros ficam fora da apropriação.[1] [3]
+A matéria-prima é reconhecida na data do romaneio de **produção própria confirmada**, que representa o consumo da tora. A data de entrada, vencimento, pagamento ou baixa do título não desloca esse custo entre competências. Serragem de terceiros, seus lotes e seus volumes são excluídos da base própria.[1] [2]
 
-O denominador de custo unitário é a soma dos itens de produção próprios confirmados. O aproveitamento só entra uma vez, quando o próprio romaneio registrou a opção `incluirAproveitamentoNoRendimento`. Não há multiplicação por percentual de rendimento ou reutilização de volume de lote como nova produção.[2]
+O volume comum é a soma dos itens de produção própria confirmados, acrescido do aproveitamento apenas quando o romaneio registrou `incluirAproveitamentoNoRendimento`. Cada volume é contado uma única vez.[1]
 
-| Indicador exibido | Composição |
+| Indicador unitário | Fórmula exibida |
 |---|---|
-| Toras e frete rastreáveis | Custo da tora com origem + frete de entrada rastreável. |
-| Valor estimado por essência | Apenas valor da tora sem romaneio, quando existe referência da mesma essência. |
-| Sem referência de preço | Volume sem base comparável; permanece fora do custo monetário. |
-| Custo de matéria-prima | Rastreável + estimado por essência, sempre discriminados. |
-| Cobertura rastreável | Volume com origem completa ÷ volume de tora consumida. |
-| Cobertura com estimativa | Volume rastreável + estimado ÷ volume de tora consumida. |
-| Custo por m³ da produção | Custo da produção ÷ volume elegível de peças, com aproveitamento somente quando marcado. |
+| Matéria-prima por m³ | `(custo real rastreado + custo de referência) ÷ volume próprio elegível`. |
+| Industrial por m³ | `(títulos industriais elegíveis + abastecimento de diesel classificado) ÷ volume próprio elegível`. |
+| Comercial/administrativo por m³ | `títulos comerciais/administrativos elegíveis ÷ volume próprio elegível`. |
+| Custo completo por m³ | `matéria-prima por m³ + industrial por m³ + comercial/administrativo por m³`. |
+
+Os componentes financeiros continuam a excluir títulos de `romaneio_carga`, títulos de `nota_diesel`, títulos cancelados e centros `nao_apropriavel`. Diesel entra somente pelo abastecimento classificado; matéria-prima entra somente pelo consumo físico da tora.[1] [2]
 
 ## 4. Interface e rastreabilidade
 
-A página **Financeiro → Rentabilidade da madeira** continua sendo a única tela de leitura por competência. Ela recebeu um painel de matéria-prima com valores rastreáveis, estimados e sem referência, além de cobertura física. A tabela **Custeio por produção** permite expandir cada romaneio e visualizar plaqueta, essência, volume, situação do custo, referência da estimativa, valor de tora, frete e total apropriado.[4]
+A página **Financeiro → Rentabilidade da madeira** continua sendo uma única leitura por competência. Os cartões passam a expor, separadamente, matéria-prima por m³, industrial por m³, comercial/administrativo por m³ e custo completo por m³. A base de volume de produção própria permanece visível para interpretar todos os valores unitários.[3]
 
-Os estados são apresentados com distinção visual e textual:
-
-| Situação | Rótulo na linha | Base apresentada |
+| Área | Conteúdo | Conduta quando há exceção |
 |---|---|---|
-| Rastreável | `Rastreável` | Número do romaneio de entrada e valor efetivo por m³. |
-| Estimado | `Estimado por essência` | Média ponderada por m³, quantidade de plaquetas e espécie usada como referência. |
-| Sem base | `Sem referência` | Motivo explícito; nenhum valor é inventado. |
+| Cobertura por custo real | Volume e percentual rastreáveis pela origem física. | Não é confundida com cobertura por referência. |
+| Matéria-prima consumida | Valores reais, de referência e indisponíveis; volumes correspondentes. | Referência traz essência, valor/m³, quantidade de plaquetas e período usado. |
+| Custeio por produção | Linha por romaneio e expansão por tora/plaqueta. | Cada linha identifica custo real, referência ou indisponível e mostra origem/base. |
+| Qualidade dos dados | Títulos sem centro, sem competência, notas de diesel e títulos de romaneio excluídos. | Mantém a exclusão de fontes duplicadas verificável. |
 
-O painel de qualidade também mostra títulos sem Centro de Custo, títulos sem competência, notas de diesel excluídas e títulos de romaneio de carga excluídos. Assim, a regra de fonte única permanece verificável na própria leitura, sem ocultar documentos financeiros que continuam válidos para suas funções originais.[3] [4]
+Na validação visual de agosto de 2026, os cartões exibiram R$ 1.291,53/m³ de matéria-prima, R$ 0,00/m³ industrial, R$ 0,00/m³ comercial/administrativo e R$ 1.291,53/m³ de custo completo sobre 119,779 m³ de produção própria. A cobertura por custo real foi de 91,7%, com 186,944 m³ reais e 16,828 m³ cobertos por referência. Os valores são calculados para a competência e não foram gravados na origem.[3]
 
-## 5. Cobertura observada na implantação
+## 5. Validação e integridade
 
-Na competência validada durante a implementação, a tela apresentou **213 toras consumidas**, cobertura física rastreável de **91,7%** e cobertura de **100%** após a estimativa específica por essência. O painel exibiu separadamente R$ 142.142,94 rastreáveis, R$ 12.001,45 estimados e R$ 154.144,39 de matéria-prima composta. Esses números são uma leitura do período validado; não foram gravados nos registros de origem.[4]
-
-## 6. Validação realizada
-
-| Camada | Resultado |
+| Camada verificada | Resultado |
 |---|---|
-| Lógica pura | Testes incluem tora e frete rastreáveis, estimativa ponderada por essência, ausência de referência, aproveitamento desmarcado, exclusão de títulos de romaneio e indicador sem produção. |
-| Regressão completa | `pnpm vitest run` aprovado: **73 arquivos e 374 testes**. |
+| Lógica pura | Cobre custo real prioritário, referência ponderada por essência com frete, ausência de referência, aproveitamento, separação unitária e exclusão de título de romaneio. |
 | TypeScript | `pnpm run check` aprovado. |
-| Build de produção | `pnpm run build` aprovado. O aviso de chunk Vite acima de 500 kB permanece não bloqueante. |
-| Revisão visual | Página validada em desktop e viewport móvel de 390 px, incluindo cartões, cobertura, tabela de custeio, alerta de qualidade e rolagem horizontal apenas dentro das tabelas extensas. |
-| Persistência | Não houve migration nem comando de escrita no banco nesta etapa. |
+| Testes completos | `pnpm vitest run` aprovado: **73 arquivos e 374 testes**. |
+| Build de produção | `pnpm run build` aprovado. Permanece apenas o aviso não bloqueante de chunk Vite acima de 500 kB. |
+| Interface | Desktop e viewport móvel de 390 px revisados; cartões, referência temporal, cobertura e tabelas continuam legíveis. Tabelas extensas usam rolagem no próprio componente, sem overflow da página. |
+| Auditoria de dados | Leitura final confirmou 52 títulos financeiros, 17 títulos de romaneio, 527 plaquetas, 213 consumos, 16 produções confirmadas e 1.376 lotes, sem criação ou alteração provocada por esta etapa. |
 
-A auditoria final, executada somente em leitura, confirmou **52 títulos financeiros** preservados e ainda sem Centro de Custo, dos quais **17** possuem origem `romaneio_carga` e também permanecem sem classificação. Foram mantidas **16 produções confirmadas**, **213 consumos de tora** e **203,772182 m³** de volume consumido. A implementação não grava a estimativa na origem: ela é calculada na consulta de rentabilidade e identificada no retorno.[1] [2]
+## 6. Limites preservados
 
-## 7. Limites preservados
-
-Esta etapa não reclassifica títulos, não altera romaneios ou plaquetas, não estima frete, não cria lançamento financeiro, não cria novo rateio e não usa o pagamento como competência. Também não altera as regras de diesel, folha, comissão, frete comercial, taxas ou custos de terceiros. Qualquer evolução dessas regras exige uma nova decisão de escopo.
+Esta atualização não altera preços históricos, não reclassifica centros, não cria nova rotina de cadastro de custos, não estima comissão, frete comercial, impostos, folha ou diesel e não usa data de pagamento como competência. Qualquer mudança futura nesses critérios exige decisão de escopo própria.
 
 ## Referências
 
-[1]: ../server/repositories/rentabilidadeFinanceira.ts "Consulta de rentabilidade: produção, consumo, plaqueta e romaneio"
-[2]: ../server/rentabilidade-financeira.logic.ts "Lógica pura de custeio físico, referência por essência e consolidação"
-[3]: ../server/repositories/financeiro.ts "Título derivado de romaneio de carga e ciclo financeiro canônico"
-[4]: ../client/src/pages/RentabilidadeMadeiraPage.tsx "Interface de cobertura, custeio por produção e detalhe rastreável"
+[1]: ../server/rentabilidade-financeira.logic.ts "Hierarquia de custeio físico, referência ponderada e consolidação"
+[2]: ../server/repositories/rentabilidadeFinanceira.ts "Consulta por competência, fontes econômicas e janela de referência"
+[3]: ../client/src/pages/RentabilidadeMadeiraPage.tsx "Cartões unitários, cobertura e custeio por produção"
+[4]: ../../upload/pasted_content_29.txt "Confirmação da regra de referência por essência"

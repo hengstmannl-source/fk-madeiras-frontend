@@ -835,3 +835,9 @@
 - [x] Auditar em leitura a separação atual entre matéria-prima, custos industriais e custos comerciais/administrativos na rentabilidade
 - [x] Medir em leitura a presença de estimativas, custos sem origem e possíveis duplicidades por título, produção, plaqueta e romaneio
 - [x] Documentar e apresentar a proposta de correção da consolidação e do custo por m³, aguardando confirmação antes de alterar regras
+- [x] Formalizar custo real prioritário, referência ponderada por essência e custo indisponível, incluindo frete real na referência
+- [x] Ajustar a lógica da matéria-prima para aplicar referência somente em exceções sem origem ou sem custo identificável
+- [x] Expor matéria-prima, industrial, comercial/administrativo e custo completo por m³ em campos separados
+- [x] Atualizar a tela de rentabilidade com cobertura por custo real, referência e indisponibilidade, incluindo a base e o período da referência
+- [x] Cobrir a hierarquia, a média ponderada com frete, a ausência de referência, a não duplicidade e a interface responsiva com testes
+- [x] Documentar e publicar a atualização aprovada sem reclassificar registros históricos
