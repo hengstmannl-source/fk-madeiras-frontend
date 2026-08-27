@@ -857,3 +857,14 @@
 - [x] Exibir a comparação entre preço líquido por m³ e custo total rastreável por venda, com cobertura parcial ou indisponível para origens físicas incompletas
 - [x] Cobrir receita líquida, múltiplos lotes, estornos, lacunas de rastreabilidade e apresentação responsiva com testes automatizados e validação visual
 - [x] Documentar e publicar a margem por venda, preservando os fluxos comerciais e financeiros existentes
+- [x] Investigar em leitura os motivos específicos de cobertura parcial ou indisponível nas vendas exibidas na rentabilidade
+- [x] Explicar a origem das lacunas e as alternativas seguras de regularização, sem alterar registros
+- [x] Definir a referência ponderada por essência aplicável exclusivamente a lotes históricos sem produção de origem
+- [x] Aplicar a estimativa identificada de matéria-prima e produção aos lotes históricos sem origem, sem substituir custos reais
+- [x] Exibir a origem estimada, o escopo da referência e a cobertura real versus estimada na margem por venda
+- [x] Cobrir referência histórica, ausência de referência, preservação de custo real e cobertura da margem com testes e validação visual
+- [x] Documentar e publicar a estimativa por média ponderada para lacunas históricas de lote
+- [x] Auditar valores por m³ de toras de Cedrinho e demais essências nos romaneios de carga elegíveis
+- [x] Substituir a referência baseada em consumo pela média ponderada dos romaneios de carga da mesma essência, sem frete
+- [x] Preservar custo real de origem e identificar claramente a estimativa de valor de tora por essência
+- [x] Validar a correção com custos de Cedrinho, ausência de referência, regressões e publicação documentada

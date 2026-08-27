@@ -6,7 +6,7 @@ const materiaPrimaVazia = () => calcularCusteioMateriaPrima({ producoes: [], tor
 describe("calcularCusteioMateriaPrima", () => {
   const producao = { id: 1, numero: "PRD-1", dataProducao: new Date("2026-08-10T12:00:00.000Z"), volumePecas: 4, volumeAproveitamento: 1, incluirAproveitamento: true };
 
-  it("prioriza tora e frete reais e usa referência ponderada da mesma essência com frete", () => {
+  it("prioriza tora e frete reais e usa somente o valor ponderado da tora da mesma essência como referência", () => {
     const resultado = calcularCusteioMateriaPrima({
       producoes: [producao],
       referenciasPrecoPorEssencia: [
@@ -22,13 +22,13 @@ describe("calcularCusteioMateriaPrima", () => {
     expect(resultado.custoTorasRastreavel).toBe(300);
     expect(resultado.freteEntradaRastreavel).toBe(40);
     expect(resultado.custoTorasEstimado).toBe(350);
-    expect(resultado.freteEntradaEstimado).toBe(50);
-    expect(resultado.custoTotalComEstimativa).toBe(740);
+    expect(resultado.freteEntradaEstimado).toBe(0);
+    expect(resultado.custoTotalComEstimativa).toBe(690);
     expect(resultado.coberturaRastreavelPercentual).toBe(50);
     expect(resultado.coberturaComEstimativaPercentual).toBe(100);
     expect(resultado.producoes[0]?.volumeElegivelM3).toBe(5);
-    expect(resultado.producoes[0]?.custoPorM3).toBe(148);
-    expect(resultado.producoes[0]?.toras[1]?.fretePorMetroCubico).toBe(25);
+    expect(resultado.producoes[0]?.custoPorM3).toBe(138);
+    expect(resultado.producoes[0]?.toras[1]?.fretePorMetroCubico).toBeNull();
     expect(resultado.producoes[0]?.toras[1]?.situacao).toBe("estimado_por_essencia");
   });
 
@@ -62,7 +62,7 @@ describe("calcularCusteioMateriaPrima", () => {
     const cambara = resultado.porEssencia.find((item) => item.essencia === "Cambará");
     const jatoba = resultado.porEssencia.find((item) => item.essencia === "Jatobá");
     expect(cambara).toMatchObject({ volumePecasM3: 3, volumeTorasConsumidasM3: 2, custoTotalReal: 220, custoPorM3: 220 / 3, coberturaRastreavelPercentual: 100 });
-    expect(jatoba).toMatchObject({ volumePecasM3: 1, volumeTorasConsumidasM3: 1, custoTotalReal: 0, custoTotalComEstimativa: 220, custoPorM3: 220, coberturaRastreavelPercentual: 0, coberturaComEstimativaPercentual: 100 });
+    expect(jatoba).toMatchObject({ volumePecasM3: 1, volumeTorasConsumidasM3: 1, custoTotalReal: 0, custoTotalComEstimativa: 200, custoPorM3: 200, coberturaRastreavelPercentual: 0, coberturaComEstimativaPercentual: 100 });
   });
 
   it("mantém o custo unitário por essência indisponível quando não há volume de produção válido", () => {

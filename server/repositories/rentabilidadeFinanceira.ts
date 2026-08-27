@@ -5,6 +5,7 @@ import {
   categoriasFinanceiras,
   centrosCustosGerenciais,
   clientes,
+  itensOrcamento,
   itensRomaneioProducao,
   itensRomaneioToras,
   lotesPecasSerradas,
@@ -21,7 +22,14 @@ import {
   consolidarRentabilidadeFinanceira,
   type ComponenteRentabilidadeFinanceira,
 } from "../rentabilidade-financeira.logic";
-import { calcularVolumeLiquidoVendido, consolidarMargemVendaRastreavel, type LoteVendidoParaRentabilidade } from "../rentabilidade-vendas.logic";
+import {
+  calcularVolumeLiquidoVendido,
+  consolidarMargemVendaRastreavel,
+  consolidarReferenciasHistoricasPorEssencia,
+  consolidarValoresToraRomaneioPorEssencia,
+  distribuirVolumeVendaHistoricaSemSaida,
+  type LoteVendidoParaRentabilidade,
+} from "../rentabilidade-vendas.logic";
 import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 
@@ -281,6 +289,7 @@ export async function obterRentabilidadeVendas(competencia: Date) {
   const empresaId = (await getEmpresaUnica()).id;
   const inicio = competenciaDaData(competencia);
   const fim = adicionarMes(inicio);
+  const inicioReferencia = inicioJanelaDozeMeses(inicio);
   const vendas = await db.select({ venda: orcamentos, cliente: clientes })
     .from(orcamentos)
     .innerJoin(clientes, and(eq(orcamentos.clienteId, clientes.id), eq(orcamentos.empresaId, clientes.empresaId)))
@@ -295,7 +304,7 @@ export async function obterRentabilidadeVendas(competencia: Date) {
   if (!vendas.length) return { competencia: inicio, periodoFimExclusivo: fim, vendas: [] };
 
   const vendasIds = vendas.map((item) => item.venda.id);
-  const [movimentos, taxas] = await Promise.all([
+  const [movimentos, taxas, itensVenda, referenciasValoresTora] = await Promise.all([
     db.select({ movimento: movimentacoesEstoqueSerrado, lote: lotesPecasSerradas, producao: romaneiosProducao })
       .from(movimentacoesEstoqueSerrado)
       .innerJoin(lotesPecasSerradas, and(
@@ -315,6 +324,25 @@ export async function obterRentabilidadeVendas(competencia: Date) {
       eq(taxasAdicionaisOrcamento.empresaId, empresaId),
       inArray(taxasAdicionaisOrcamento.orcamentoId, vendasIds),
     )),
+    db.select().from(itensOrcamento).where(and(
+      eq(itensOrcamento.empresaId, empresaId),
+      inArray(itensOrcamento.orcamentoId, vendasIds),
+    )),
+    db.select({
+      essencia: plaquetas.madeiraNome,
+      volumeBaseM3: plaquetas.volumeInicial,
+      valorMetroCubico: plaquetas.valorMetroCubico,
+    })
+      .from(plaquetas)
+      .innerJoin(romaneiosCargaToras, and(
+        eq(plaquetas.romaneioCargaId, romaneiosCargaToras.id),
+        eq(plaquetas.empresaId, romaneiosCargaToras.empresaId),
+      ))
+      .where(and(
+        eq(plaquetas.empresaId, empresaId),
+        gte(romaneiosCargaToras.dataCarga, inicioReferencia),
+        lt(romaneiosCargaToras.dataCarga, fim),
+      )),
   ]);
 
   const saidasPorLote = new Map<string, SaidaLiquidaLote>();
@@ -341,11 +369,47 @@ export async function obterRentabilidadeVendas(competencia: Date) {
       .filter((data): data is Date => data instanceof Date)
       .map(chaveCompetencia),
   ));
+  const competenciasReferencia = Array.from({ length: 12 }, (_, indice) => {
+    const data = new Date(inicio.getFullYear(), inicio.getMonth() - 11 + indice, 1, 12, 0, 0, 0);
+    return chaveCompetencia(data);
+  });
+  const competenciasNecessarias = Array.from(new Set([...competenciasProducoes, ...competenciasReferencia]));
   const resumosPorCompetencia = new Map<string, Awaited<ReturnType<typeof obterResumoRentabilidadeFinanceira>>>();
-  await Promise.all(competenciasProducoes.map(async (chave) => {
+  await Promise.all(competenciasNecessarias.map(async (chave) => {
     const [ano, mes] = chave.split("-").map(Number);
     resumosPorCompetencia.set(chave, await obterResumoRentabilidadeFinanceira(new Date(ano, mes, 1, 12, 0, 0, 0)));
   }));
+  const referenciasHistoricas = consolidarReferenciasHistoricasPorEssencia(
+    competenciasReferencia.flatMap((chave) => {
+      const resumo = resumosPorCompetencia.get(chave);
+      if (!resumo) return [];
+      return resumo.materiaPrima.porEssencia
+        .filter((item) => item.volumeElegivelM3 > 0 && item.coberturaComEstimativaPercentual >= 100 && item.custoPorM3 !== null)
+        .map((item) => ({
+          competencia: chave,
+          essencia: item.essencia,
+          volumeProduzidoM3: item.volumeElegivelM3,
+          custoMateriaPrima: item.custoTotalComEstimativa,
+          custoIndustrialPorM3: resumo.indicadores.custosIndustriaisPorM3,
+          custoComercialAdministrativoPorM3: resumo.indicadores.custosComerciaisAdministrativosPorM3,
+        }));
+    }),
+  );
+  const valoresToraPorEssencia = consolidarValoresToraRomaneioPorEssencia(referenciasValoresTora);
+  const obterReferenciaEstimada = (essencia: string) => {
+    const chaveEssencia = normalizarEssencia(essencia);
+    const valorTora = valoresToraPorEssencia.get(chaveEssencia);
+    if (!valorTora) return null;
+    const custosHistoricos = referenciasHistoricas.get(chaveEssencia);
+    return {
+      essencia: valorTora.essencia,
+      volumeBaseM3: valorTora.volumeBaseM3,
+      competenciasComDados: custosHistoricos?.competenciasComDados ?? 0,
+      custoMateriaPrimaPorM3: valorTora.valorMetroCubicoMedio,
+      custoIndustrialPorM3: custosHistoricos?.custoIndustrialPorM3 ?? null,
+      custoComercialAdministrativoPorM3: custosHistoricos?.custoComercialAdministrativoPorM3 ?? null,
+    };
+  };
 
   const taxasPorVenda = new Map<number, typeof taxas>();
   for (const taxa of taxas) {
@@ -364,26 +428,32 @@ export async function obterRentabilidadeVendas(competencia: Date) {
     const resumoCompetencia = producao ? resumosPorCompetencia.get(chaveCompetencia(producao.dataProducao)) : null;
     const producaoComCusto = producao && resumoCompetencia?.materiaPrima.producoes.find((item) => item.id === producao.id);
     const essenciaComCusto = producaoComCusto?.porEssencia.find((item: { essencia: string }) => normalizarEssencia(item.essencia) === normalizarEssencia(essencia));
+    const origemFisicaIncompleta = !lote.romaneioId || !producao || (lote.tipo === "peca" && lote.quantidadeProduzida <= 0);
     const volumeVendidoM3 = calcularVolumeLiquidoVendido({
       tipo: lote.tipo,
       quantidadeLiquida: saida.quantidadeLiquida,
       volumeLiquidoMovimentado: saida.volumeLiquido,
       volumeLote: lote.volume,
       quantidadeProduzida: lote.quantidadeProduzida,
+      permitirVolumeLoteSemProducao: lote.propriedade === "proprio" && origemFisicaIncompleta,
     });
+    const referenciaEstimada = lote.propriedade === "proprio" && origemFisicaIncompleta
+      ? obterReferenciaEstimada(essencia)
+      : null;
     let motivoIndisponibilidade: string | null = null;
     if (lote.propriedade !== "proprio") motivoIndisponibilidade = "Lote de madeira de terceiro não compõe a margem da madeira própria.";
-    else if (!lote.romaneioId || !producao) motivoIndisponibilidade = "Lote sem produção própria de origem rastreável.";
-    else if (lote.tipo === "peca" && lote.quantidadeProduzida <= 0) motivoIndisponibilidade = "Lote de peça sem quantidade produzida positiva; o volume de saída não pode ser reconstituído.";
-    else if (!essenciaComCusto) motivoIndisponibilidade = "Produção de origem sem custo de matéria-prima apurável para a essência do lote.";
-    else if (lote.tipo === "aproveitamento" && essenciaComCusto.volumeElegivelM3 <= 0) motivoIndisponibilidade = "Aproveitamento fora do volume elegível da produção de origem.";
-    const custoMateriaPrimaPorM3 = motivoIndisponibilidade ? null : essenciaComCusto?.custoPorM3 ?? null;
-    const custoIndustrialPorM3 = producao && resumoCompetencia?.indicadores.custosIndustriaisPorM3 != null
-      ? numero(resumoCompetencia.indicadores.custosIndustriaisPorM3)
-      : null;
-    const custoComercialAdministrativoPorM3 = producao && resumoCompetencia?.indicadores.custosComerciaisAdministrativosPorM3 != null
-      ? numero(resumoCompetencia.indicadores.custosComerciaisAdministrativosPorM3)
-      : null;
+    else if (origemFisicaIncompleta && !referenciaEstimada) motivoIndisponibilidade = "Lote histórico sem origem física e sem valor de tora comparável por essência nos romaneios de carga dos últimos 12 meses.";
+    else if (!origemFisicaIncompleta && !essenciaComCusto) motivoIndisponibilidade = "Produção de origem sem custo de matéria-prima apurável para a essência do lote.";
+    else if (!origemFisicaIncompleta && lote.tipo === "aproveitamento" && (essenciaComCusto?.volumeElegivelM3 ?? 0) <= 0) motivoIndisponibilidade = "Aproveitamento fora do volume elegível da produção de origem.";
+    const custoMateriaPrimaPorM3 = origemFisicaIncompleta
+      ? referenciaEstimada?.custoMateriaPrimaPorM3 ?? null
+      : essenciaComCusto?.custoPorM3 ?? null;
+    const custoIndustrialPorM3 = origemFisicaIncompleta
+      ? referenciaEstimada?.custoIndustrialPorM3 ?? null
+      : producao && resumoCompetencia?.indicadores.custosIndustriaisPorM3 != null ? numero(resumoCompetencia.indicadores.custosIndustriaisPorM3) : null;
+    const custoComercialAdministrativoPorM3 = origemFisicaIncompleta
+      ? referenciaEstimada?.custoComercialAdministrativoPorM3 ?? null
+      : producao && resumoCompetencia?.indicadores.custosComerciaisAdministrativosPorM3 != null ? numero(resumoCompetencia.indicadores.custosComerciaisAdministrativosPorM3) : null;
     const lotes = lotesPorVenda.get(saida.vendaId) ?? [];
     lotes.push({
       loteId: lote.id,
@@ -395,10 +465,55 @@ export async function obterRentabilidadeVendas(competencia: Date) {
       custoMateriaPrimaPorM3,
       custoIndustrialPorM3,
       custoComercialAdministrativoPorM3,
-      coberturaMateriaPrimaPercentual: essenciaComCusto?.coberturaComEstimativaPercentual ?? 0,
+      coberturaMateriaPrimaPercentual: origemFisicaIncompleta ? 0 : essenciaComCusto?.coberturaRastreavelPercentual ?? 0,
+      coberturaMateriaPrimaComEstimativaPercentual: origemFisicaIncompleta ? (referenciaEstimada ? 100 : 0) : essenciaComCusto?.coberturaComEstimativaPercentual ?? 0,
+      origemCustoMateriaPrima: origemFisicaIncompleta ? (referenciaEstimada ? "estimado_por_essencia" : "indisponivel") : "rastreavel",
+      referenciaEstimada,
       motivoIndisponibilidade,
     });
     lotesPorVenda.set(saida.vendaId, lotes);
+  }
+
+  const itensPorVenda = new Map<number, typeof itensVenda>();
+  for (const item of itensVenda) {
+    const atuais = itensPorVenda.get(item.orcamentoId) ?? [];
+    atuais.push(item);
+    itensPorVenda.set(item.orcamentoId, atuais);
+  }
+  for (const { venda } of vendas) {
+    if ((lotesPorVenda.get(venda.id) ?? []).length > 0) continue;
+    const itensFisicos = (itensPorVenda.get(venda.id) ?? []).filter((item) => item.tipoComercializacao === "metro_cubico");
+    const volumesEstimadosPorItem = distribuirVolumeVendaHistoricaSemSaida({
+      volumeTotalVendaM3: venda.totalVolume,
+      itens: itensFisicos,
+    });
+    const lotesEstimados = itensFisicos
+      .map((item) => {
+        const volumeVendidoM3 = volumesEstimadosPorItem.get(item.id) ?? null;
+        const referenciaEstimada = obterReferenciaEstimada(item.madeiraNome);
+        const motivoIndisponibilidade = volumeVendidoM3 === null
+          ? "Item de venda sem dimensões físicas suficientes para estimar o volume."
+          : !referenciaEstimada
+            ? "Venda entregue sem saída de estoque e sem valor de tora comparável por essência nos romaneios de carga dos últimos 12 meses."
+            : null;
+        return {
+          loteId: null,
+          itemVendaId: item.id,
+          essencia: item.madeiraNome,
+          tipo: "peca" as const,
+          quantidadeLiquida: numero(item.quantidade),
+          volumeVendidoM3,
+          custoMateriaPrimaPorM3: referenciaEstimada?.custoMateriaPrimaPorM3 ?? null,
+          custoIndustrialPorM3: referenciaEstimada?.custoIndustrialPorM3 ?? null,
+          custoComercialAdministrativoPorM3: referenciaEstimada?.custoComercialAdministrativoPorM3 ?? null,
+          coberturaMateriaPrimaPercentual: 0,
+          coberturaMateriaPrimaComEstimativaPercentual: referenciaEstimada ? 100 : 0,
+          origemCustoMateriaPrima: referenciaEstimada ? "estimado_por_essencia" as const : "indisponivel" as const,
+          referenciaEstimada,
+          motivoIndisponibilidade,
+        } satisfies LoteVendidoParaRentabilidade;
+      });
+    if (lotesEstimados.length) lotesPorVenda.set(venda.id, lotesEstimados);
   }
 
   return {

@@ -310,7 +310,8 @@ export function calcularCusteioMateriaPrima(input: {
     const referenciaEssencia = referencia && referencia.volumeBaseM3 > 0
       ? {
         valorMetroCubicoMedio: referencia.valorTotalPonderado / referencia.volumeBaseM3,
-        fretePorMetroCubicoMedio: referencia.freteTotalPonderado / referencia.volumeBaseM3,
+        /** Frete só é custo real de uma tora com romaneio de origem. */
+        fretePorMetroCubicoMedio: 0,
         quantidadePlaquetas: referencia.quantidadePlaquetas,
         volumeBaseM3: referencia.volumeBaseM3,
       }
@@ -359,15 +360,13 @@ export function calcularCusteioMateriaPrima(input: {
     } else if (referenciaEssencia) {
       detalhe.situacao = "estimado_por_essencia";
       detalhe.valorMetroCubico = referenciaEssencia.valorMetroCubicoMedio;
-      detalhe.fretePorMetroCubico = referenciaEssencia.fretePorMetroCubicoMedio;
+      detalhe.fretePorMetroCubico = null;
       detalhe.custoEstimado = volumeM3 * referenciaEssencia.valorMetroCubicoMedio;
       producao.volumeEstimadoM3 += volumeM3;
       producao.custoTorasEstimado += detalhe.custoEstimado;
-      producao.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
       for (const essencia of essencias) {
         essencia.volumeEstimadoM3 += volumeM3;
         essencia.custoTorasEstimado += detalhe.custoEstimado;
-        essencia.freteEntradaEstimado += volumeM3 * referenciaEssencia.fretePorMetroCubicoMedio;
       }
     } else {
       producao.volumeSemReferenciaM3 += volumeM3;
@@ -429,7 +428,7 @@ export function calcularCusteioMateriaPrima(input: {
     referenciasPorEssencia: Array.from(referencias.values()).map((item) => ({
       essencia: item.essencia,
       valorMetroCubicoMedio: item.valorTotalPonderado / item.volumeBaseM3,
-      fretePorMetroCubicoMedio: item.freteTotalPonderado / item.volumeBaseM3,
+      fretePorMetroCubicoMedio: 0,
       quantidadePlaquetas: item.quantidadePlaquetas,
       volumeBaseM3: item.volumeBaseM3,
     })).sort((a, b) => a.essencia.localeCompare(b.essencia)),

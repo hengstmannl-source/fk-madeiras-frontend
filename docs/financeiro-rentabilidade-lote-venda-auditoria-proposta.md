@@ -3,7 +3,7 @@
 **Status:** regra comercial confirmada; leitura implementada e validada localmente.
 **Escopo deste documento:** registrar a auditoria da cadeia existente entre produção, lote, estoque e venda e a implementação da leitura de rentabilidade que preserva fonte única, múltiplos lotes por venda e cobertura explícita de custo.
 
-> A rentabilidade por venda deve usar a saída física de estoque como evidência do lote consumido. Um item vendido pode ter várias saídas e, portanto, vários lotes; o custo não pode ser substituído por uma média global da essência.[1] [2]
+> A rentabilidade por venda deve usar a saída física de estoque como evidência do lote consumido. Um item vendido pode ter várias saídas e, portanto, vários lotes; custo real de origem tem prioridade. Apenas para uma lacuna histórica de origem, a exceção autorizada é a média ponderada do **valor da tora** nos romaneios de carga da mesma essência, sem frete.[1] [2]
 
 ## 1. Resultado da auditoria de integração
 
@@ -23,7 +23,7 @@ Um mesmo item de venda pode possuir mais de uma movimentação de saída, com lo
 | Múltiplos lotes | Várias movimentações podem apontar ao mesmo item da venda. | A soma deve ocorrer por movimentação/lote, sem escolher um lote arbitrário. |
 | Volume da saída | A movimentação armazena quantidade e volume; o lote conserva quantidade produzida e volume. | Para peças, o volume é reconstituído pela quantidade líquida × volume do lote ÷ quantidade produzida, pois movimentos históricos podem registrar volume zero. Aproveitamento usa o volume líquido movimentado. |
 
-As consultas de leitura também confirmaram que há situações históricas sem um vínculo físico suficiente para custo por lote ou com dados de quantidade que não permitem derivação segura de volume. Esses registros não devem receber custo aproximado por regra geral. A interface futura deve classificá-los como **custo de madeira indisponível** e informar o motivo.[1]
+As consultas de leitura também confirmaram que há situações históricas sem um vínculo físico suficiente para custo por lote ou com dados de quantidade que não permitem derivação segura de volume. Quando houver volume mensurável e referência de romaneio de carga da mesma essência, esses registros recebem somente a estimativa autorizada de valor da tora, identificada como referência. Sem volume ou sem referência comparável, o custo permanece **indisponível** e a interface informa o motivo.[1]
 
 ## 2. Custo direto da madeira por essência e lote
 
@@ -35,7 +35,7 @@ O custo direto de madeira pode ser rastreado em duas camadas complementares, sem
 | **Lote** | Item de produção que originou o lote, mais a distribuição da matéria-prima daquela produção pelos volumes próprios elegíveis. | Cada lote recebe custo unitário de sua produção de origem; movimentações de saída apropriam apenas o volume que saiu. |
 | **Venda** | Soma das movimentações de saída vinculadas aos itens da venda. | Uma venda com vários lotes soma os custos individuais de todos os lotes; não usa média global da espécie. |
 
-Para lote próprio, a proposta calcula o custo de matéria-prima da produção pela cadeia de tora consumida. Esse valor é dividido pelo volume próprio elegível da mesma produção e aplicado ao volume do lote que foi efetivamente vendido. Quando a produção tiver matéria-prima por referência de essência, o lote e a venda apresentam a parcela como **referência**, sem apagar a distinção do custo real. Quando não houver base, o custo permanece indisponível.[2] [4]
+Para lote próprio, a proposta calcula o custo de matéria-prima da produção pela cadeia de tora consumida. Esse valor é dividido pelo volume próprio elegível da mesma produção e aplicado ao volume do lote que foi efetivamente vendido. Quando a produção tiver matéria-prima por referência de essência, o lote e a venda apresentam a parcela como **referência**, sem apagar a distinção do custo real. Essa referência corresponde à média ponderada por volume do valor das toras da mesma essência nos romaneios de carga elegíveis, sem frete. Quando não houver base, o custo permanece indisponível.[2] [4]
 
 ```text
 custo unitário do lote = custo de matéria-prima da produção de origem ÷ volume próprio elegível da produção
@@ -60,7 +60,7 @@ Consequentemente, frete comercial e comissão **não são novamente somados ao c
 | Impostos e taxas cobrados | `taxaCalculada` e taxas adicionais. | Permanecem fora da receita da madeira e são apenas informativos até existir uma despesa financeira classificada. |
 | Custos comercial/administrativo | Títulos classificados por Centro de Custo na competência da produção de origem. | São aplicados por m³, separadamente de frete e comissão. |
 
-Assim, a comparação solicitada é expressa como: **preço líquido da madeira por m³ = (subtotal − desconto − frete comercial − comissão) ÷ volume negociado**. A margem só é considerada determinada quando todos os lotes físicos da venda têm volume e custo rastreáveis; do contrário, a tela mostra os custos conhecidos, a cobertura e a margem como parcial ou indisponível, sem média global.[1] [2]
+Assim, a comparação solicitada é expressa como: **preço líquido da madeira por m³ = (subtotal − desconto − frete comercial − comissão) ÷ volume negociado**. A margem é identificada como estimada quando algum lote histórico usa a média de romaneios de carga da mesma essência; é parcial ou indisponível quando ainda faltar volume ou referência comparável.[1] [2]
 
 ## 4. Proposta de apresentação
 
@@ -70,9 +70,9 @@ A tela permanecerá em **Financeiro → Rentabilidade da madeira**. A nova leitu
 |---|---|---|
 | Resumo por essência | Custo de madeira, volume produzido, volume vendido, cobertura e custo de matéria-prima por m³. | Não rateia industrial ou comercial por espécie sem regra específica. |
 | Lotes vendidos | Número do lote, espécie, produção de origem, volume vendido, custo por m³, custo da saída e situação de rastreabilidade. | Cada linha usa a origem física do lote. |
-| Venda | Receita líquida, custo de madeira, frete comercial, comissão, impostos/taxas classificados, margem bruta e margem após custos específicos. | Custos comerciais só entram se estiverem explicitamente marcados como custo. |
+| Venda | Receita líquida, custo de madeira, frete comercial, comissão, custos industrial e comercial/administrativo e margem. | Frete e comissão reduzem a receita uma única vez; estimativas de madeira ficam identificadas. |
 | Múltiplos lotes | Expansão dentro da venda com todos os lotes e volumes que atenderam cada item. | Não há média global ou ocultação dos lotes. |
-| Cobertura e alertas | Venda/lote com custo real, referência ou indisponível; item sem lote; saída com volume não derivável; taxa sem classificação de custo. | A margem fica identificada como parcial quando faltar custo direto de madeira. |
+| Cobertura e alertas | Venda/lote com custo real, referência ou indisponível; item sem lote; saída com volume não derivável; taxa sem classificação de custo. | A média de romaneio da mesma essência só é usada em lacuna histórica mensurável; a margem fica parcial quando ainda faltar custo direto de madeira. |
 
 Os custos industriais e comercial/administrativos de competência continuam como análise mensal por Centro de Custo. Eles não serão misturados à margem direta de uma venda, pois o escopo não definiu um direcionador auditável para distribuí-los por pedido, essência ou lote.[2] [4]
 
@@ -93,6 +93,12 @@ Após a confirmação da regra comercial, a tela **Financeiro → Rentabilidade 
 > **Regra aplicada: frete comercial e comissão reduzem uma única vez a receita bruta da madeira; a margem compara a receita líquida por m³ com matéria-prima, produção e comercial/administrativo rastreáveis.**
 
 A validação automatizada cobriu a composição de receita líquida, a exclusão de frete e comissão do custo, lacunas de origem física e a reconstrução de volume para peça, estorno líquido e aproveitamento. A interface foi verificada em desktop e móvel; os testes de tipos, a suíte completa e a geração de produção concluíram sem erro. O aviso de tamanho de chunk do Vite permanece não bloqueante.
+
+### 6.1 Correção da referência para lacunas históricas
+
+A regra foi corrigida após a conferência operacional: a referência não deve depender de tora já consumida em produção. Para uma tora, produção ou lote histórico sem custo real de origem, o sistema procura nos romaneios de carga elegíveis da janela de referência as toras com a **mesma essência** e `valorMetroCubico` válido. A estimativa é a média ponderada por volume desse valor; o frete de entrada não é estimado. A tela passa a informar expressamente “valor de tora por essência” e “frete não estimado”.
+
+Essa exceção não substitui custo real, não altera romaneios, plaquetas, estoque, vendas, títulos ou baixas, e não permite referência entre essências. Sem volume mensurável da saída ou sem romaneio comparável da mesma essência, a lacuna continua indisponível.
 
 ## Referências
 
