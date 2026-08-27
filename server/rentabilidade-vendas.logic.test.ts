@@ -112,11 +112,11 @@ describe("consolidarMargemVendaRastreavel", () => {
     });
   });
 
-  it("calcula a média ponderada pelo volume das toras da mesma essência e ignora toras sem valor", () => {
+  it("calcula a média ponderada de tora e frete de entrada pelo volume da mesma essência, sem confundir com frete comercial", () => {
     const referencias = consolidarValoresToraRomaneioPorEssencia([
-      { essencia: "Cedrinho", volumeBaseM3: 2, valorMetroCubico: 900 },
-      { essencia: "CEDRINHO", volumeBaseM3: 6, valorMetroCubico: 1_100 },
-      { essencia: "Cedrinho", volumeBaseM3: 4, valorMetroCubico: null },
+      { essencia: "Cedrinho", volumeBaseM3: 2, valorMetroCubico: 900, fretePorMetroCubico: 100 },
+      { essencia: "CEDRINHO", volumeBaseM3: 6, valorMetroCubico: 1_100, fretePorMetroCubico: 50 },
+      { essencia: "Cedrinho", volumeBaseM3: 4, valorMetroCubico: null, fretePorMetroCubico: 200 },
       { essencia: "Cambará", volumeBaseM3: 3, valorMetroCubico: 1_500 },
     ]);
 
@@ -124,6 +124,8 @@ describe("consolidarMargemVendaRastreavel", () => {
       essencia: "Cedrinho",
       volumeBaseM3: 8,
       valorMetroCubicoMedio: 1_050,
+      freteEntradaPorM3Medio: 62.5,
+      custoMateriaPrimaPorM3Medio: 1_112.5,
       quantidadeToras: 2,
     });
     expect(referencias.get("CAMBARA")?.valorMetroCubicoMedio).toBe(1_500);

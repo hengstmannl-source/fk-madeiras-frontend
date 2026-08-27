@@ -6,6 +6,8 @@ export type ReferenciaCustoHistoricoVenda = {
   volumeBaseM3: number;
   competenciasComDados: number;
   custoMateriaPrimaPorM3: number;
+  valorToraPorM3: number;
+  freteEntradaPorM3: number;
   custoIndustrialPorM3: number | null;
   custoComercialAdministrativoPorM3: number | null;
 };
@@ -14,6 +16,7 @@ export type ObservacaoValorToraRomaneio = {
   essencia: string;
   volumeBaseM3: number | string | null | undefined;
   valorMetroCubico: number | string | null | undefined;
+  fretePorMetroCubico?: number | string | null | undefined;
 };
 
 export type ObservacaoReferenciaCustoHistoricoVenda = {
@@ -101,6 +104,8 @@ export function consolidarReferenciasHistoricasPorEssencia(input: ObservacaoRefe
     volumeBaseM3: item.volumeBaseM3,
     competenciasComDados: item.competencias.size,
     custoMateriaPrimaPorM3: item.custoMateriaPrima / item.volumeBaseM3,
+    valorToraPorM3: item.custoMateriaPrima / item.volumeBaseM3,
+    freteEntradaPorM3: 0,
     custoIndustrialPorM3: item.volumeIndustrial > 0 ? item.custoIndustrial / item.volumeIndustrial : null,
     custoComercialAdministrativoPorM3: item.volumeComercialAdministrativo > 0 ? item.custoComercialAdministrativo / item.volumeComercialAdministrativo : null,
   } satisfies ReferenciaCustoHistoricoVenda]));
@@ -109,19 +114,22 @@ export function consolidarReferenciasHistoricasPorEssencia(input: ObservacaoRefe
 /**
  * Forma a referência de matéria-prima pelos romaneios de carga. Somente toras
  * da mesma essência com valor por m³ informado participam da média ponderada.
- * Frete não integra a estimativa e permanece exclusivo da origem rastreável.
+ * O frete de entrada do mesmo romaneio integra a matéria-prima; frete comercial
+ * de madeira serrada não é recebido nesta função e permanece fora do custo.
  */
 export function consolidarValoresToraRomaneioPorEssencia(input: ObservacaoValorToraRomaneio[]) {
-  const acumulados = new Map<string, { essencia: string; volumeBaseM3: number; valorTotal: number; quantidadeToras: number }>();
+  const acumulados = new Map<string, { essencia: string; volumeBaseM3: number; valorTotal: number; freteTotal: number; quantidadeToras: number }>();
   for (const item of input) {
     const essencia = item.essencia.trim();
     const chave = normalizarEssencia(essencia);
     const volume = numeroSeguro(item.volumeBaseM3);
     const valorMetroCubico = Number(item.valorMetroCubico);
     if (!chave || volume <= 0 || !Number.isFinite(valorMetroCubico) || valorMetroCubico <= 0) continue;
-    const atual = acumulados.get(chave) ?? { essencia, volumeBaseM3: 0, valorTotal: 0, quantidadeToras: 0 };
+    const fretePorMetroCubico = numeroSeguro(item.fretePorMetroCubico);
+    const atual = acumulados.get(chave) ?? { essencia, volumeBaseM3: 0, valorTotal: 0, freteTotal: 0, quantidadeToras: 0 };
     atual.volumeBaseM3 += volume;
     atual.valorTotal += volume * valorMetroCubico;
+    atual.freteTotal += volume * fretePorMetroCubico;
     atual.quantidadeToras += 1;
     acumulados.set(chave, atual);
   }
@@ -129,6 +137,8 @@ export function consolidarValoresToraRomaneioPorEssencia(input: ObservacaoValorT
     essencia: item.essencia,
     volumeBaseM3: item.volumeBaseM3,
     valorMetroCubicoMedio: item.valorTotal / item.volumeBaseM3,
+    freteEntradaPorM3Medio: item.freteTotal / item.volumeBaseM3,
+    custoMateriaPrimaPorM3Medio: (item.valorTotal + item.freteTotal) / item.volumeBaseM3,
     quantidadeToras: item.quantidadeToras,
   }]));
 }

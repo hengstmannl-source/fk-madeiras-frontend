@@ -332,6 +332,7 @@ export async function obterRentabilidadeVendas(competencia: Date) {
       essencia: plaquetas.madeiraNome,
       volumeBaseM3: plaquetas.volumeInicial,
       valorMetroCubico: plaquetas.valorMetroCubico,
+      fretePorMetroCubico: romaneiosCargaToras.fretePorMetroCubico,
     })
       .from(plaquetas)
       .innerJoin(romaneiosCargaToras, and(
@@ -405,7 +406,9 @@ export async function obterRentabilidadeVendas(competencia: Date) {
       essencia: valorTora.essencia,
       volumeBaseM3: valorTora.volumeBaseM3,
       competenciasComDados: custosHistoricos?.competenciasComDados ?? 0,
-      custoMateriaPrimaPorM3: valorTora.valorMetroCubicoMedio,
+      custoMateriaPrimaPorM3: valorTora.custoMateriaPrimaPorM3Medio,
+      valorToraPorM3: valorTora.valorMetroCubicoMedio,
+      freteEntradaPorM3: valorTora.freteEntradaPorM3Medio,
       custoIndustrialPorM3: custosHistoricos?.custoIndustrialPorM3 ?? null,
       custoComercialAdministrativoPorM3: custosHistoricos?.custoComercialAdministrativoPorM3 ?? null,
     };

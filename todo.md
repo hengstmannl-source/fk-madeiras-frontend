@@ -868,3 +868,10 @@
 - [x] Substituir a referência baseada em consumo pela média ponderada dos romaneios de carga da mesma essência, sem frete
 - [x] Preservar custo real de origem e identificar claramente a estimativa de valor de tora por essência
 - [x] Validar a correção com custos de Cedrinho, ausência de referência, regressões e publicação documentada
+- [x] Comparar a implementação atual da Etapa 6 com a metodologia final de matéria-prima, industrial e comercial/administrativa
+- [x] Auditar em leitura a cobertura de toras, volumes, produção própria, produção de terceiros e custos por centro e competência
+- [x] Confrontar os resultados auditados com a tela de Rentabilidade da Madeira e registrar divergências sem alterar dados
+- [x] Elaborar o relatório final de validação da Etapa 6, incluindo qualquer regra conflitante que exija confirmação
+- [x] Incluir o frete do romaneio de carga de toras no custo real e na referência ponderada por essência
+- [x] Manter frete comercial de madeira serrada fora do custo da tora e explicitamente separado na margem da venda
+- [x] Validar a separação de fretes em testes, interface e documentação antes de publicar a regra confirmada
