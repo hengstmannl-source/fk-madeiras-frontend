@@ -4,10 +4,17 @@ import {
   categoriasFinanceiras,
   centrosCustosGerenciais,
   itensRomaneioProducao,
+  itensRomaneioToras,
+  plaquetas,
+  romaneiosCargaToras,
   romaneiosProducao,
   titulosFinanceiros,
 } from "../../drizzle/schema";
-import { consolidarRentabilidadeFinanceira, type ComponenteRentabilidadeFinanceira } from "../rentabilidade-financeira.logic";
+import {
+  calcularCusteioMateriaPrima,
+  consolidarRentabilidadeFinanceira,
+  type ComponenteRentabilidadeFinanceira,
+} from "../rentabilidade-financeira.logic";
 import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 
@@ -17,6 +24,12 @@ const numero = (valor: unknown) => {
   return Number.isFinite(convertido) ? convertido : 0;
 };
 
+/**
+ * Leitura mensal da rentabilidade. A matéria-prima vem exclusivamente das
+ * toras efetivamente consumidas na produção própria; títulos de romaneio
+ * permanecem no Financeiro, mas são excluídos desta composição para não
+ * representar o mesmo evento econômico duas vezes.
+ */
 export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
   const db = await getDb();
   if (!db) throw new Error("Banco de dados indisponível.");
@@ -24,7 +37,7 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
   const inicio = new Date(competencia.getFullYear(), competencia.getMonth(), 1, 12, 0, 0, 0);
   const fim = adicionarMes(inicio);
 
-  const [titulos, abastecimentos, volumes, semCentro, semCompetencia, excluidos] = await Promise.all([
+  const [titulos, abastecimentos, producoes, torasConsumidas, referenciasPreco, semCentro, semCompetencia, notasDieselExcluidas, titulosRomaneioExcluidos] = await Promise.all([
     db.select({ titulo: titulosFinanceiros, centro: centrosCustosGerenciais, categoria: categoriasFinanceiras })
       .from(titulosFinanceiros)
       .innerJoin(centrosCustosGerenciais, eq(titulosFinanceiros.centroCustoId, centrosCustosGerenciais.id))
@@ -44,26 +57,100 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
         gte(abastecimentosDiesel.dataAbastecimento, inicio),
         lt(abastecimentosDiesel.dataAbastecimento, fim),
       )),
-    db.select({ volume: itensRomaneioProducao.volume, romaneioId: romaneiosProducao.id })
-      .from(itensRomaneioProducao)
-      .innerJoin(romaneiosProducao, eq(itensRomaneioProducao.romaneioId, romaneiosProducao.id))
+    db.select({
+      producao: romaneiosProducao,
+      volumePecas: sql<string>`coalesce(sum(${itensRomaneioProducao.volume}), 0)`,
+    })
+      .from(romaneiosProducao)
+      .leftJoin(itensRomaneioProducao, and(
+        eq(itensRomaneioProducao.romaneioId, romaneiosProducao.id),
+        eq(itensRomaneioProducao.empresaId, romaneiosProducao.empresaId),
+      ))
       .where(and(
         eq(romaneiosProducao.empresaId, empresaId),
         eq(romaneiosProducao.estado, "confirmado"),
         gte(romaneiosProducao.dataProducao, inicio),
         lt(romaneiosProducao.dataProducao, fim),
+      ))
+      .groupBy(romaneiosProducao.id),
+    db.select({
+      producaoId: itensRomaneioToras.romaneioId,
+      plaquetaId: plaquetas.id,
+      plaquetaCodigo: plaquetas.codigo,
+      essencia: itensRomaneioToras.madeiraNome,
+      volume: itensRomaneioToras.volume,
+      romaneioCargaId: plaquetas.romaneioCargaId,
+      valorMetroCubico: plaquetas.valorMetroCubico,
+      fretePorMetroCubico: romaneiosCargaToras.fretePorMetroCubico,
+      numeroRomaneioCarga: romaneiosCargaToras.numero,
+    })
+      .from(itensRomaneioToras)
+      .innerJoin(romaneiosProducao, and(
+        eq(itensRomaneioToras.romaneioId, romaneiosProducao.id),
+        eq(itensRomaneioToras.empresaId, romaneiosProducao.empresaId),
+      ))
+      .innerJoin(plaquetas, and(
+        eq(itensRomaneioToras.plaquetaId, plaquetas.id),
+        eq(itensRomaneioToras.empresaId, plaquetas.empresaId),
+      ))
+      .leftJoin(romaneiosCargaToras, and(
+        eq(plaquetas.romaneioCargaId, romaneiosCargaToras.id),
+        eq(plaquetas.empresaId, romaneiosCargaToras.empresaId),
+      ))
+      .where(and(
+        eq(itensRomaneioToras.empresaId, empresaId),
+        eq(romaneiosProducao.estado, "confirmado"),
+        gte(romaneiosProducao.dataProducao, inicio),
+        lt(romaneiosProducao.dataProducao, fim),
+      )),
+    db.select({
+      essencia: plaquetas.madeiraNome,
+      volumeBase: plaquetas.volumeInicial,
+      valorMetroCubico: plaquetas.valorMetroCubico,
+    })
+      .from(plaquetas)
+      .where(and(
+        eq(plaquetas.empresaId, empresaId),
+        isNotNull(plaquetas.romaneioCargaId),
       )),
     db.select({ quantidade: sql<number>`count(*)`, valor: sql<string>`coalesce(sum(${titulosFinanceiros.valorOriginal}), 0)` })
-      .from(titulosFinanceiros).where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), isNull(titulosFinanceiros.centroCustoId), gte(titulosFinanceiros.competencia, inicio), lt(titulosFinanceiros.competencia, fim))),
+      .from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), isNull(titulosFinanceiros.centroCustoId), gte(titulosFinanceiros.competencia, inicio), lt(titulosFinanceiros.competencia, fim))),
     db.select({ quantidade: sql<number>`count(*)`, valor: sql<string>`coalesce(sum(${titulosFinanceiros.valorOriginal}), 0)` })
-      .from(titulosFinanceiros).where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), isNull(titulosFinanceiros.competencia))),
+      .from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), isNull(titulosFinanceiros.competencia))),
     db.select({ quantidade: sql<number>`count(*)`, valor: sql<string>`coalesce(sum(${titulosFinanceiros.valorOriginal}), 0)` })
-      .from(titulosFinanceiros).where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), isNotNull(titulosFinanceiros.centroCustoId), gte(titulosFinanceiros.competencia, inicio), lt(titulosFinanceiros.competencia, fim), eq(titulosFinanceiros.origem, "nota_diesel"))),
+      .from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), gte(titulosFinanceiros.competencia, inicio), lt(titulosFinanceiros.competencia, fim), eq(titulosFinanceiros.origem, "nota_diesel"))),
+    db.select({ quantidade: sql<number>`count(*)`, valor: sql<string>`coalesce(sum(${titulosFinanceiros.valorOriginal}), 0)` })
+      .from(titulosFinanceiros)
+      .where(and(eq(titulosFinanceiros.empresaId, empresaId), eq(titulosFinanceiros.tipo, "pagar"), ne(titulosFinanceiros.estado, "cancelado"), gte(titulosFinanceiros.competencia, inicio), lt(titulosFinanceiros.competencia, fim), eq(titulosFinanceiros.origem, "romaneio_carga"))),
   ]);
+
+  const materiaPrima = calcularCusteioMateriaPrima({
+    producoes: producoes.map((item) => ({
+      id: item.producao.id,
+      numero: item.producao.numero,
+      dataProducao: item.producao.dataProducao,
+      volumePecas: item.volumePecas,
+      volumeAproveitamento: item.producao.volumeAproveitamento,
+      incluirAproveitamento: item.producao.incluirAproveitamentoNoRendimento,
+    })),
+    torasConsumidas: torasConsumidas.map((item) => ({
+      ...item,
+      plaquetaCodigo: item.plaquetaCodigo ?? `Plaqueta ${item.plaquetaId}`,
+      essencia: item.essencia,
+      romaneioCargaId: item.romaneioCargaId ?? null,
+      valorMetroCubico: item.valorMetroCubico ?? null,
+      fretePorMetroCubico: item.fretePorMetroCubico ?? null,
+      numeroRomaneioCarga: item.numeroRomaneioCarga ?? null,
+    })),
+    referenciasPrecoPorEssencia: referenciasPreco,
+  });
 
   const componentes: ComponenteRentabilidadeFinanceira[] = [];
   for (const item of titulos) {
-    if (item.titulo.origem === "nota_diesel") continue;
+    if (item.titulo.origem === "nota_diesel" || item.titulo.origem === "romaneio_carga") continue;
     componentes.push({
       chave: `titulo:${item.titulo.id}`,
       origem: item.titulo.origem,
@@ -92,10 +179,12 @@ export async function obterResumoRentabilidadeFinanceira(competencia: Date) {
 
   const resumo = consolidarRentabilidadeFinanceira({
     componentes,
-    volumeProprioM3: volumes.reduce((total, item) => total + numero(item.volume), 0),
+    volumeProprioM3: materiaPrima.producoes.reduce((total, item) => total + numero(item.volumeElegivelM3), 0),
+    materiaPrima,
     titulosSemCentro: semCentro[0] ?? { quantidade: 0, valor: 0 },
     titulosSemCompetencia: semCompetencia[0] ?? { quantidade: 0, valor: 0 },
-    titulosExcluidosPorOrigem: excluidos[0] ?? { quantidade: 0, valor: 0 },
+    titulosExcluidosPorOrigem: notasDieselExcluidas[0] ?? { quantidade: 0, valor: 0 },
+    titulosRomaneioCargaExcluidos: titulosRomaneioExcluidos[0] ?? { quantidade: 0, valor: 0 },
   });
-  return { competencia: inicio, periodoFimExclusivo: fim, totalRomaneiosProducao: new Set(volumes.map((item) => item.romaneioId)).size, ...resumo };
+  return { competencia: inicio, periodoFimExclusivo: fim, totalRomaneiosProducao: producoes.length, ...resumo };
 }

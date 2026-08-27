@@ -826,3 +826,9 @@
 - [x] Auditar em leitura a cadeia existente de romaneio de entrada, plaqueta, tora, consumo, produção, lote e estoque para a Etapa 6F
 - [x] Medir a cobertura histórica de custo rastreável de toras e frete de entrada por produção própria, sem estimar valores ausentes
 - [x] Documentar e apresentar proposta técnica de leitura da matéria-prima por produção e competência, aguardando aprovação antes de implementar
+- [x] Formalizar a estimativa auditável por essência para toras consumidas sem romaneio de entrada, sem alterar dados históricos
+- [x] Calcular matéria-prima pela tora consumida e frete de entrada, excluindo títulos de romaneio da rentabilidade para evitar dupla apropriação
+- [x] Expor custos rastreáveis, estimados e sem referência por produção e competência no contrato de rentabilidade
+- [x] Atualizar a tela de rentabilidade com cobertura, base da estimativa e detalhe de produção responsivo
+- [x] Cobrir cálculos, exclusões, estimativas, regressões e interface da Etapa 6F com testes e revisão visual
+- [x] Documentar e publicar a implementação aprovada da Etapa 6F sem reclassificar os históricos
