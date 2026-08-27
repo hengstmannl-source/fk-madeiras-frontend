@@ -832,3 +832,6 @@
 - [x] Atualizar a tela de rentabilidade com cobertura, base da estimativa e detalhe de produção responsivo
 - [x] Cobrir cálculos, exclusões, estimativas, regressões e interface da Etapa 6F com testes e revisão visual
 - [x] Documentar e publicar a implementação aprovada da Etapa 6F sem reclassificar os históricos
+- [x] Auditar em leitura a separação atual entre matéria-prima, custos industriais e custos comerciais/administrativos na rentabilidade
+- [x] Medir em leitura a presença de estimativas, custos sem origem e possíveis duplicidades por título, produção, plaqueta e romaneio
+- [x] Documentar e apresentar a proposta de correção da consolidação e do custo por m³, aguardando confirmação antes de alterar regras
