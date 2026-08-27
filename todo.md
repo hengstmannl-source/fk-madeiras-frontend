@@ -810,3 +810,6 @@
 - [x] Auditar o parser, modelo CSV e mensagens de validação da importação financeira para datas
 - [x] Aceitar datas DD/MM/AAAA na importação financeira sem ambiguidades e preservar a compatibilidade necessária
 - [x] Atualizar o modelo, as regressões e publicar o ajuste de formato brasileiro
+- [x] Auditar em leitura as fontes de custo de diesel, RH, frete, financeiro e vendas para a Etapa 6E
+- [x] Mapear origem, competência, critério de apropriação, limites e risco de dupla apropriação de cada fonte
+- [x] Documentar a proposta de integração auditável à Rentabilidade da Madeira sem implementar lançamentos automáticos
