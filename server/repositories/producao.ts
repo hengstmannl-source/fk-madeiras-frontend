@@ -31,6 +31,7 @@ import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { prepararIdentificacaoPlaqueta } from "./estoque";
 import { garantirTituloFinanceiroAutomatico } from "./financeiro";
+import { obterCentroCustoAtivo } from "./centrosCusto";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
 type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -287,6 +288,7 @@ async function getOrCreateCategoriaReceitaSerragem(tx: any, empresaId: number, u
 
 export async function criarSerragemTerceiros(data: {
   clienteId: number;
+  centroCustoId?: number | null;
   dataProducao: Date;
   dataVencimento: Date;
   responsavel?: string | null;
@@ -300,6 +302,7 @@ export async function criarSerragemTerceiros(data: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {
+    if (data.centroCustoId) await obterCentroCustoAtivo(data.centroCustoId, tx, data.empresaId);
     const cliente = (await tx.select().from(clientes).where(and(eq(clientes.id, data.clienteId), eq(clientes.empresaId, data.empresaId))).limit(1))[0];
     if (!cliente) throw new Error("Cliente não encontrado para o serviço de serragem");
     const calculo = validarSerragemTerceiros({ toras: data.toras, itens: data.itens });
@@ -310,6 +313,7 @@ export async function criarSerragemTerceiros(data: {
       empresaId: data.empresaId,
       numero: `SER-TMP-${crypto.randomUUID().slice(0, 16)}`,
       clienteId: data.clienteId,
+      centroCustoId: data.centroCustoId ?? null,
       dataProducao: data.dataProducao,
       responsavel: data.responsavel?.trim() || null,
       observacoes: data.observacoes?.trim() || null,
@@ -350,6 +354,7 @@ export async function criarSerragemTerceiros(data: {
       descricao: `Serviço de serragem — ${numero}`,
       clienteId: data.clienteId, contraparteNome: cliente.nome, serragemTerceirosId: serragemId,
       categoriaId, valorOriginal: valorServico.toFixed(2),
+      centroCustoId: data.centroCustoId ?? null,
       dataEmissao: data.dataProducao, dataVencimento: data.dataVencimento, competencia: data.dataProducao,
       observacoes: "Cobrança referente exclusivamente ao serviço de serragem; as peças permanecem de propriedade do cliente.", criadoPor: data.criadoPor,
       database: tx,

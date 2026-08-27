@@ -498,6 +498,20 @@
       "when": 1787774018762,
       "tag": "0070_short_tana_nile",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "5",
+      "when": 1787833747090,
+      "tag": "0071_optimal_ghost_rider",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "5",
+      "when": 1787834814527,
+      "tag": "0072_dashing_changeling",
+      "breakpoints": true
     }
   ]
 }

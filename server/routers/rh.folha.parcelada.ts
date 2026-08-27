@@ -134,6 +134,7 @@ export const folhaParcelada = {
         descricao: `Salário ${competenciaFormatada} — ${colaborador?.nome ?? "Colaborador"}`,
         contraparteNome: colaborador?.nome ?? null,
         categoriaId,
+        centroCustoId: colaborador?.centroCustoId ?? null,
         valorOriginal: item.salarioLiquido,
         dataEmissao: new Date(),
         dataVencimento: dataLocal(input.dataVencimento),

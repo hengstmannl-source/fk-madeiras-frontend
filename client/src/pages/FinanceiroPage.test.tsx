@@ -72,6 +72,7 @@ vi.mock("@/lib/trpc", () => {
           titulos: { list: invalidar, baixas: invalidar },
           contasOperacionais: { list: invalidar },
           categorias: { list: invalidar },
+          centrosCusto: { list: invalidar },
           fornecedores: { list: invalidar, modeloCsv: invalidar },
           contas: { list: invalidar },
           transferencias: { list: invalidar, movimentosPorConta: invalidar },
@@ -176,6 +177,7 @@ vi.mock("@/lib/trpc", () => {
           return { data: { ...state.contasOperacionais, itens, resumo }, isLoading: false, isFetching: false };
         } } },
         categorias: { list: { useQuery: () => ({ data: state.categorias, isLoading: false }) }, create: mutationInerte },
+        centrosCusto: { list: queryVazia },
         fornecedores: { list: queryVazia, create: mutationInerte, update: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
         anexos: {
           upload: mutationInerte,

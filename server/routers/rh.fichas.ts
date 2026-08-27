@@ -187,6 +187,7 @@ export const fichasFinanceirasRh = router({
           descricao: `Pagamento de colaborador — ${colaborador.nome}: ${input.descricao}`,
           contraparteNome: colaborador.nome,
           categoriaId,
+          centroCustoId: colaborador.centroCustoId ?? null,
           valorOriginal: decimal(input.valor),
           dataEmissao: dataLocal(input.dataLancamento),
           dataVencimento: dataLocal(input.dataLancamento),

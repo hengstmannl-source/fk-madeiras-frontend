@@ -816,4 +816,10 @@
 - [x] Diagnosticar a arquitetura atual da Rentabilidade da Madeira, suas tabelas gerenciais e os vínculos possíveis com títulos financeiros
 - [x] Mapear uma migração segura para Centros de Custo financeiros, preservando históricos, importações, recorrências e origens automáticas
 - [x] Documentar as mudanças previstas de frontend e backend sem executar migration, apagar dados ou modificar a interface
-- [ ] Aguardar aprovação explícita do diagnóstico revisado antes de implementar a simplificação da Etapa 6E
+- [x] Aguardar aprovação explícita do diagnóstico revisado antes de implementar a simplificação da Etapa 6E
+- [x] Evoluir os Centros de Custo existentes com tipo, situação e compatibilidade preservada, e vincular centro aos títulos e recorrências por migration aditiva
+- [x] Propagar e validar Centros de Custo em lançamentos financeiros manuais, parcelados, importados, recorrentes, conciliados e editados em lote
+- [x] Configurar a classificação explícita das origens automáticas sem inferência por texto e sem duplicar diesel, matéria-prima, folha ou vendas
+- [x] Simplificar a interface de Centros de Custo e Rentabilidade, removendo o lançamento paralelo e exibindo custos por competência e centro
+- [x] Cobrir migration, históricos sem classificação, competências, origens, cálculos e interface com testes e revisão visual
+- [x] Atualizar a documentação operacional e publicar a simplificação aprovada da Etapa 6E

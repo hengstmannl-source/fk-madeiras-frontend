@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { protectedProcedure, router } from "../_core/trpc";
 import * as db from "../db";
+import * as centrosCusto from "../repositories/centrosCusto";
+import { obterResumoRentabilidadeFinanceira } from "../repositories/rentabilidadeFinanceira";
 import { calcularParcelas } from "../financeiro.logic";
 import { storagePut } from "../storage";
 import { normalizarDadosBoleto } from "../../shared/boleto";
@@ -49,6 +51,7 @@ export const LancamentoManualSchema = z.object({
   tipo: TipoTituloSchema,
   descricao: z.string().trim().min(2, "Informe uma descrição"),
   categoriaId: z.number().int().positive(),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   valorOriginal: z.string().regex(/^\d+(?:[.,]\d{1,2})?$/, "Informe um valor válido"),
   dataEmissao: DataFinanceiraSchema,
   dataVencimento: DataFinanceiraSchema,
@@ -69,6 +72,7 @@ const AtualizarTitulosEmLoteSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1, "Selecione ao menos um lançamento").max(200, "Edite no máximo 200 lançamentos por vez"),
   descricao: z.string().trim().min(2).max(300).optional(),
   categoriaId: z.number().int().positive().optional(),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   dataEmissao: DataFinanceiraSchema.optional(),
   dataVencimento: DataFinanceiraSchema.optional(),
   contraparteNome: z.string().trim().max(300).nullable().optional(),
@@ -90,6 +94,12 @@ const CategoriaSchema = z.object({
   nome: z.string().trim().min(2).max(150),
   tipo: z.enum(["receita", "despesa", "ambos"]).default("ambos"),
   categoriaPaiId: z.number().int().positive().nullable().optional(),
+});
+
+const CentroCustoSchema = z.object({
+  nome: z.string().trim().min(2, "Informe o nome do Centro de Custo.").max(150),
+  tipo: z.enum(["industrial", "comercial_administrativo", "nao_apropriavel"]),
+  observacoes: z.string().trim().max(4000).nullable().optional(),
 });
 
 export const ContaSchema = z.object({
@@ -116,6 +126,7 @@ export const RecorrenciaSchema = z.object({
   tipo: TipoTituloSchema,
   descricao: z.string().trim().min(2).max(300),
   categoriaId: z.number().int().positive(),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   contaFinanceiraId: z.number().int().positive().nullable().optional(),
   clienteId: z.number().int().positive().nullable().optional(),
   fornecedorId: z.number().int().positive().nullable().optional(),
@@ -156,6 +167,21 @@ export const financeiroRouter = router({
       const { id, ...dados } = input;
       return db.updateCategoriaFinanceira(id, dados);
     }),
+  }),
+
+  centrosCusto: router({
+    list: protectedProcedure.input(z.object({ incluirInativos: z.boolean().optional() }).optional())
+      .query(({ input }) => centrosCusto.listarCentrosCusto(input?.incluirInativos)),
+    create: protectedProcedure.input(CentroCustoSchema)
+      .mutation(({ ctx, input }) => centrosCusto.criarCentroCusto({ ...input, criadoPor: ctx.user.id })),
+    update: protectedProcedure.input(CentroCustoSchema.partial().extend({ id: z.number().int().positive(), ativo: z.boolean().optional() })
+      .refine((input) => Object.keys(input).some((chave) => chave !== "id"), "Informe ao menos um campo para atualizar."))
+      .mutation(({ input }) => centrosCusto.atualizarCentroCusto(input)),
+  }),
+
+  rentabilidade: router({
+    resumo: protectedProcedure.input(z.object({ competencia: DataFinanceiraSchema }))
+      .query(({ input }) => obterResumoRentabilidadeFinanceira(dataLocal(input.competencia))),
   }),
 
   contas: router({
@@ -327,6 +353,7 @@ export const financeiroRouter = router({
     criarLancamento: protectedProcedure.input(z.object({
       movimentoId: z.number().int().positive(),
       categoriaId: z.number().int().positive(),
+      centroCustoId: z.number().int().positive().nullable().optional(),
       descricao: z.string().trim().min(2).max(300),
       observacoes: z.string().trim().max(4000).nullable().optional(),
     })).mutation(({ ctx, input }) => db.criarLancamentoDaConciliacao(input, ctx.user.id)),
@@ -344,6 +371,7 @@ export const financeiroRouter = router({
       clienteId: z.number().int().positive().optional(),
       fornecedorId: z.number().int().positive().optional(),
       categoriaId: z.number().int().positive().optional(),
+      centroCustoId: z.number().int().positive().optional(),
       descricao: z.string().trim().min(1).max(300).optional(),
       valorMinimo: z.number().nonnegative().optional(),
       valorMaximo: z.number().nonnegative().optional(),

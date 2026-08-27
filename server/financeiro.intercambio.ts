@@ -1,5 +1,5 @@
 export const CABECALHOS_CSV_LANCAMENTOS = [
-  "referencia", "tipo", "descricao", "categoria", "valor", "data_emissao", "data_vencimento", "competencia", "contraparte", "observacoes",
+  "referencia", "tipo", "descricao", "categoria", "centro_custo", "valor", "data_emissao", "data_vencimento", "competencia", "contraparte", "observacoes",
 ] as const;
 
 export type LinhaImportacaoLancamento = {
@@ -8,6 +8,7 @@ export type LinhaImportacaoLancamento = {
   tipo: "receber" | "pagar";
   descricao: string;
   categoria: string;
+  centroCusto: string;
   valor: string;
   dataEmissao: string;
   dataVencimento: string;
@@ -17,6 +18,7 @@ export type LinhaImportacaoLancamento = {
 };
 
 export type CategoriaParaImportacao = { id: number; nome: string; tipo: "receita" | "despesa" | "ambos" };
+export type CentroCustoParaImportacao = { id: number; nome: string; codigo: string; ativo?: boolean | number | null };
 export type TituloExistenteParaImportacao = { id: number; chaveImportacao?: string | null };
 
 type LinhaExportacaoLancamento = {
@@ -25,6 +27,7 @@ type LinhaExportacaoLancamento = {
   tipo: "receber" | "pagar";
   descricao: string;
   categoria: string;
+  centroCusto?: string | null;
   valor: string | number;
   dataEmissao: Date | string;
   dataVencimento: Date | string;
@@ -96,7 +99,7 @@ function normalizarValor(valor: string): string | null {
 }
 
 export function criarModeloCsvLancamentos(): string {
-  return `\uFEFF${CABECALHOS_CSV_LANCAMENTOS.join(";")}\nEXEMPLO-001;receber;Venda avulsa;Receitas;1250,00;01/08/2026;15/08/2026;01/08/2026;Cliente exemplo;Preencha esta linha como referência`;
+  return `\uFEFF${CABECALHOS_CSV_LANCAMENTOS.join(";")}\nEXEMPLO-001;receber;Venda avulsa;Receitas;Comercial;1250,00;01/08/2026;15/08/2026;01/08/2026;Cliente exemplo;Preencha esta linha como referência`;
 }
 
 export function exportarLancamentosCsv(lancamentos: LinhaExportacaoLancamento[]): string {
@@ -105,6 +108,7 @@ export function exportarLancamentosCsv(lancamentos: LinhaExportacaoLancamento[])
     lancamento.tipo,
     lancamento.descricao,
     lancamento.categoria,
+    lancamento.centroCusto,
     moedaParaCsv(lancamento.valor),
     dataParaCsv(lancamento.dataEmissao),
     dataParaCsv(lancamento.dataVencimento),
@@ -136,6 +140,7 @@ export function validarCsvLancamentos(conteudo: string, maximoLinhas = 1000): { 
     const tipo = valor("tipo").toLowerCase();
     const descricao = valor("descricao");
     const categoria = valor("categoria");
+    const centroCusto = valor("centro_custo");
     const valorOriginal = normalizarValor(valor("valor"));
     const dataEmissao = normalizarDataCsv(valor("data_emissao"));
     const dataVencimento = normalizarDataCsv(valor("data_vencimento"));
@@ -148,6 +153,7 @@ export function validarCsvLancamentos(conteudo: string, maximoLinhas = 1000): { 
     if (tipo !== "receber" && tipo !== "pagar") problemas.push("tipo deve ser receber ou pagar");
     if (descricao.length < 2 || descricao.length > 300) problemas.push("descrição deve ter entre 2 e 300 caracteres");
     if (!categoria || categoria.length > 150) problemas.push("categoria obrigatória de até 150 caracteres");
+    if (!centroCusto || centroCusto.length > 150) problemas.push("centro_custo obrigatório de até 150 caracteres");
     if (!valorOriginal) problemas.push("valor deve ser positivo, com no máximo duas casas decimais");
     if (!dataEmissao) problemas.push("data_emissao inválida (DD/MM/AAAA)");
     if (!dataVencimento) problemas.push("data_vencimento inválida (DD/MM/AAAA)");
@@ -155,7 +161,7 @@ export function validarCsvLancamentos(conteudo: string, maximoLinhas = 1000): { 
     if (valor("contraparte").length > 300) problemas.push("contraparte excede 300 caracteres");
     if (valor("observacoes").length > 4000) problemas.push("observações excedem 4000 caracteres");
     if (problemas.length) { erros.push(`Linha ${numeroLinha}: ${problemas.join("; ")}`); return; }
-    linhas.push({ numeroLinha, referencia, tipo: tipo as "receber" | "pagar", descricao, categoria, valor: valorOriginal!, dataEmissao: dataEmissao!, dataVencimento: dataVencimento!, competencia, contraparte: valor("contraparte") || null, observacoes: valor("observacoes") || null });
+    linhas.push({ numeroLinha, referencia, tipo: tipo as "receber" | "pagar", descricao, categoria, centroCusto, valor: valorOriginal!, dataEmissao: dataEmissao!, dataVencimento: dataVencimento!, competencia, contraparte: valor("contraparte") || null, observacoes: valor("observacoes") || null });
   });
   return { linhas, erros };
 }
@@ -163,20 +169,27 @@ export function validarCsvLancamentos(conteudo: string, maximoLinhas = 1000): { 
 export function prepararImportacaoLancamentos(input: {
   conteudo: string;
   categorias: CategoriaParaImportacao[];
+  centrosCusto: CentroCustoParaImportacao[];
   titulosExistentes: TituloExistenteParaImportacao[];
 }) {
   const validacao = validarCsvLancamentos(input.conteudo);
   if (validacao.erros.length) return { linhas: [], erros: validacao.erros };
   const categoriasPorNome = new Map(input.categorias.map((categoria) => [categoria.nome.trim().toLocaleLowerCase("pt-BR"), categoria]));
+  const centrosPorIdentificador = new Map(input.centrosCusto.flatMap((centro) => [
+    [centro.nome.trim().toLocaleLowerCase("pt-BR"), centro],
+    [centro.codigo.trim().toLocaleLowerCase("pt-BR"), centro],
+  ]));
   const referenciasExistentes = new Set(input.titulosExistentes.map((titulo) => titulo.chaveImportacao || `FK-${titulo.id}`));
   const erros: string[] = [];
   const linhas = validacao.linhas.map((linha) => {
     const categoria = categoriasPorNome.get(linha.categoria.toLocaleLowerCase("pt-BR"));
     if (!categoria) { erros.push(`Linha ${linha.numeroLinha}: categoria "${linha.categoria}" não encontrada`); return null; }
+    const centroCusto = centrosPorIdentificador.get(linha.centroCusto.toLocaleLowerCase("pt-BR"));
+    if (!centroCusto || !Boolean(centroCusto.ativo ?? true)) { erros.push(`Linha ${linha.numeroLinha}: centro de custo ativo "${linha.centroCusto}" não encontrado`); return null; }
     const tipoPermitido = categoria.tipo === "ambos" || (linha.tipo === "receber" && categoria.tipo === "receita") || (linha.tipo === "pagar" && categoria.tipo === "despesa");
     if (!tipoPermitido) { erros.push(`Linha ${linha.numeroLinha}: a categoria "${linha.categoria}" não é compatível com ${linha.tipo}`); return null; }
     if (referenciasExistentes.has(linha.referencia)) { erros.push(`Linha ${linha.numeroLinha}: a referência "${linha.referencia}" já foi importada ou exportada anteriormente`); return null; }
-    return { ...linha, categoriaId: categoria.id };
-  }).filter(Boolean) as Array<LinhaImportacaoLancamento & { categoriaId: number }>;
+    return { ...linha, categoriaId: categoria.id, centroCustoId: centroCusto.id };
+  }).filter(Boolean) as Array<LinhaImportacaoLancamento & { categoriaId: number; centroCustoId: number }>;
   return { linhas: erros.length ? [] : linhas, erros };
 }

@@ -201,9 +201,11 @@ export const controleRhSimplificado = router({
       const fechamento = validarFechamentoRhSimplificado(resumo.linhas);
       if (fechamento.bloqueado) throw new TRPCError({ code: "BAD_REQUEST", message: "Existem funcionários com saldo negativo. Revise os adiantamentos antes de enviar o fechamento ao Financeiro." });
       const categoriaId = await garantirCategoriaPagamentos(db, empresaId, ctx.user.id);
+      const colaboradores = await db.select({ id: colaboradoresRh.id, centroCustoId: colaboradoresRh.centroCustoId }).from(colaboradoresRh).where(eq(colaboradoresRh.empresaId, empresaId));
       let titulos = 0;
       for (const linha of resumo.linhas) {
         if (linha.saldoPagar <= 0) continue;
+        const centroCustoId = colaboradores.find((colaborador) => colaborador.id === linha.id)?.centroCustoId ?? null;
         const resultado = await garantirTituloFinanceiroComChave({
           tipo: "pagar",
           origem: "folha_pagamento",
@@ -211,6 +213,7 @@ export const controleRhSimplificado = router({
           descricao: `Saldo mensal ${input.competencia} — ${linha.nome}`,
           contraparteNome: linha.nome,
           categoriaId,
+          centroCustoId,
           valorOriginal: decimal(linha.saldoPagar),
           dataEmissao: new Date(),
           dataVencimento: dataLocal(input.dataVencimento),

@@ -30,6 +30,7 @@ import { getDb } from "./core";
 import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { garantirTituloFinanceiroAutomatico } from "./financeiro";
+import { obterCentroCustoAtivo } from "./centrosCusto";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
 type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -82,6 +83,7 @@ export async function getResumoTanqueDiesel() {
 export async function criarNotaDiesel(data: {
   numeroNota?: string | null;
   fornecedorId: number;
+  centroCustoId?: number | null;
   litros: string;
   valorTotal: string;
   dataNota: Date;
@@ -93,6 +95,7 @@ export async function criarNotaDiesel(data: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   return db.transaction(async (tx: any) => {
+    if (data.centroCustoId) await obterCentroCustoAtivo(data.centroCustoId, tx, data.empresaId);
     const fornecedor = (await tx.select().from(fornecedores).where(and(eq(fornecedores.id, data.fornecedorId), eq(fornecedores.empresaId, data.empresaId))).limit(1))[0];
     if (!fornecedor) throw new Error("Fornecedor não encontrado para a nota de diesel");
     const litros = Number(data.litros.replace(",", "."));
@@ -102,6 +105,7 @@ export async function criarNotaDiesel(data: {
       empresaId: data.empresaId,
       numeroNota: data.numeroNota?.trim() || null,
       fornecedorId: data.fornecedorId,
+      centroCustoId: data.centroCustoId ?? null,
       litros: litros.toFixed(3),
       valorTotal: valorTotal.toFixed(2),
       dataNota: data.dataNota,
@@ -120,6 +124,7 @@ export async function criarNotaDiesel(data: {
       contraparteNome: fornecedor.nome,
       notaDieselId,
       categoriaId,
+      centroCustoId: data.centroCustoId ?? null,
       valorOriginal: valorTotal.toFixed(2),
       dataEmissao: data.dataNota,
       dataVencimento: data.dataVencimento,
@@ -160,6 +165,7 @@ export async function excluirNotaDiesel(id: number, userId: number) {
 
 export async function registrarAbastecimentoDiesel(data: {
   destino: string;
+  centroCustoId?: number | null;
   responsavel?: string | null;
   litros: string;
   dataAbastecimento: Date;
@@ -171,6 +177,7 @@ export async function registrarAbastecimentoDiesel(data: {
   if (!db) throw new Error("Database not available");
   if (!data.destino.trim()) throw new Error("Informe o destino do abastecimento");
   return db.transaction(async (tx: any) => {
+    if (data.centroCustoId) await obterCentroCustoAtivo(data.centroCustoId, tx, data.empresaId);
     const [notas, abastecimentos] = await Promise.all([
       tx.select().from(notasDiesel).where(eq(notasDiesel.empresaId, data.empresaId)),
       tx.select().from(abastecimentosDiesel).where(eq(abastecimentosDiesel.empresaId, data.empresaId)),
@@ -184,6 +191,7 @@ export async function registrarAbastecimentoDiesel(data: {
       custoUnitario: custo.custoUnitario.toFixed(4),
       custoTotal: custo.custoTotal.toFixed(2),
       dataAbastecimento: data.dataAbastecimento,
+      centroCustoId: data.centroCustoId ?? null,
       observacoes: data.observacoes?.trim() || null,
       criadoPor: data.criadoPor,
     });

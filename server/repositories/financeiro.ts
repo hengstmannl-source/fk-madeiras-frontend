@@ -30,6 +30,7 @@ import { numerarDuplicidadesPlaquetas } from "../../shared/plaquetas";
 
 import { getDb } from "./core";
 import { getInsertedId } from "./catalogo";
+import { listarCentrosCusto, obterCentroCustoAtivo } from "./centrosCusto";
 import { getEmpresaUnica } from "./identidade";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
@@ -139,6 +140,7 @@ export type CriarTituloFinanceiroInput = {
   chaveImportacao?: string | null;
   descricao: string;
   categoriaId: number;
+  centroCustoId?: number | null;
   valorOriginal: string;
   dataEmissao: Date;
   dataVencimento: Date;
@@ -721,6 +723,7 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
   if (!db) throw new Error("Database not available");
   if (!input.descricao.trim()) throw new Error("Informe uma descrição para o lançamento");
   if (decimalParaNumero(input.valorOriginal) <= 0) throw new Error("O valor do título deve ser maior que zero");
+  const centroCustoId = input.centroCustoId == null ? null : (await obterCentroCustoAtivo(input.centroCustoId, db, empresaId)).id;
   const data: InsertTituloFinanceiro = {
     tipo: input.tipo,
     origem: input.origem ?? "manual",
@@ -731,6 +734,7 @@ export async function createTituloFinanceiro(input: CriarTituloFinanceiroInput) 
     contraparteNome: input.contraparteNome ?? null,
     orcamentoId: input.orcamentoId ?? null,
     categoriaId: input.categoriaId,
+    centroCustoId,
     recorrenciaId: input.recorrenciaId ?? null,
     grupoParcelamento: input.grupoParcelamento ?? null,
     numeroParcela: input.numeroParcela ?? null,
@@ -765,6 +769,7 @@ export async function garantirTituloFinanceiroComChave(input: GarantirTituloComC
   if (!chaveImportacao) throw new Error("Informe a chave de idempotência do título automático");
   if (!input.descricao.trim()) throw new Error("Informe uma descrição para o lançamento");
   if (decimalParaNumero(input.valorOriginal) <= 0) throw new Error("O valor do título deve ser maior que zero");
+  const centroCustoId = input.centroCustoId == null ? null : (await obterCentroCustoAtivo(input.centroCustoId, db, empresaId)).id;
 
   const existente = (await db.select().from(titulosFinanceiros)
     .where(eq(titulosFinanceiros.chaveImportacao, chaveImportacao)).limit(1))[0];
@@ -789,6 +794,7 @@ export async function garantirTituloFinanceiroComChave(input: GarantirTituloComC
     notaDieselId: input.notaDieselId ?? null,
     serragemTerceirosId: input.serragemTerceirosId ?? null,
     categoriaId: input.categoriaId,
+    centroCustoId,
     recorrenciaId: input.recorrenciaId ?? null,
     grupoParcelamento: input.grupoParcelamento ?? null,
     numeroParcela: input.numeroParcela ?? null,
@@ -934,6 +940,7 @@ export async function listTitulosFinanceiros(
     clienteId?: number;
     fornecedorId?: number;
     categoriaId?: number;
+    centroCustoId?: number;
     descricao?: string;
     valorMinimo?: number;
     valorMaximo?: number;
@@ -952,6 +959,7 @@ export async function listTitulosFinanceiros(
   if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
   if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
   if (filters?.categoriaId) conditions.push(eq(titulosFinanceiros.categoriaId, filters.categoriaId));
+  if (filters?.centroCustoId) conditions.push(eq(titulosFinanceiros.centroCustoId, filters.centroCustoId));
   const titulos = dependencias?.titulos ?? await db!.select().from(titulosFinanceiros)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(titulosFinanceiros.dataVencimento));
@@ -962,6 +970,7 @@ export async function listTitulosFinanceiros(
     if (filters?.clienteId && titulo.clienteId !== filters.clienteId) return false;
     if (filters?.fornecedorId && titulo.fornecedorId !== filters.fornecedorId) return false;
     if (filters?.categoriaId && titulo.categoriaId !== filters.categoriaId) return false;
+    if (filters?.centroCustoId && titulo.centroCustoId !== filters.centroCustoId) return false;
     const descricao = filters?.descricao?.trim().toLocaleLowerCase("pt-BR");
     if (descricao && !`${titulo.descricao} ${titulo.contraparteNome ?? ""}`.toLocaleLowerCase("pt-BR").includes(descricao)) return false;
     const valor = decimalParaNumero(titulo.valorOriginal) - decimalParaNumero(titulo.desconto ?? "0") + decimalParaNumero(titulo.juros ?? "0");
@@ -1179,11 +1188,13 @@ export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTi
   const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
-  const [titulos, categorias] = await Promise.all([
+  const [titulos, categorias, centrosCusto] = await Promise.all([
     listTitulosFinanceiros(filters, { empresaId }),
     listCategoriasFinanceiras(),
+    listarCentrosCusto(true),
   ]);
   const categoriasPorId = new Map(categorias.map((categoria) => [categoria.id, categoria.nome]));
+  const centrosPorId = new Map(centrosCusto.map((centro) => [centro.id, centro.nome]));
   return exportarLancamentosCsv(titulos
     .filter((titulo) => titulo.origem === "manual")
     .map((titulo) => ({
@@ -1192,6 +1203,7 @@ export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTi
       tipo: titulo.tipo,
       descricao: titulo.descricao,
       categoria: categoriasPorId.get(titulo.categoriaId) ?? `Categoria ${titulo.categoriaId}`,
+      centroCusto: titulo.centroCustoId ? (centrosPorId.get(titulo.centroCustoId) ?? `Centro ${titulo.centroCustoId}`) : "",
       valor: titulo.valorOriginal,
       dataEmissao: titulo.dataEmissao,
       dataVencimento: titulo.dataVencimento,
@@ -1204,16 +1216,17 @@ export async function exportarLancamentosFinanceirosCsv(filters: { tipo?: TipoTi
 export async function importarLancamentosFinanceirosCsv(
   conteudo: string,
   userId: number,
-  dependencias?: { database?: DatabaseConnection; categorias?: CategoriaFinanceira[]; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
+  dependencias?: { database?: DatabaseConnection; categorias?: CategoriaFinanceira[]; centrosCusto?: Array<{ id: number; nome: string; codigo: string; ativo?: boolean | number | null }>; titulosExistentes?: Array<{ id: number; chaveImportacao?: string | null }> },
 ) {
   const empresaId = (await getEmpresaUnica()).id;
   const db = dependencias?.database ?? await getDb();
   if (!db) throw new Error("Database not available");
-  const [categorias, titulosExistentes] = await Promise.all([
+  const [categorias, centrosCusto, titulosExistentes] = await Promise.all([
     dependencias?.categorias ?? listCategoriasFinanceiras(),
+    dependencias?.centrosCusto ?? listarCentrosCusto(),
     dependencias?.titulosExistentes ?? db.select({ id: titulosFinanceiros.id, chaveImportacao: titulosFinanceiros.chaveImportacao }).from(titulosFinanceiros).where(eq(titulosFinanceiros.empresaId, empresaId)),
   ]);
-  const preparo = prepararImportacaoLancamentos({ conteudo, categorias, titulosExistentes });
+  const preparo = prepararImportacaoLancamentos({ conteudo, categorias, centrosCusto, titulosExistentes });
   if (preparo.erros.length) return { importados: 0, erros: preparo.erros };
   await db.transaction(async (tx) => {
     await tx.insert(titulosFinanceiros).values(preparo.linhas.map((linha) => ({
@@ -1223,6 +1236,7 @@ export async function importarLancamentosFinanceirosCsv(
       chaveImportacao: linha.referencia,
       descricao: linha.descricao,
       categoriaId: linha.categoriaId,
+      centroCustoId: linha.centroCustoId,
       valorOriginal: linha.valor,
       desconto: "0",
       juros: "0",
@@ -1713,7 +1727,7 @@ export async function desfazerConciliacaoBancaria(movimentoId: number, userId: n
   return { success: true };
 }
 
-export async function criarLancamentoDaConciliacao(input: { movimentoId: number; categoriaId: number; descricao: string; observacoes?: string | null }, userId: number) {
+export async function criarLancamentoDaConciliacao(input: { movimentoId: number; categoriaId: number; centroCustoId?: number | null; descricao: string; observacoes?: string | null }, userId: number) {
   const empresaId = (await getEmpresaUnica()).id;
   const db = await getDb();
   if (!db) throw new Error("Database not available");
@@ -1733,6 +1747,7 @@ export async function criarLancamentoDaConciliacao(input: { movimentoId: number;
       chaveIdempotencia: `CONCILIACAO-MOV-${empresaId}-${movimento.id}`,
       descricao: input.descricao.trim(),
       categoriaId: categoria.id,
+      centroCustoId: input.centroCustoId,
       valorOriginal: movimento.valor,
       dataEmissao: movimento.dataMovimento,
       dataVencimento: movimento.dataMovimento,
@@ -2128,6 +2143,7 @@ export async function atualizarTituloFinanceiro(
     tipo: "receber" | "pagar";
     descricao: string;
     categoriaId: number;
+    centroCustoId?: number | null;
     valorOriginal: string;
     dataEmissao: Date;
     dataVencimento: Date;
@@ -2162,10 +2178,12 @@ export async function atualizarTituloFinanceiro(
     juros,
     valorBaixado,
   });
+  const centroCustoId = dados.centroCustoId == null ? null : (await obterCentroCustoAtivo(dados.centroCustoId, db, empresaId)).id;
   await db.update(titulosFinanceiros).set({
     tipo: dados.tipo,
     descricao: dados.descricao.trim(),
     categoriaId: dados.categoriaId,
+    centroCustoId,
     valorOriginal: dados.valorOriginal,
     desconto: dados.desconto ?? "0",
     juros: dados.juros ?? "0",
@@ -2191,6 +2209,7 @@ export async function atualizarTitulosFinanceirosEmLote(
   dados: {
     descricao?: string;
     categoriaId?: number;
+    centroCustoId?: number | null;
     dataEmissao?: Date;
     dataVencimento?: Date;
     contraparteNome?: string | null;
@@ -2209,6 +2228,7 @@ export async function atualizarTitulosFinanceirosEmLote(
     tipo: titulo.tipo,
     descricao: dados.descricao ?? titulo.descricao,
     categoriaId: dados.categoriaId ?? titulo.categoriaId,
+    centroCustoId: dados.centroCustoId === undefined ? titulo.centroCustoId : dados.centroCustoId,
     valorOriginal: titulo.valorOriginal,
     dataEmissao: dados.dataEmissao ?? titulo.dataEmissao,
     dataVencimento: dados.dataVencimento ?? titulo.dataVencimento,
@@ -2286,6 +2306,7 @@ export async function criarTituloReceberDeOrcamento(orcamentoId: number, userId:
     clienteId: orcamento.clienteId,
     orcamentoId,
     categoriaId,
+    centroCustoId: orcamento.centroCustoId ?? null,
     valorOriginal: orcamento.total,
     dataEmissao: new Date(),
     dataVencimento: orcamento.dataVencimento ?? dataVencimento ?? new Date(),
@@ -2358,6 +2379,7 @@ export async function configurarCondicaoPagamentoVenda(
       contraparteNome: null,
       orcamentoId,
       categoriaId,
+      centroCustoId: orcamento.centroCustoId ?? null,
       recorrenciaId: null,
       grupoParcelamento,
       numeroParcela: indice + 1,
@@ -2438,6 +2460,7 @@ export async function createRecorrenciaFinanceira(data: InsertRecorrenciaFinance
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   if (decimalParaNumero(data.valor) <= 0) throw new Error("O valor da recorrência deve ser maior que zero");
+  if (data.centroCustoId != null) await obterCentroCustoAtivo(data.centroCustoId, db, data.empresaId);
   const result = await db.insert(recorrenciasFinanceiras).values(data);
   return { id: getInsertedId(result as MysqlInsertResult) };
 }
@@ -2445,6 +2468,7 @@ export async function createRecorrenciaFinanceira(data: InsertRecorrenciaFinance
 export async function updateRecorrenciaFinanceira(id: number, data: Partial<InsertRecorrenciaFinanceira>) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
+  if (data.centroCustoId != null) await obterCentroCustoAtivo(data.centroCustoId, db);
   await db.update(recorrenciasFinanceiras).set(data).where(eq(recorrenciasFinanceiras.id, id));
   return { success: true };
 }
@@ -2583,6 +2607,7 @@ export async function processarRecorrenciasFinanceiras(agora = new Date(), datab
         fornecedorId: recorrencia.fornecedorId,
         contraparteNome: recorrencia.contraparteNome,
         categoriaId: recorrencia.categoriaId,
+        centroCustoId: recorrencia.centroCustoId,
         recorrenciaId: recorrencia.id,
         valorOriginal: recorrencia.valor,
         dataEmissao: vencimento,

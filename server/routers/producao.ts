@@ -38,6 +38,7 @@ const RomaneioCargaSchema = z.object({
   dataVencimento: DataSchema.optional(),
   origem: z.string().trim().max(200).nullable().optional(),
   fornecedorId: z.number().int().positive().nullable().optional(),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),
   observacoes: z.string().max(4000).nullable().optional(),
   fretePorMetroCubico: DecimalNaoNegativo.default("0"),
@@ -140,6 +141,7 @@ const ToraSerragemTerceirosSchema = z.object({
 
 const SerragemTerceirosSchema = z.object({
   clienteId: z.number().int().positive(),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   dataProducao: DataSchema,
   dataVencimento: DataSchema,
   responsavel: z.string().trim().max(200).nullable().optional(),
@@ -152,16 +154,16 @@ const SerragemTerceirosSchema = z.object({
 const IdsRomaneioLoteSchema = z.array(z.number().int().positive()).min(1, "Selecione ao menos um romaneio").max(100).refine((ids) => new Set(ids).size === ids.length, "Não repita romaneios na seleção");
 const CabecalhoCargaLoteSchema = z.object({
   ids: IdsRomaneioLoteSchema,
-  dataCarga: DataSchema.optional(), dataVencimento: DataSchema.optional(), origem: z.string().trim().max(200).nullable().optional(), fornecedorId: z.number().int().positive().nullable().optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(), fretePorMetroCubico: DecimalNaoNegativo.optional(),
-}).refine((dados) => dados.dataCarga !== undefined || dados.dataVencimento !== undefined || dados.origem !== undefined || dados.fornecedorId !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined || dados.fretePorMetroCubico !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
+  dataCarga: DataSchema.optional(), dataVencimento: DataSchema.optional(), origem: z.string().trim().max(200).nullable().optional(), fornecedorId: z.number().int().positive().nullable().optional(), centroCustoId: z.number().int().positive().nullable().optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(), fretePorMetroCubico: DecimalNaoNegativo.optional(),
+}).refine((dados) => dados.dataCarga !== undefined || dados.dataVencimento !== undefined || dados.origem !== undefined || dados.fornecedorId !== undefined || dados.centroCustoId !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined || dados.fretePorMetroCubico !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
 const CabecalhoProducaoLoteSchema = z.object({
   ids: IdsRomaneioLoteSchema,
   dataProducao: DataSchema.optional(), fita: z.string().trim().max(100).nullable().optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(),
 }).refine((dados) => dados.dataProducao !== undefined || dados.fita !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
 const CabecalhoSerragemLoteSchema = z.object({
   ids: IdsRomaneioLoteSchema,
-  clienteId: z.number().int().positive().optional(), dataProducao: DataSchema.optional(), dataVencimento: DataSchema.optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(),
-}).refine((dados) => dados.clienteId !== undefined || dados.dataProducao !== undefined || dados.dataVencimento !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
+  clienteId: z.number().int().positive().optional(), centroCustoId: z.number().int().positive().nullable().optional(), dataProducao: DataSchema.optional(), dataVencimento: DataSchema.optional(), responsavel: z.string().trim().max(200).nullable().optional(), observacoes: z.string().max(4000).nullable().optional(),
+}).refine((dados) => dados.clienteId !== undefined || dados.centroCustoId !== undefined || dados.dataProducao !== undefined || dados.dataVencimento !== undefined || dados.responsavel !== undefined || dados.observacoes !== undefined, "Informe ao menos um dado de cabeçalho para alterar");
 
 const RetiradaSerragemTerceirosSchema = z.object({
   serragemId: z.number().int().positive(),

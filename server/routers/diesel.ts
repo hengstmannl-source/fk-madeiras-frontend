@@ -15,6 +15,7 @@ function dataLocal(data: string): Date {
 const NotaDieselSchema = z.object({
   numeroNota: z.string().trim().max(100).nullable().optional(),
   fornecedorId: z.number().int().positive(),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   litros: DecimalPositivo,
   valorTotal: DecimalPositivo,
   dataNota: DataSchema,
@@ -24,6 +25,7 @@ const NotaDieselSchema = z.object({
 
 const AbastecimentoDieselSchema = z.object({
   destino: z.string().trim().min(2, "Informe o destino do abastecimento").max(200),
+  centroCustoId: z.number().int().positive().nullable().optional(),
   responsavel: z.string().trim().max(200).nullable().optional(),
   litros: DecimalPositivo,
   dataAbastecimento: DataSchema,

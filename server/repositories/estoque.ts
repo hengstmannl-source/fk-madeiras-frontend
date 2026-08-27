@@ -31,6 +31,7 @@ import { getEmpresaUnica } from "./identidade";
 import { getInsertedId } from "./catalogo";
 import { garantirTituloFinanceiroAutomatico, getOrCreateCategoriaCustoMateriaPrima } from "./financeiro";
 import { formatarNumeroDocumentoPadronizado, reservarProximoNumeroDocumento } from "./documentos";
+import { obterCentroCustoAtivo } from "./centrosCusto";
 
 type MysqlInsertResult = readonly [{ insertId?: number | bigint }, unknown];
 type DatabaseConnection = NonNullable<Awaited<ReturnType<typeof getDb>>>;
@@ -424,6 +425,7 @@ export async function criarRomaneioCargaToras(data: {
   dataVencimento: Date;
   origem?: string | null;
   fornecedorId?: number | null;
+  centroCustoId?: number | null;
   responsavel?: string | null;
   observacoes?: string | null;
   fretePorMetroCubico: string;
@@ -440,6 +442,7 @@ export async function criarRomaneioCargaToras(data: {
   const frete = Number((volumeTotal * fretePorMetroCubico).toFixed(2));
   const valorTotal = valorProdutos + frete;
   return db.transaction(async (tx: any) => {
+    if (data.centroCustoId) await obterCentroCustoAtivo(data.centroCustoId, tx, data.empresaId);
     const temporario = `TMP-${crypto.randomUUID().slice(0, 20)}`;
     const insercao = await tx.insert(romaneiosCargaToras).values({
       numero: temporario,
@@ -447,6 +450,7 @@ export async function criarRomaneioCargaToras(data: {
       dataVencimento: data.dataVencimento,
       origem: data.origem?.trim() || null,
       fornecedorId: data.fornecedorId ?? null,
+      centroCustoId: data.centroCustoId ?? null,
       responsavel: data.responsavel?.trim() || null,
       observacoes: data.observacoes?.trim() || null,
       totalPlaquetas: plaquetasPreparadas.length,
@@ -469,6 +473,7 @@ export async function criarRomaneioCargaToras(data: {
       dataVencimento: data.dataVencimento,
       origem: data.origem,
       fornecedorId: data.fornecedorId,
+      centroCustoId: data.centroCustoId,
       observacoes: data.observacoes,
       valorTotal,
       criadoPor: data.criadoPor,
@@ -505,6 +510,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
   dataVencimento: Date;
   origem?: string | null;
   fornecedorId?: number | null;
+  centroCustoId?: number | null;
   responsavel?: string | null;
   observacoes?: string | null;
   fretePorMetroCubico: string;
@@ -522,6 +528,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
   return db.transaction(async (tx: any) => {
     const carga = (await tx.select().from(romaneiosCargaToras).where(eq(romaneiosCargaToras.id, id)).limit(1))[0];
     if (!carga) throw new Error("Romaneio de carga não encontrado");
+    if (data.centroCustoId) await obterCentroCustoAtivo(data.centroCustoId, tx, carga.empresaId);
     const existentes = await tx.select().from(plaquetas).where(eq(plaquetas.romaneioCargaId, id));
     if (existentes.some((plaqueta: any) => plaqueta.estado !== "disponivel")) throw new Error("Este romaneio possui toras utilizadas na produção e não pode ser alterado");
     for (const plaqueta of existentes) await tx.delete(movimentacoesPlaquetas).where(eq(movimentacoesPlaquetas.plaquetaId, plaqueta.id));
@@ -545,7 +552,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
       const plaquetaId = getInsertedId(await tx.insert(plaquetas).values({ ...valores, empresaId: carga.empresaId, romaneioCargaId: id, estado: "disponivel", criadoPor: carga.criadoPor }) as MysqlInsertResult);
       await tx.insert(movimentacoesPlaquetas).values({ empresaId: carga.empresaId, plaquetaId, tipo: "entrada", volume: plaqueta.volume.toFixed(6), motivo: `Entrada pelo romaneio ${carga.numero}`, criadoPor: carga.criadoPor });
     }
-    await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, dataVencimento: data.dataVencimento, origem: data.origem?.trim() || null, fornecedorId: data.fornecedorId ?? null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), fretePorMetroCubico: fretePorMetroCubico.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
+    await tx.update(romaneiosCargaToras).set({ dataCarga: data.dataCarga, dataVencimento: data.dataVencimento, origem: data.origem?.trim() || null, fornecedorId: data.fornecedorId ?? null, centroCustoId: data.centroCustoId ?? null, responsavel: data.responsavel?.trim() || null, observacoes: data.observacoes?.trim() || null, totalPlaquetas: plaquetasPreparadas.length, volumeTotal: volumeTotal.toFixed(6), valorProdutos: valorProdutos.toFixed(2), fretePorMetroCubico: fretePorMetroCubico.toFixed(2), frete: frete.toFixed(2), valorTotal: valorTotal.toFixed(2) }).where(eq(romaneiosCargaToras.id, id));
     await sincronizarTituloMateriaPrimaCarga(tx, {
       romaneioId: id,
       numero: carga.numero,
@@ -553,6 +560,7 @@ export async function atualizarRomaneioCargaToras(id: number, data: {
       dataVencimento: data.dataVencimento,
       origem: data.origem,
       fornecedorId: data.fornecedorId,
+      centroCustoId: data.centroCustoId,
       observacoes: data.observacoes,
       valorTotal,
       criadoPor: carga.criadoPor,
@@ -569,6 +577,7 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
   dataVencimento: Date;
   origem?: string | null;
   fornecedorId?: number | null;
+  centroCustoId?: number | null;
   observacoes?: string | null;
   valorTotal: number;
   criadoPor: number;
@@ -589,6 +598,7 @@ async function sincronizarTituloMateriaPrimaCarga(tx: any, data: {
     contraparteNome: fornecedor?.nome ?? data.origem?.trim() ?? null,
     romaneioCargaId: data.romaneioId,
     categoriaId,
+    centroCustoId: data.centroCustoId ?? null,
     valorOriginal,
     dataEmissao: data.dataCarga,
     dataVencimento: data.dataVencimento,

@@ -171,6 +171,8 @@ export const orcamentos = mysqlTable("orcamentos", {
   totalPecas: int("totalPecas").notNull().default(0),
   totalMetroLinear: decimal("totalMetroLinear", { precision: 14, scale: 4 }).notNull().default("0"),
   totalVolume: decimal("totalVolume", { precision: 14, scale: 6 }).notNull().default("0"),
+  /** Classificação comercial explícita, propagada aos recebíveis gerados pela venda. */
+  centroCustoId: int("centroCustoId"),
   observacoes: text("observacoes"),
   vendedor: varchar("vendedor", { length: 200 }),
   criadoPor: int("criadoPor"),
@@ -380,6 +382,8 @@ export const romaneiosCargaToras = mysqlTable("romaneiosCargaToras", {
   dataVencimento: timestamp("dataVencimento").notNull(),
   origem: varchar("origem", { length: 200 }),
   fornecedorId: int("fornecedorId"),
+  /** Centro de Custo explicitamente escolhido para a compra e seu título automático. */
+  centroCustoId: int("centroCustoId"),
   responsavel: varchar("responsavel", { length: 200 }),
   observacoes: text("observacoes"),
   totalPlaquetas: int("totalPlaquetas").notNull().default(0),
@@ -546,6 +550,8 @@ export const serragensTerceiros = mysqlTable("serragensTerceiros", {
   empresaId: int("empresaId").notNull(),
   numero: varchar("numero", { length: 40 }).notNull().unique(),
   clienteId: int("clienteId").notNull(),
+  /** Centro de Custo explicitamente escolhido para o recebível do serviço. */
+  centroCustoId: int("centroCustoId"),
   dataProducao: timestamp("dataProducao").notNull(),
   responsavel: varchar("responsavel", { length: 200 }),
   observacoes: text("observacoes"),
@@ -781,6 +787,8 @@ export const notasDiesel = mysqlTable("notasDiesel", {
   valorTotal: decimal("valorTotal", { precision: 14, scale: 2 }).notNull(),
   dataNota: timestamp("dataNota").notNull(),
   dataVencimento: timestamp("dataVencimento").notNull(),
+  /** Centro de Custo da obrigação de compra; não é fonte de custo operacional do diesel. */
+  centroCustoId: int("centroCustoId"),
   observacoes: text("observacoes"),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -799,6 +807,8 @@ export const abastecimentosDiesel = mysqlTable("abastecimentosDiesel", {
   custoUnitario: decimal("custoUnitario", { precision: 14, scale: 4 }).notNull(),
   custoTotal: decimal("custoTotal", { precision: 14, scale: 2 }).notNull(),
   dataAbastecimento: timestamp("dataAbastecimento").notNull(),
+  /** Centro de Custo do consumo físico de diesel. */
+  centroCustoId: int("centroCustoId"),
   observacoes: text("observacoes"),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -807,18 +817,22 @@ export const abastecimentosDiesel = mysqlTable("abastecimentosDiesel", {
 export type AbastecimentoDiesel = typeof abastecimentosDiesel.$inferSelect;
 export type InsertAbastecimentoDiesel = typeof abastecimentosDiesel.$inferInsert;
 
-/** Centro gerencial que separa custos industriais dos comerciais e administrativos. */
+/** Centro de custo utilizado para classificar a área econômica de títulos financeiros. */
 export const centrosCustosGerenciais = mysqlTable("centrosCustosGerenciais", {
   id: int("id").autoincrement().primaryKey(),
   empresaId: int("empresaId").notNull(),
-  codigo: mysqlEnum("codigo", ["industrial", "comercial_administrativo"]).notNull(),
+  /** Código técnico estável. Não representa mais o tipo do centro. */
+  codigo: varchar("codigo", { length: 80 }).notNull(),
   nome: varchar("nome", { length: 150 }).notNull(),
+  tipo: mysqlEnum("tipo", ["industrial", "comercial_administrativo", "nao_apropriavel"]).notNull().default("industrial"),
   ativo: boolean("ativo").notNull().default(true),
+  observacoes: text("observacoes"),
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 }, (table) => ({
   empresaCodigoUnico: uniqueIndex("centros_custos_gerenciais_empresa_codigo_unico").on(table.empresaId, table.codigo),
+  empresaTipoAtivoIndice: index("centros_custos_gerenciais_empresa_tipo_ativo_indice").on(table.empresaId, table.tipo, table.ativo),
 }));
 
 export type CentroCustoGerencial = typeof centrosCustosGerenciais.$inferSelect;
@@ -999,6 +1013,8 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   notaDieselId: int("notaDieselId").unique(),
   serragemTerceirosId: int("serragemTerceirosId").unique(),
   categoriaId: int("categoriaId").notNull(),
+  /** Centro de Custo do evento financeiro. Históricos não classificados permanecem nulos. */
+  centroCustoId: int("centroCustoId"),
   recorrenciaId: int("recorrenciaId"),
   grupoParcelamento: varchar("grupoParcelamento", { length: 64 }),
   numeroParcela: int("numeroParcela"),
@@ -1020,7 +1036,9 @@ export const titulosFinanceiros = mysqlTable("titulosFinanceiros", {
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  centroCompetenciaIndice: index("titulos_financeiros_centro_competencia_indice").on(table.empresaId, table.centroCustoId, table.competencia, table.estado),
+}));
 
 export type TituloFinanceiro = typeof titulosFinanceiros.$inferSelect;
 export type InsertTituloFinanceiro = typeof titulosFinanceiros.$inferInsert;
@@ -1195,6 +1213,8 @@ export const recorrenciasFinanceiras = mysqlTable("recorrenciasFinanceiras", {
   fornecedorId: int("fornecedorId"),
   contraparteNome: varchar("contraparteNome", { length: 300 }),
   categoriaId: int("categoriaId").notNull(),
+  /** Centro herdado por cada título futuro da recorrência. */
+  centroCustoId: int("centroCustoId"),
   contaFinanceiraId: int("contaFinanceiraId"),
   valor: decimal("valor", { precision: 14, scale: 2 }).notNull(),
   frequencia: mysqlEnum("frequencia", ["semanal", "mensal", "trimestral", "semestral", "anual"]).notNull(),
@@ -1205,7 +1225,9 @@ export const recorrenciasFinanceiras = mysqlTable("recorrenciasFinanceiras", {
   criadoPor: int("criadoPor").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (table) => ({
+  centroAtivaIndice: index("recorrencias_financeiras_centro_ativa_indice").on(table.empresaId, table.centroCustoId, table.ativa),
+}));
 
 export type RecorrenciaFinanceira = typeof recorrenciasFinanceiras.$inferSelect;
 export type InsertRecorrenciaFinanceira = typeof recorrenciasFinanceiras.$inferInsert;
@@ -1277,6 +1299,8 @@ export const colaboradoresRh = mysqlTable("colaboradoresRh", {
   usuarioId: int("usuarioId"),
   departamentoId: int("departamentoId"),
   cargoId: int("cargoId"),
+  /** Centro de Custo que poderá ser propagado aos títulos de folha do colaborador. */
+  centroCustoId: int("centroCustoId"),
   nome: varchar("nome", { length: 300 }).notNull(),
   cpf: varchar("cpf", { length: 20 }),
   rg: varchar("rg", { length: 30 }),
