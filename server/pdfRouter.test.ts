@@ -128,6 +128,28 @@ describe("rotas de PDF protegidas", () => {
     validarAreaSeguraDoRodape();
   });
 
+  it("resume o saldo total em m³ por essência no PDF de carga", async () => {
+    vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);
+    vi.spyOn(db, "getEmpresaConfiguracao").mockResolvedValue(undefined);
+    vi.spyOn(db, "getRomaneioCargaComPlaquetas").mockResolvedValue({
+      carga: { numero: "CARGA-000009", dataCarga: new Date(), origem: "Origem", responsavel: "Responsável", volumeTotal: "5.500000", totalPlaquetas: 3, valorProdutos: "4950", fretePorMetroCubico: "0", frete: "0", valorTotal: "4950", observacoes: null },
+      plaquetas: [
+        { id: 10, codigo: "TOR-0100", situacaoIdentificacao: "identificada", madeiraNome: "Cedrinho", diametro: "30", comprimento: "5", volumeInicial: "3.000", valorMetroCubico: "900", valorTotal: "2700" },
+        { id: 11, codigo: "TOR-0101", situacaoIdentificacao: "identificada", madeiraNome: "Cedrinho", diametro: "28", comprimento: "4", volumeInicial: "2.000", valorMetroCubico: "900", valorTotal: "1800" },
+        { id: 12, codigo: "TOR-0102", situacaoIdentificacao: "identificada", madeiraNome: "Cambará", diametro: "25", comprimento: "2", volumeInicial: "0.500", valorMetroCubico: "900", valorTotal: "450" },
+      ],
+    } as any);
+    const res = createResponse();
+
+    await routes["/api/pdf/romaneio-carga/:id"]!({ params: { id: "9" } }, res);
+
+    const textos = textosDoPdf();
+    expect(textos).toContain("SALDO TOTAL POR ESSÊNCIA");
+    expect(textos).toContain("Cedrinho: 5 m³");
+    expect(textos).toContain("Cambará: 0,5 m³");
+    validarAreaSeguraDoRodape();
+  });
+
   it("mantém o código interno longo de plaqueta sem referência dentro da primeira coluna", async () => {
     const codigoInterno = "SEM-PLQ-OPERADOR-IDENTIFICADOR-MUITO-LONGO-0001";
     vi.spyOn(sdk, "authenticateRequest").mockResolvedValue({ id: 1 } as any);

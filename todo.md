@@ -875,3 +875,5 @@
 - [x] Incluir o frete do romaneio de carga de toras no custo real e na referência ponderada por essência
 - [x] Manter frete comercial de madeira serrada fora do custo da tora e explicitamente separado na margem da venda
 - [x] Validar a separação de fretes em testes, interface e documentação antes de publicar a regra confirmada
+- [x] Adicionar ao PDF do romaneio de carga o saldo total em m³ agrupado por essência
+- [x] Cobrir o resumo de volume por essência com testes e validação visual do PDF

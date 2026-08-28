@@ -68,6 +68,23 @@ function larguraTexto(font: any, texto: string, tamanho: number): number {
   return texto.length * tamanho * 0.52;
 }
 
+function resumirVolumePorEssencia(plaquetas: Array<{ madeiraNome?: unknown; volumeInicial?: string | number | null }>) {
+  const porEssencia = new Map<string, { essencia: string; volume: number }>();
+
+  for (const plaqueta of plaquetas) {
+    const essencia = normalizarTexto(plaqueta.madeiraNome) || "Essência não informada";
+    const chave = essencia.toLocaleUpperCase("pt-BR");
+    const volume = Number(plaqueta.volumeInicial);
+    if (!Number.isFinite(volume)) continue;
+
+    const atual = porEssencia.get(chave);
+    if (atual) atual.volume += volume;
+    else porEssencia.set(chave, { essencia, volume });
+  }
+
+  return Array.from(porEssencia.values()).sort((a, b) => a.essencia.localeCompare(b.essencia, "pt-BR"));
+}
+
 /** Encurta conteúdo de célula antes de desenhá-lo, evitando invadir a coluna seguinte. */
 function truncarTexto(font: any, texto: unknown, larguraMaxima: number, tamanho: number): string {
   const original = normalizarTexto(texto) || "—";
@@ -917,6 +934,18 @@ export async function registerPdfRoutes(app: any) {
           x += colunas[indice];
         });
         layout.mover(16);
+      }
+
+      const volumePorEssencia = resumirVolumePorEssencia(data.plaquetas ?? []);
+      if (volumePorEssencia.length) {
+        layout.garantirEspaco(38);
+        layout.page.drawText("SALDO TOTAL POR ESSÊNCIA", { x: MARGEM_LATERAL, y: layout.y, size: 9, font: boldFont, color: COR_MARROM });
+        layout.mover(14);
+        const resumo = volumePorEssencia
+          .map(({ essencia, volume }) => `${essencia}: ${formatMeasurement(volume)} m³`)
+          .join("   •   ");
+        layout.escreverParagrafo(resumo, MARGEM_LATERAL, width - (MARGEM_LATERAL * 2), 8.5, { color: COR_TEXTO_SECUNDARIO }, 12);
+        layout.mover(8);
       }
 
       layout.garantirEspaco(96);
