@@ -26,7 +26,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { startLogin } from "@/const";
 import { useIsMobile } from "@/hooks/useMobile";
 import {
-  ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Sun, Users,
+  Bell, ChevronDown, CircleDollarSign, LayoutDashboard, LogOut, Moon, PanelLeft, Search, Sun, Users,
   FileText, Building2, BadgeCheck, WalletCards, ArrowDownToLine,
   ArrowUpFromLine, Warehouse, Factory, Fuel, ClipboardCheck, Landmark, FileWarning, Truck, CircleCheckBig, ReceiptText, TreePine,
 } from "lucide-react";
@@ -167,8 +167,12 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
   const isMobile = useIsMobile();
   const navigationPresentation = getNavigationPresentation(isMobile);
   const [gruposExpandidos, setGruposExpandidos] = useState(() => gruposExpandidosIniciais(localStorage.getItem(SIDEBAR_GROUPS_KEY)));
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [termoBusca, setTermoBusca] = useState("");
   const empresa = contextoQuery.data?.empresa;
   const nomeEmpresa = empresa?.nomeFantasia || empresa?.nome || "FK Madeiras";
+  const alertas = trpc.financeiro.alertas.list.useQuery(undefined, { staleTime: 60_000 });
+  const resultadosBusca = dashboardMenuItems.filter((item) => item.label.toLocaleLowerCase("pt-BR").includes(termoBusca.toLocaleLowerCase("pt-BR"))).slice(0, 7);
 
   useEffect(() => { if (isCollapsed) setIsResizing(false); }, [isCollapsed]);
   useEffect(() => { localStorage.setItem(SIDEBAR_GROUPS_KEY, JSON.stringify(gruposExpandidos)); }, [gruposExpandidos]);
@@ -199,7 +203,7 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
     <>
       <div className="relative" ref={sidebarRef}>
         <Sidebar collapsible={navigationPresentation.collapsible} className="border-r-0" disableTransition={isResizing}>
-          <SidebarHeader className="h-16 justify-center">
+          <SidebarHeader className="h-[4.25rem] justify-center border-b border-sidebar-border/70">
             <div className="flex items-center gap-3 px-2 transition-all w-full">
               <button
                 onClick={toggleSidebar}
@@ -210,24 +214,24 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
               </button>
               {!isCollapsed ? (
                 <div className="flex items-center gap-2 min-w-0">
-                  <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center shrink-0">
-                    <span className="text-primary-foreground text-xs font-bold">FK</span>
+                  <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center shrink-0 shadow-sm">
+                    <span className="text-sidebar-primary-foreground text-xs font-extrabold">FK</span>
                   </div>
                   <div className="flex flex-col min-w-0">
-                    <span className="font-bold tracking-tight truncate text-sm text-foreground">FK Madeiras</span>
-                    <span className="text-[10px] text-muted-foreground truncate" title={nomeEmpresa}>{nomeEmpresa}</span>
+                    <span className="font-bold tracking-tight truncate text-sm text-sidebar-foreground">FK Madeiras</span>
+                    <span className="text-[10px] text-sidebar-foreground/65 truncate" title={nomeEmpresa}>{nomeEmpresa}</span>
                   </div>
                 </div>
               ) : (
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                  <span className="text-primary-foreground text-xs font-bold">FK</span>
+                <div className="w-8 h-8 rounded-lg bg-sidebar-primary flex items-center justify-center">
+                  <span className="text-sidebar-primary-foreground text-xs font-bold">FK</span>
                 </div>
               )}
               {!isCollapsed && <button onClick={toggleTheme} title={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>}
             </div>
           </SidebarHeader>
 
-          <SidebarContent className="gap-0 px-2 py-1">
+          <SidebarContent className="gap-0 px-2 py-3">
             <SidebarMenu>
               {dashboardNavigation.principal.map((item) => <NavigationButton key={item.path} item={item} location={location} search={search} navigate={setLocation} />)}
             </SidebarMenu>
@@ -281,18 +285,26 @@ function DashboardLayoutContent({ children, setSidebarWidth }: DashboardLayoutCo
         />
       </div>
 
-      <SidebarInset>
-        {navigationPresentation.showMobileHeader && (
-          <div className="flex border-b h-14 items-center justify-between bg-background/95 px-2 backdrop-blur supports-[backdrop-filter]:backdrop-blur sticky top-0 z-40">
-            <div className="flex items-center gap-2">
-              <SidebarTrigger className="h-9 w-9 rounded-lg bg-background" />
-              <span className="tracking-tight text-foreground font-medium">
-                {activeMenuItem?.label ?? "FK Madeiras"}
-              </span>
+      <SidebarInset className="fk-workspace">
+        <header className="fk-topbar sticky top-0 z-30">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
+            <SidebarTrigger className="h-9 w-9 shrink-0 rounded-lg border border-border/70 bg-card text-muted-foreground hover:bg-muted hover:text-foreground" />
+            <div className="hidden min-w-0 sm:block">
+              <p className="fk-eyebrow">Operação FK Madeiras</p>
+              <p className="truncate text-sm font-semibold text-foreground">{activeMenuItem?.label ?? "Dashboard"}</p>
+            </div>
+            <div className="relative ml-auto hidden w-full max-w-sm md:block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <input aria-label="Pesquisar módulos" value={termoBusca} onFocus={() => setBuscaAberta(true)} onChange={(event) => { setTermoBusca(event.target.value); setBuscaAberta(true); }} onKeyDown={(event) => { if (event.key === "Escape") setBuscaAberta(false); if (event.key === "Enter" && resultadosBusca[0]) { setLocation(resultadosBusca[0].path); setBuscaAberta(false); setTermoBusca(""); } }} placeholder="Pesquisar módulos…" className="h-9 w-full rounded-lg border border-border/70 bg-card py-2 pl-9 pr-3 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15" />
+              {buscaAberta && termoBusca.trim() ? <div className="absolute left-0 right-0 top-11 overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-lg"><p className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Ir para</p>{resultadosBusca.length ? resultadosBusca.map((item) => <button key={item.path} type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => { setLocation(item.path); setBuscaAberta(false); setTermoBusca(""); }} className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-foreground transition-colors hover:bg-muted"><item.icon className="h-4 w-4 text-primary" /><span>{item.label}</span></button>) : <p className="px-2 py-2 text-sm text-muted-foreground">Nenhum módulo encontrado.</p>}</div> : null}
             </div>
           </div>
-        )}
-        <main className="flex-1 p-6">{children}</main>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={toggleTheme} title={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} aria-label={theme === "dark" ? "Ativar modo claro" : "Ativar modo escuro"} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring">{theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}</button>
+            <button type="button" onClick={() => setLocation("/financeiro")} aria-label="Ver alertas financeiros" className="relative flex h-9 w-9 items-center justify-center rounded-lg border border-border/70 bg-card text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"><Bell className="h-4 w-4" />{alertas.data?.length ? <span className="absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-bold leading-4 text-white">{alertas.data.length > 9 ? "9+" : alertas.data.length}</span> : null}</button>
+          </div>
+        </header>
+        <main className="mx-auto w-full max-w-[1600px] flex-1 px-4 py-5 sm:px-6 lg:px-8 lg:py-7">{children}</main>
       </SidebarInset>
     </>
   );

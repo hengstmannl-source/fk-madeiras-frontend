@@ -13,6 +13,7 @@ import { BadgeCheck, CalendarClock, CalendarDays, CheckCircle2, CircleDollarSign
 import { useLocation } from "wouter";
 import { toast } from "sonner";
 import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
+import { PageHeader } from "@/components/PageHeader";
 
 const FORMAS_PAGAMENTO = [
   ["pix", "PIX"],
@@ -302,16 +303,13 @@ export default function OrcamentosAprovadosPage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <div className="mb-2 flex items-center gap-2 text-primary"><BadgeCheck className="h-4 w-4" /><span className="text-xs font-semibold uppercase tracking-wider">Vendas</span></div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">{configuracao.titulo}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{configuracao.descricao}</p>
-        </div>
-        <Card className={`${configuracao.destaque} shadow-none`}>
-          <CardContent className="flex items-center gap-2 p-3 text-xs"><PackageCheck className="h-4 w-4 shrink-0" />Pagamento e entrega são registados separadamente.</CardContent>
-        </Card>
-      </div>
+      <PageHeader
+        icon={BadgeCheck}
+        eyebrow="Operação comercial"
+        title={configuracao.titulo}
+        description={configuracao.descricao}
+        actions={<Card className={`${configuracao.destaque} max-w-xs shadow-none`}><CardContent className="flex items-center gap-2 p-3 text-xs"><PackageCheck className="h-4 w-4 shrink-0" />Pagamento e entrega são registrados separadamente.</CardContent></Card>}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {(Object.keys(CATEGORIAS) as CategoriaOperacional[]).map((chave) => {
@@ -324,7 +322,7 @@ export default function OrcamentosAprovadosPage() {
         })}
       </div>
 
-      <Card className="border-border/60 shadow-sm">
+      <Card className="fk-panel border-0 shadow-none">
         <CardContent className="p-4">
           <div className="mb-4 flex items-center gap-2"><Search className="h-4 w-4 text-primary" /><h2 className="text-sm font-semibold">Filtros de busca</h2></div>
           <div className="grid gap-4 md:grid-cols-[1.5fr_1fr_1fr_auto] md:items-end">
@@ -337,7 +335,7 @@ export default function OrcamentosAprovadosPage() {
         </CardContent>
       </Card>
 
-      <div className="overflow-hidden rounded-xl border border-border/50 bg-card shadow-sm">
+      <div className="fk-panel overflow-hidden">
         {vendas.isLoading ? <div className="p-10 text-center text-muted-foreground"><Loader2 className="mx-auto mb-2 h-6 w-6 animate-spin" />A carregar...</div>
           : vendasFiltradas.length > 0 ? (
             <div className="overflow-x-auto"><Table>

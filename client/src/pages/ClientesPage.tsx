@@ -14,6 +14,7 @@ import {
 import { Plus, Pencil, Trash2, Users, Loader2, Mail, Phone, MapPin, FileSpreadsheet, Upload, Download, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Link } from "wouter";
+import { PageHeader } from "@/components/PageHeader";
 
 type LinhaImportacao = { linha: number; nome: string; contacto: string; email: string; morada: string; nif: string; observacoes: string };
 const valorPlanilha = (linha: Record<string, unknown>, ...nomes: string[]) => {
@@ -100,12 +101,12 @@ export default function ClientesPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Clientes</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gestão de clientes e contactos</p>
-        </div>
-        <div className="flex items-center gap-2">
+      <PageHeader
+        icon={Users}
+        eyebrow="Gestão comercial"
+        title="Clientes"
+        description="Centralize cadastros, contatos e o histórico comercial de cada cliente."
+        actions={<div className="flex items-center gap-2">
         <Dialog open={importOpen} onOpenChange={(aberto) => { setImportOpen(aberto); if (!aberto) { setLinhasImportacao([]); setPrevisaoImportacao(null); } }}>
           <DialogTrigger asChild><Button variant="outline"><FileSpreadsheet className="mr-2 h-4 w-4" />Importar planilha</Button></DialogTrigger>
           <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
@@ -137,10 +138,10 @@ export default function ClientesPage() {
             </div>
           </DialogContent>
         </Dialog>
-        </div>
-      </div>
+        </div>}
+      />
 
-      <div className="rounded-xl border border-border/50 bg-white shadow-sm overflow-hidden">
+      <div className="fk-panel overflow-hidden">
         {clientes.isLoading ? <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />A carregar...</div>
         : clientes.data && clientes.data.length > 0 ? (
           <Table>

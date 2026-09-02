@@ -54,6 +54,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { SearchableEntitySelect } from "@/components/SearchableEntitySelect";
 import { PdfPreviewDialog } from "@/components/PdfPreviewDialog";
+import { PageHeader } from "@/components/PageHeader";
 
 type PlaquetaCarga = {
   codigo: string;
@@ -761,16 +762,12 @@ export default function EstoquePage() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <header>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-          Pátio e armazenamento
-        </p>
-        <h1 className="mt-1 text-2xl font-bold tracking-tight">Estoque</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Controle as cargas de toras recebidas e as peças serradas já
-          produzidas.
-        </p>
-      </header>
+      <PageHeader
+        icon={Warehouse}
+        eyebrow="Pátio e armazenamento"
+        title="Estoque"
+        description="Controle cargas de toras recebidas, plaquetas e peças serradas disponíveis para a operação."
+      />
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Resumo
           icone={<ClipboardList />}

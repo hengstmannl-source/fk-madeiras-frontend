@@ -2,11 +2,12 @@ import { trpc } from "@/lib/trpc";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   ArrowDownToLine, ArrowUpFromLine, CircleAlert, CircleDollarSign,
-  ArrowRight, CalendarClock,
+  ArrowRight, CalendarClock, WalletCards,
 } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/PageHeader";
 import { useMemo } from "react";
 import { saldoAbertoDashboard, resumirDashboardFinanceiro } from "@/lib/dashboardFinanceiro";
 
@@ -42,21 +43,18 @@ export default function Dashboard() {
   const proximosTitulos = (titulos.data ?? []).filter((titulo: any) => !["quitado", "cancelado"].includes(titulo.estado)).sort((a: any, b: any) => new Date(a.dataVencimento).getTime() - new Date(b.dataVencimento).getTime()).slice(0, 5);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Visão geral do fluxo financeiro da empresa</p>
-      </div>
+    <div className="max-w-none space-y-7">
+      <PageHeader icon={WalletCards} eyebrow="Visão executiva" title="Dashboard" description="Acompanhe compromissos, liquidez projetada e pontos de atenção da operação." />
 
       {/* KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {kpis.map((kpi) => (
-          <Card key={kpi.title} className="border border-border/50 shadow-sm hover:shadow-md transition-shadow cursor-pointer" onClick={() => setLocation(kpi.path)}>
+          <Card key={kpi.title} className="fk-kpi-card cursor-pointer transition-[transform,box-shadow,border-color] duration-150 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md" onClick={() => setLocation(kpi.path)}>
             <CardContent className="p-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">{kpi.title}</p>
-                  <p className="text-2xl font-bold text-foreground mt-1">{kpi.value}</p>
+                  <p className="fk-eyebrow">{kpi.title}</p>
+                  <p className="fk-kpi-value mt-1 text-2xl font-extrabold text-foreground">{kpi.value}</p>
                 </div>
                 <div className={`w-10 h-10 rounded-lg ${kpi.bg} flex items-center justify-center`}>
                   <kpi.icon className={`h-5 w-5 ${kpi.color}`} />
@@ -68,7 +66,7 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="border border-border/50 shadow-sm lg:col-span-2">
+        <Card className="fk-panel lg:col-span-2">
         <CardHeader className="flex flex-row items-center justify-between pb-2">
           <CardTitle className="text-base font-semibold">Próximos compromissos</CardTitle>
           <button onClick={() => setLocation("/financeiro")} className="text-sm text-primary hover:underline flex items-center gap-1">
@@ -107,7 +105,7 @@ export default function Dashboard() {
           )}
         </CardContent>
         </Card>
-        <Card className="border border-amber-200 bg-amber-50/40 shadow-sm"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base font-semibold text-amber-950"><CalendarClock className="h-4 w-4 text-amber-700" />Alertas financeiros</CardTitle></CardHeader><CardContent>{alertas.data?.length ? <div className="space-y-3">{alertas.data.slice(0, 3).map((alerta: any) => <div key={alerta.id} className="rounded-lg border border-amber-200 bg-white/80 p-3"><p className="text-sm font-medium text-amber-950">{alerta.mensagem}</p><p className="mt-1 text-xs text-amber-800">{formatCurrency(alerta.valorOriginal)}</p></div>)}</div> : <p className="py-8 text-center text-sm text-amber-800">Nenhum alerta financeiro ativo.</p>}</CardContent></Card>
+        <Card className="border border-amber-300/70 bg-amber-50/55 shadow-sm"><CardHeader className="pb-2"><CardTitle className="flex items-center gap-2 text-base font-semibold text-amber-950"><CalendarClock className="h-4 w-4 text-amber-700" />Alertas financeiros</CardTitle></CardHeader><CardContent>{alertas.data?.length ? <div className="space-y-3">{alertas.data.slice(0, 3).map((alerta: any) => <div key={alerta.id} className="rounded-lg border border-amber-200/90 bg-card p-3"><p className="text-sm font-medium text-amber-950">{alerta.mensagem}</p><p className="mt-1 text-xs text-amber-800">{formatCurrency(alerta.valorOriginal)}</p></div>)}</div> : <p className="py-8 text-center text-sm text-amber-800">Nenhum alerta financeiro ativo.</p>}</CardContent></Card>
       </div>
     </div>
   );

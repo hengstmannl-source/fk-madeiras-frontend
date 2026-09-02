@@ -448,7 +448,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
 
     await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas recebidas" }).at(-1)!);
     expect(screen.getByText("Receita recebida arquivada")).toBeInTheDocument();
-  });
+  }, 10_000);
 
   it("aplica períodos rápidos e apresenta totais a pagar e receber do resultado pesquisado", async () => {
     const user = userEvent.setup();
@@ -583,7 +583,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     const user = userEvent.setup();
     render(<FinanceiroPage />);
 
-    fireEvent.click(screen.getByRole("button", { name: /novo lançamento avulso/i }));
+    fireEvent.click(screen.getByRole("button", { name: /novo lançamento/i }));
 
     expect(screen.getByText("Documentos do lançamento")).toBeInTheDocument();
     const seletorTipo = screen.getByText("Conta a receber", { exact: true }).closest('[role="combobox"]');

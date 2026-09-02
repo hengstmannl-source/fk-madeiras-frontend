@@ -56,6 +56,9 @@ function Router() {
         <Route path="/orcamentos/concluidas" component={OrcamentosAprovadosPage} />
         <Route path="/vendas/margem" component={RelatorioMargemVendasPage} />
         <Route path="/orcamentos/margem" component={RelatorioMargemVendasPage} />
+        <Route path="/vendas/novo" component={OrcamentoNovo} />
+        <Route path="/vendas/:id" component={OrcamentoEdit} />
+        <Route path="/vendas" component={OrcamentosPage} />
         <Route path="/orcamentos" component={OrcamentosPage} />
         <Route path="/orcamentos/novo" component={OrcamentoNovo} />
         <Route path="/orcamentos/:id" component={OrcamentoEdit} />

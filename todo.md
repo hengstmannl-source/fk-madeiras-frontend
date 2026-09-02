@@ -881,3 +881,13 @@
 - [x] Corrigir a cobertura dos recebíveis de serragem sem criar duplicidades ou alterar lançamentos indevidamente
 - [x] Melhorar a usabilidade de contas a pagar, pagas, receber e recebidas com filtros, totais e leitura operacional
 - [x] Cobrir a correção de serragem e a nova interface financeira com testes e validação responsiva
+- [x] Revisar o briefing completo de redesign visual e mapear as telas, rotas e componentes existentes sem alterar regras de negócio
+- [x] Definir e aplicar um sistema visual corporativo próprio da FK Madeiras, com tipografia, cores, espaçamentos, estados e acessibilidade consistentes
+- [x] Redesenhar a estrutura global com sidebar agrupada e colapsável, header contextual, busca, alertas e identificação do usuário
+- [x] Reorganizar as experiências de Contas a Pagar, Pagas, a Receber e Recebidas, preservando os filtros e cálculos existentes
+- [x] Modernizar painel financeiro, fluxo de caixa, resultado gerencial, conciliação e relatórios sem alterar a lógica financeira
+- [x] Aplicar o padrão visual aos módulos reais de operação, comercial e gestão interna, sem criar páginas fictícias
+- [x] Validar responsividade, acessibilidade, fluxos críticos e regressões; atualizar os testes visuais e automatizados pertinentes
+- [ ] Publicar o redesign visual aprovado e registrar a entrega
+- [x] Estabilizar o cenário de teste financeiro de pesquisa sequencial que excedeu o limite sob carga da suíte completa
+- [x] Corrigir a rota comercial inválida identificada na validação responsiva para que Vendas abra o módulo real

@@ -10,6 +10,7 @@ import { Plus, FileText, Eye, Trash2, Loader2, Send, CheckCircle2, XCircle, Cloc
 import { formatCurrency } from "@/lib/utils";
 import { useLocation } from "wouter";
 import { toast } from "sonner";
+import { PageHeader } from "@/components/PageHeader";
 
 const estadosOrcamento = ["rascunho", "enviado", "aprovado", "rejeitado"] as const;
 type EstadoOrcamento = (typeof estadosOrcamento)[number];
@@ -64,21 +65,19 @@ export default function OrcamentosPage() {
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">Vendas</h1>
-          <p className="text-sm text-muted-foreground mt-1">Gestão de vendas de madeira serrada</p>
-        </div>
-        <Button onClick={() => setLocation("/orcamentos/novo")} className="bg-primary hover:bg-primary/90 text-primary-foreground">
-          <Plus className="h-4 w-4 mr-2" />Nova Venda
-        </Button>
-      </div>
+      <PageHeader
+        icon={FileText}
+        eyebrow="Comercial"
+        title="Vendas"
+        description="Acompanhe pedidos de madeira serrada, seus estados e a evolução comercial."
+        actions={<Button onClick={() => setLocation("/orcamentos/novo")} className="bg-primary hover:bg-primary/90 text-primary-foreground"><Plus className="h-4 w-4 mr-2" />Nova venda</Button>}
+      />
 
-      <div className="flex items-center gap-3">
+      <div className="fk-panel flex items-center gap-3 p-3">
         <Select value={filterEstado} onValueChange={(valor) => {
           if (valor === "todos" || isEstadoOrcamento(valor)) setFilterEstado(valor);
         }}>
-          <SelectTrigger className="w-48 bg-white"><SelectValue placeholder="Todos os estados" /></SelectTrigger>
+          <SelectTrigger className="w-48"><SelectValue placeholder="Todos os estados" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="rascunho">Rascunho</SelectItem>
@@ -89,7 +88,7 @@ export default function OrcamentosPage() {
         </Select>
       </div>
 
-      <div className="rounded-xl border border-border/50 bg-white shadow-sm overflow-hidden">
+      <div className="fk-panel overflow-hidden">
         {orcamentos.isLoading ? <div className="p-8 text-center text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />A carregar...</div>
         : orcamentos.data && orcamentos.data.length > 0 ? (
           <Table>
