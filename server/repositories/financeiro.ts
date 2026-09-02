@@ -937,6 +937,7 @@ export async function listTitulosFinanceiros(
   filters: {
     tipo?: TipoTituloFinanceiro;
     estado?: TituloFinanceiro["estado"];
+    origem?: TituloFinanceiro["origem"];
     clienteId?: number;
     fornecedorId?: number;
     categoriaId?: number;
@@ -946,8 +947,15 @@ export async function listTitulosFinanceiros(
     valorMaximo?: number;
     dataInicio?: Date;
     dataFim?: Date;
+    criterioData?: "vencimento" | "baixa";
   } | undefined,
-  dependencias: { database?: DatabaseConnection; atualizarEstado?: (titulo: TituloFinanceiro) => Promise<TituloFinanceiro>; titulos?: TituloFinanceiro[]; empresaId: number },
+  dependencias: {
+    database?: DatabaseConnection;
+    atualizarEstado?: (titulo: TituloFinanceiro) => Promise<TituloFinanceiro>;
+    titulos?: TituloFinanceiro[];
+    baixas?: Pick<InferSelectModel<typeof baixasFinanceiras>, "tituloId" | "dataBaixa" | "estornada">[];
+    empresaId: number;
+  },
 ) {
   const db = dependencias?.database ?? await getDb();
   if (!db && !dependencias?.titulos) return [];
@@ -956,6 +964,7 @@ export async function listTitulosFinanceiros(
   if (filters?.tipo) conditions.push(eq(titulosFinanceiros.tipo, filters.tipo));
   if (filters?.estado) conditions.push(eq(titulosFinanceiros.estado, filters.estado));
   else conditions.push(ne(titulosFinanceiros.estado, "cancelado"));
+  if (filters?.origem) conditions.push(eq(titulosFinanceiros.origem, filters.origem));
   if (filters?.clienteId) conditions.push(eq(titulosFinanceiros.clienteId, filters.clienteId));
   if (filters?.fornecedorId) conditions.push(eq(titulosFinanceiros.fornecedorId, filters.fornecedorId));
   if (filters?.categoriaId) conditions.push(eq(titulosFinanceiros.categoriaId, filters.categoriaId));
@@ -963,10 +972,25 @@ export async function listTitulosFinanceiros(
   const titulos = dependencias?.titulos ?? await db!.select().from(titulosFinanceiros)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(titulosFinanceiros.dataVencimento));
+  const idsTitulos = titulos.map((titulo) => titulo.id);
+  const baixas = filters?.criterioData === "baixa" && idsTitulos.length > 0
+    ? (dependencias?.baixas ?? await db!.select({
+      tituloId: baixasFinanceiras.tituloId,
+      dataBaixa: baixasFinanceiras.dataBaixa,
+      estornada: baixasFinanceiras.estornada,
+    }).from(baixasFinanceiras).where(inArray(baixasFinanceiras.tituloId, idsTitulos)))
+    : [];
+  const baixasValidasPorTitulo = new Map<number, Date[]>();
+  baixas.filter((baixa) => !baixa.estornada).forEach((baixa) => {
+    const datas = baixasValidasPorTitulo.get(baixa.tituloId) ?? [];
+    datas.push(new Date(baixa.dataBaixa));
+    baixasValidasPorTitulo.set(baixa.tituloId, datas);
+  });
   const titulosVisiveis = titulos.filter((titulo) => {
     if (!filters?.estado && titulo.estado === "cancelado") return false;
     if (filters?.estado && titulo.estado !== filters.estado) return false;
     if (filters?.tipo && titulo.tipo !== filters.tipo) return false;
+    if (filters?.origem && titulo.origem !== filters.origem) return false;
     if (filters?.clienteId && titulo.clienteId !== filters.clienteId) return false;
     if (filters?.fornecedorId && titulo.fornecedorId !== filters.fornecedorId) return false;
     if (filters?.categoriaId && titulo.categoriaId !== filters.categoriaId) return false;
@@ -976,12 +1000,23 @@ export async function listTitulosFinanceiros(
     const valor = decimalParaNumero(titulo.valorOriginal) - decimalParaNumero(titulo.desconto ?? "0") + decimalParaNumero(titulo.juros ?? "0");
     if (filters?.valorMinimo !== undefined && valor < filters.valorMinimo) return false;
     if (filters?.valorMaximo !== undefined && valor > filters.valorMaximo) return false;
-    const vencimento = new Date(titulo.dataVencimento).getTime();
-    if (filters?.dataInicio && vencimento < filters.dataInicio.getTime()) return false;
-    if (filters?.dataFim && vencimento > filters.dataFim.getTime()) return false;
+    const datasReferencia = filters?.criterioData === "baixa"
+      ? baixasValidasPorTitulo.get(titulo.id) ?? []
+      : [new Date(titulo.dataVencimento)];
+    if (filters?.criterioData === "baixa" && datasReferencia.length === 0) return false;
+    const existeDataNoPeriodo = datasReferencia.some((data) => (
+      (!filters?.dataInicio || data.getTime() >= filters.dataInicio.getTime())
+      && (!filters?.dataFim || data.getTime() <= filters.dataFim.getTime())
+    ));
+    if (!existeDataNoPeriodo) return false;
     return true;
   });
-  return Promise.all(titulosVisiveis.map((titulo) => dependencias?.atualizarEstado ? dependencias.atualizarEstado(titulo) : atualizarEstadoTituloFinanceiro(titulo)));
+  return Promise.all(titulosVisiveis.map(async (titulo) => {
+    const atualizado = dependencias?.atualizarEstado ? await dependencias.atualizarEstado(titulo) : await atualizarEstadoTituloFinanceiro(titulo);
+    const datasBaixa = baixasValidasPorTitulo.get(titulo.id) ?? [];
+    const dataUltimaBaixa = datasBaixa.length ? new Date(Math.max(...datasBaixa.map((data) => data.getTime()))) : undefined;
+    return { ...atualizado, dataUltimaBaixa };
+  }));
 }
 
 export type FiltrosContasOperacionais = {

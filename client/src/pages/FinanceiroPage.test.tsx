@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const state = vi.hoisted(() => ({
   search: "",
   ultimaConsultaOperacional: undefined as Record<string, unknown> | undefined,
+  ultimaConsultaTitulos: undefined as Record<string, unknown> | undefined,
   titulos: [] as Array<Record<string, unknown>>,
   clientes: [] as Array<Record<string, unknown>>,
   categorias: [] as Array<Record<string, unknown>>,
@@ -87,18 +88,23 @@ vi.mock("@/lib/trpc", () => {
       cliente: { list: { useQuery: () => ({ data: state.clientes, isLoading: false }) }, create: mutationInerte },
       financeiro: {
         titulos: {
-          list: { useQuery: (filtros?: { descricao?: string; clienteId?: number; categoriaId?: number; dataInicio?: Date; dataFim?: Date }) => ({
+          list: { useQuery: (filtros?: { descricao?: string; clienteId?: number; categoriaId?: number; dataInicio?: Date; dataFim?: Date; origem?: string; criterioData?: "vencimento" | "baixa" }) => {
+            state.ultimaConsultaTitulos = filtros;
+            return {
             data: !filtros ? state.titulos : state.titulos.filter((titulo) => {
               if (filtros.descricao && !`${titulo.descricao ?? ""}`.toLocaleLowerCase("pt-BR").includes(filtros.descricao.toLocaleLowerCase("pt-BR"))) return false;
               if (filtros.categoriaId && titulo.categoriaId !== filtros.categoriaId) return false;
               if (filtros.clienteId && titulo.clienteId !== filtros.clienteId) return false;
-              if (filtros.dataInicio && new Date(titulo.dataVencimento as string).getTime() < filtros.dataInicio.getTime()) return false;
-              if (filtros.dataFim && new Date(titulo.dataVencimento as string).getTime() > filtros.dataFim.getTime()) return false;
+              if (filtros.origem && titulo.origem !== filtros.origem) return false;
+              const dataFiltro = filtros.criterioData === "baixa" ? titulo.dataUltimaBaixa : titulo.dataVencimento;
+              if (filtros.dataInicio && (!dataFiltro || new Date(dataFiltro as string).getTime() < filtros.dataInicio.getTime())) return false;
+              if (filtros.dataFim && (!dataFiltro || new Date(dataFiltro as string).getTime() > filtros.dataFim.getTime())) return false;
               return true;
             }),
             isLoading: false,
             isFetching: false,
-          }) },
+          };
+          } },
           baixas: { useQuery: () => ({ data: state.baixas, isLoading: false, refetch: vi.fn() }) },
           createManual: mutationInerte,
           createParcelado: mutationInerte,
@@ -223,6 +229,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
   beforeEach(() => {
     state.search = "";
     state.ultimaConsultaOperacional = undefined;
+    state.ultimaConsultaTitulos = undefined;
     state.cancelar.mockReset();
     state.atualizarLote.mockReset();
     state.atualizarAgendamento.mockReset();
@@ -455,7 +462,7 @@ describe("FinanceiroPage — cancelamento manual", () => {
     );
     render(<FinanceiroPage />);
 
-    expect(screen.getByText("Períodos rápidos:")).toBeInTheDocument();
+    expect(screen.getByText("Atalhos:")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Hoje" }));
 
     expect(screen.getByText("Fornecedor do período")).toBeInTheDocument();
@@ -469,6 +476,33 @@ describe("FinanceiroPage — cancelamento manual", () => {
     await user.click(screen.getByRole("button", { name: "Este mês" }));
     await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas a receber" }).at(-1)!);
     expect(screen.getByText("Cliente do período")).toBeInTheDocument();
+  });
+
+  it("pesquisa recebimentos de serragem pela origem e pela data efetiva", async () => {
+    const user = userEvent.setup();
+    state.titulos.push({
+      id: 84,
+      descricao: "Serviço de serragem — Cliente teste",
+      origem: "serragem_terceiros",
+      tipo: "receber",
+      estado: "quitado",
+      valorOriginal: "2055.78",
+      valorBaixado: "2055.78",
+      desconto: "0.00",
+      juros: "0.00",
+      dataVencimento: "2026-08-10T00:00:00.000Z",
+      dataUltimaBaixa: "2026-08-19T00:00:00.000Z",
+    });
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getAllByRole("button", { name: "Visão financeira: Contas recebidas" }).at(-1)!);
+    expect(screen.getByText("Recebimentos efetivados")).toBeInTheDocument();
+    expect(screen.getByText(/data efetiva da baixa/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Serviços de serragem" }));
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
+
+    expect(state.ultimaConsultaTitulos).toEqual(expect.objectContaining({ origem: "serragem_terceiros", criterioData: "baixa" }));
+    expect(screen.getByText("Serviço de serragem — Cliente teste")).toBeInTheDocument();
   });
 
   it("permite reagendar o vencimento de uma conta vinculada ao romaneio de carga", async () => {

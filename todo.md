@@ -877,3 +877,7 @@
 - [x] Validar a separação de fretes em testes, interface e documentação antes de publicar a regra confirmada
 - [x] Adicionar ao PDF do romaneio de carga o saldo total em m³ agrupado por essência
 - [x] Cobrir o resumo de volume por essência com testes e validação visual do PDF
+- [x] Auditar por que serviços de serragem não aparecem nos relatórios de contas a receber
+- [x] Corrigir a cobertura dos recebíveis de serragem sem criar duplicidades ou alterar lançamentos indevidamente
+- [x] Melhorar a usabilidade de contas a pagar, pagas, receber e recebidas com filtros, totais e leitura operacional
+- [x] Cobrir a correção de serragem e a nova interface financeira com testes e validação responsiva

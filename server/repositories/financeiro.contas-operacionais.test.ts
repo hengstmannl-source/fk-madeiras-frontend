@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { getContasOperacionais } from "./financeiro";
+import { getContasOperacionais, listTitulosFinanceiros } from "./financeiro";
 
 const agora = new Date(2026, 7, 11, 12);
 
@@ -113,5 +113,53 @@ describe("getContasOperacionais", () => {
     expect(resultado.itens.map((item) => item.id)).toEqual([1]);
     expect(resultado.agrupamentos).toEqual([{ contraparte: "Cliente A", clienteId: 1, fornecedorId: null, quantidade: 1, saldoAberto: 100, vencido: 0 }]);
     expect(resultado.top5Contrapartes).toEqual(resultado.agrupamentos);
+  });
+});
+
+describe("listTitulosFinanceiros", () => {
+  it("encontra recebível de serragem quitado pela data efetiva da baixa, mesmo com vencimento fora do período", async () => {
+    const resultado = await listTitulosFinanceiros({
+      tipo: "receber",
+      estado: "quitado",
+      origem: "serragem_terceiros",
+      criterioData: "baixa",
+      dataInicio: new Date(2026, 7, 11, 0, 0, 0),
+      dataFim: new Date(2026, 7, 11, 23, 59, 59),
+    }, {
+      ...dependencias([
+        titulo(1, {
+          origem: "serragem_terceiros",
+          estado: "quitado",
+          serragemTerceirosId: 41,
+          dataVencimento: new Date(2026, 6, 31, 12),
+          valorBaixado: "100.00",
+        }),
+      ], [baixa(1, 1, { dataBaixa: new Date(2026, 7, 11, 12) })]),
+      atualizarEstado: async (item) => item,
+    });
+
+    expect(resultado).toHaveLength(1);
+    expect(resultado[0]).toMatchObject({
+      id: 1,
+      origem: "serragem_terceiros",
+      dataUltimaBaixa: new Date(2026, 7, 11, 12),
+    });
+  });
+
+  it("não inclui baixa estornada na pesquisa histórica", async () => {
+    const resultado = await listTitulosFinanceiros({
+      tipo: "receber",
+      estado: "quitado",
+      criterioData: "baixa",
+      dataInicio: new Date(2026, 7, 11, 0, 0, 0),
+      dataFim: new Date(2026, 7, 11, 23, 59, 59),
+    }, {
+      ...dependencias([titulo(1, { estado: "quitado", valorBaixado: "100.00" })], [
+        baixa(1, 1, { dataBaixa: new Date(2026, 7, 11, 12), estornada: true }),
+      ]),
+      atualizarEstado: async (item) => item,
+    });
+
+    expect(resultado).toHaveLength(0);
   });
 });
