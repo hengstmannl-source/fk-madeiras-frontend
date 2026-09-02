@@ -888,6 +888,6 @@
 - [x] Modernizar painel financeiro, fluxo de caixa, resultado gerencial, conciliação e relatórios sem alterar a lógica financeira
 - [x] Aplicar o padrão visual aos módulos reais de operação, comercial e gestão interna, sem criar páginas fictícias
 - [x] Validar responsividade, acessibilidade, fluxos críticos e regressões; atualizar os testes visuais e automatizados pertinentes
-- [ ] Publicar o redesign visual aprovado e registrar a entrega
+- [x] Publicar o redesign visual aprovado e registrar a entrega
 - [x] Estabilizar o cenário de teste financeiro de pesquisa sequencial que excedeu o limite sob carga da suíte completa
 - [x] Corrigir a rota comercial inválida identificada na validação responsiva para que Vendas abra o módulo real
