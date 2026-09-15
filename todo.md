@@ -900,3 +900,11 @@
 - [ ] Validar a inicialização local, migrations e conexão do servidor com o MySQL Docker
 - [ ] Executar restauração controlada de dump em homologação local e comparar contagens e saldos críticos
 - [ ] Concluir a desativação do fallback Manus somente após validar todos os utilizadores no login próprio
+
+- [x] Confirmar Docker Desktop, Compose, MySQL 8.4 saudável e acesso ao banco local no projeto fk-madeiras-frontend-main
+- [ ] Construir e iniciar o fk-madeiras-app sem importar dados reais
+- [ ] Aplicar as migrations versionadas e validar o schema vazio do banco local
+- [ ] Fazer dump da origem atual e restaurá-lo somente numa base local de homologação
+
+- [x] Corrigir o pacote da versão atual para incluir docker/local/Dockerfile referenciado pelo Compose
+- [x] Validar que o Dockerfile e o Compose pertencem ao mesmo estado do projeto e não alteram o volume MySQL
