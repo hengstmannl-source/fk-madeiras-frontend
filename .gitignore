@@ -13,6 +13,8 @@ build/
 .env.development.local
 .env.test.local
 .env.production.local
+.env.docker
+.env.docker.local
 
 # IDE and editor files
 .vscode/
@@ -103,6 +105,9 @@ temp/
 
 # Database
 *.db
+fk-madeiras-*.sql
+fk-madeiras-*.sql.gz
+fk-madeiras-*.sha256
 *.sqlite
 *.sqlite3
 

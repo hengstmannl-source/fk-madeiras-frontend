@@ -895,3 +895,8 @@
 - [x] Permitir criar Centro de Custo contextual e aplicar Centro de Custo em lote aos lançamentos financeiros elegíveis
 - [x] Proteger a rentabilidade contra dupla apropriação ao classificar títulos originados de romaneio de carga
 - [x] Cobrir edição em lote, criação contextual, exclusões de origem e interface com testes e validação visual
+
+- [x] Preparar pacote executável local com Docker Compose, MySQL e configuração de ambiente sem alterar a versão publicada
+- [ ] Validar a inicialização local, migrations e conexão do servidor com o MySQL Docker
+- [ ] Executar restauração controlada de dump em homologação local e comparar contagens e saldos críticos
+- [ ] Concluir a desativação do fallback Manus somente após validar todos os utilizadores no login próprio

@@ -10,131 +10,37 @@ Portanto, a migração não deve começar criando outro sistema de login. O cami
 
 ## 2. Execução local com Docker e MySQL
 
-Crie um arquivo `docker-compose.yml` na raiz do projeto:
-
-```yaml
-services:
-  mysql:
-    image: mysql:8.4
-    container_name: fk-madeiras-mysql
-    restart: unless-stopped
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
-    environment:
-      MYSQL_DATABASE: fkmadeiras
-      MYSQL_USER: fk_madeiras
-      MYSQL_PASSWORD: altere-esta-senha
-      MYSQL_ROOT_PASSWORD: altere-esta-senha-root
-    ports:
-      - "3307:3306"
-    volumes:
-      - fk_madeiras_mysql:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
-      interval: 5s
-      timeout: 5s
-      retries: 30
-
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: fk-madeiras-app
-    restart: unless-stopped
-    depends_on:
-      mysql:
-        condition: service_healthy
-    env_file:
-      - .env.docker
-    environment:
-      NODE_ENV: production
-      PORT: 3000
-      DATABASE_URL: mysql://fk_madeiras:altere-esta-senha@mysql:3306/fkmadeiras
-    ports:
-      - "3000:3000"
-
-volumes:
-  fk_madeiras_mysql:
-```
-
-Dentro da rede do Compose, o host do banco é `mysql`, não `localhost`. A porta `3307` existe apenas para permitir acesso ao banco a partir da máquina hospedeira.
-
-Crie também um `Dockerfile`:
-
-```dockerfile
-FROM node:22-bookworm-slim AS build
-
-WORKDIR /app
-
-RUN corepack enable
-
-COPY package.json pnpm-lock.yaml ./
-RUN pnpm install --frozen-lockfile
-
-COPY . .
-RUN pnpm build
-
-FROM node:22-bookworm-slim AS runtime
-
-WORKDIR /app
-ENV NODE_ENV=production
-
-RUN corepack enable
-
-COPY --from=build /app/package.json /app/pnpm-lock.yaml ./
-# Mantemos as dependências de desenvolvimento neste container para permitir
-# executar `pnpm drizzle-kit migrate` com o mesmo artefato.
-RUN pnpm install --frozen-lockfile
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/drizzle ./drizzle
-COPY --from=build /app/drizzle.config.ts ./drizzle.config.ts
-
-EXPOSE 3000
-CMD ["pnpm", "start"]
-```
-
-Crie `.env.docker` sem o `DATABASE_URL`, pois ele já será fornecido pelo Compose. Os valores devem ser reais e não devem ser versionados:
-
-```dotenv
-JWT_SECRET=coloque-uma-chave-aleatoria-com-pelo-menos-32-caracteres
-OWNER_OPEN_ID=local-owner
-OWNER_NAME=Administrador
-VITE_APP_TITLE=FK Madeiras
-```
-
-Gere uma chave segura com:
-
+O projeto já inclui `docker-compose.local.yml`, `docker/local/Dockerfile` e `.env.docker.example`. Esses arquivos são exclusivos da execução local e não substituem o deploy gerido do Manus. Prepare as variáveis assim:
 ```bash
+cp .env.docker.example .env.docker
 openssl rand -base64 48
 ```
+Substitua as senhas e o `JWT_SECRET` em `.env.docker`. Nunca versione esse arquivo. Dentro da rede do Compose, o host do banco é `mysql`, não `localhost`; a porta `3307` serve apenas para acesso a partir da máquina hospedeira.
 
-Adicione ao `.gitignore`:
-
-```gitignore
-.env
-.env.*
-!.env.example
+Valide a configuração antes de iniciar:
+```bash
+docker compose --env-file .env.docker -f docker-compose.local.yml config
 ```
+
+
 
 Suba apenas o MySQL primeiro:
-
 ```bash
-docker compose up -d mysql
-docker compose ps
-docker compose logs -f mysql
+docker compose --env-file .env.docker -f docker-compose.local.yml up -d mysql
+docker compose --env-file .env.docker -f docker-compose.local.yml ps
+docker compose --env-file .env.docker -f docker-compose.local.yml logs -f mysql
 ```
 
-Depois, construa a aplicação:
-
+Depois, construa a aplicação e aplique as migrations já existentes:
 ```bash
-docker compose build app
-docker compose run --rm app pnpm drizzle-kit migrate
-docker compose up -d app
+docker compose --env-file .env.docker -f docker-compose.local.yml build app
+docker compose --env-file .env.docker -f docker-compose.local.yml run --rm app pnpm drizzle-kit migrate
+docker compose --env-file .env.docker -f docker-compose.local.yml up -d app
 ```
 
 Acesse `http://localhost:3000`. Para acompanhar os logs:
-
 ```bash
-docker compose logs -f app
+docker compose --env-file .env.docker -f docker-compose.local.yml logs -f app
 ```
 
 O comando `pnpm drizzle-kit migrate` deve ser utilizado somente quando o banco estiver numa situação conhecida. Não execute `drizzle-kit generate` em produção ou num banco migrado sem revisar o SQL gerado.
