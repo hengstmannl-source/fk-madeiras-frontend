@@ -29,4 +29,4 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: mysql://fk_madeiras_test:migration_test_password@mysql-migrations-test:3306/fkmadeiras_migrations_test
-    command: ["pnpm", "drizzle-kit", "migrate"]
+    command: ["sh", "-c", "pnpm drizzle-kit migrate && node scripts/verify-migrations.mjs"]

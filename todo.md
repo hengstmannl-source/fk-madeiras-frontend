@@ -913,3 +913,6 @@
 - [x] Corrigir duplicidades e incompatibilidades da cadeia de migrations sem marcar migrations como executadas
 - [ ] Validar todas as migrations em um MySQL 8.4 vazio e comparar o schema criado com drizzle/schema.ts
 - [x] Executar TypeScript e build após a correção da cadeia de migrations
+
+- [ ] Executar o Compose isolado em MySQL 8.4 vazio e comprovar as 73 migrations em __drizzle_migrations antes de considerar a migração concluída
+- [ ] Confirmar a comparação do schema criado com drizzle/schema.ts no banco vazio, sem usar fk-madeiras-mysql
