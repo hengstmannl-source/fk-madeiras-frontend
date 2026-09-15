@@ -235,6 +235,13 @@ if (!HTMLElement.prototype.hasPointerCapture) {
 if (!HTMLElement.prototype.scrollIntoView) {
   HTMLElement.prototype.scrollIntoView = () => undefined;
 }
+if (typeof globalThis.ResizeObserver === "undefined") {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  } as unknown as typeof ResizeObserver;
+}
 
 describe("FinanceiroPage — cancelamento manual", () => {
   afterEach(() => cleanup());
@@ -663,6 +670,29 @@ describe("FinanceiroPage — cancelamento manual", () => {
     fireEvent.change(screen.getByLabelText("Descrição"), { target: { value: "Recebimento revisado" } });
     fireEvent.click(screen.getByRole("button", { name: /salvar alterações em lote/i }));
     expect(state.atualizarLote).toHaveBeenCalledWith(expect.objectContaining({ ids: [10, 11], descricao: "Recebimento revisado" }));
+  });
+
+  it("permite criar um Centro de Custo no contexto e aplicá-lo em lote sem duplicar a rentabilidade", async () => {
+    state.centrosCusto = [{ id: 21, nome: "Produção", tipo: "industrial", ativo: true }];
+    const user = userEvent.setup();
+    render(<FinanceiroPage />);
+
+    await user.click(screen.getByRole("button", { name: "Visão financeira: Contas a receber" }));
+    await user.type(screen.getByLabelText("Descrição ou contraparte"), "Recebimento");
+    await user.click(screen.getByRole("button", { name: "Pesquisar" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar Recebimento para cancelar" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Selecionar Recebimento preservado" }));
+    await user.click(screen.getByRole("button", { name: /editar 2 em lote/i }));
+
+    expect(screen.getByText(/não duplica o custo na Rentabilidade da Madeira/i)).toBeInTheDocument();
+    await user.click(screen.getByRole("combobox", { name: "Centro de Custo para edição em lote" }));
+    await user.click(screen.getByText("Criar novo Centro de Custo"));
+    await user.type(screen.getByLabelText("Nome *"), "Matéria-prima");
+    await user.click(screen.getByRole("button", { name: "Criar Centro de Custo" }));
+
+    expect(state.criarCentroCusto).toHaveBeenCalledWith({ nome: "Matéria-prima", tipo: "industrial", observacoes: null });
+    await user.click(screen.getByRole("button", { name: /salvar alterações em lote/i }));
+    expect(state.atualizarLote).toHaveBeenCalledWith(expect.objectContaining({ ids: [10, 11], centroCustoId: 22 }));
   });
 
   it("exibe cards rastreáveis e aging usando o mesmo conjunto de títulos operacionais", async () => {

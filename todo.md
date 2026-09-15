@@ -891,7 +891,7 @@
 - [x] Publicar o redesign visual aprovado e registrar a entrega
 - [x] Estabilizar o cenário de teste financeiro de pesquisa sequencial que excedeu o limite sob carga da suíte completa
 - [x] Corrigir a rota comercial inválida identificada na validação responsiva para que Vendas abra o módulo real
-- [ ] Mapear o efeito de classificar em lote títulos de romaneio de carga como Matéria-prima na Rentabilidade da Madeira
-- [ ] Permitir criar Centro de Custo contextual e aplicar Centro de Custo em lote aos lançamentos financeiros elegíveis
-- [ ] Proteger a rentabilidade contra dupla apropriação ao classificar títulos originados de romaneio de carga
-- [ ] Cobrir edição em lote, criação contextual, exclusões de origem e interface com testes e validação visual
+- [x] Mapear o efeito de classificar em lote títulos de romaneio de carga como Matéria-prima na Rentabilidade da Madeira
+- [x] Permitir criar Centro de Custo contextual e aplicar Centro de Custo em lote aos lançamentos financeiros elegíveis
+- [x] Proteger a rentabilidade contra dupla apropriação ao classificar títulos originados de romaneio de carga
+- [x] Cobrir edição em lote, criação contextual, exclusões de origem e interface com testes e validação visual
