@@ -908,3 +908,8 @@
 
 - [x] Corrigir o pacote da versão atual para incluir docker/local/Dockerfile referenciado pelo Compose
 - [x] Validar que o Dockerfile e o Compose pertencem ao mesmo estado do projeto e não alteram o volume MySQL
+
+- [x] Auditar os 73 arquivos drizzle/*.sql, o journal e o schema antes de corrigir a cadeia de migrations
+- [x] Corrigir duplicidades e incompatibilidades da cadeia de migrations sem marcar migrations como executadas
+- [ ] Validar todas as migrations em um MySQL 8.4 vazio e comparar o schema criado com drizzle/schema.ts
+- [x] Executar TypeScript e build após a correção da cadeia de migrations

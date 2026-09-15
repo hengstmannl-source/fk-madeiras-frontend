@@ -1,1 +1,2 @@
-ALTER TABLE `orcamentos` ADD `dataVencimento` timestamp;
+-- Migration histórica mantida por compatibilidade com o journal.
+-- dataVencimento já é criado em 0009_previous_vengeance.sql.

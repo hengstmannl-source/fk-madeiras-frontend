@@ -45,6 +45,27 @@ docker compose --env-file .env.docker -f docker-compose.local.yml logs -f app
 
 O comando `pnpm drizzle-kit migrate` deve ser utilizado somente quando o banco estiver numa situação conhecida. Não execute `drizzle-kit generate` em produção ou num banco migrado sem revisar o SQL gerado.
 
+### 2.1 Teste reprodutível das migrations em banco vazio
+
+O projeto também inclui `docker-compose.migrations-test.yml` e `scripts/test-migrations-docker.sh`. Esse ambiente usa outro container, outra base, outra porta (`3308`) e `tmpfs`, portanto não acessa nem remove o container `fk-madeiras-mysql` ou o volume `fk_madeiras_mysql`.
+
+No WSL ou num terminal Bash, execute:
+
+```bash
+./scripts/test-migrations-docker.sh
+```
+
+No PowerShell, o mesmo teste pode ser executado diretamente:
+
+```powershell
+docker compose -f docker-compose.migrations-test.yml up --build --abort-on-container-exit --exit-code-from migration-test
+docker compose -f docker-compose.migrations-test.yml down --remove-orphans
+```
+
+O resultado esperado é a conclusão de `pnpm drizzle-kit migrate` sem erro no serviço `migration-test`. O teste não deve usar `docker compose down -v` sobre o Compose local, pois isso poderia remover volumes do ambiente de homologação. O arquivo `drizzle/meta/_journal.json` deve conter exatamente uma entrada para cada um dos 73 arquivos SQL, e a cadeia corrigida não deve exigir que uma base seja previamente preparada pelo Manus.
+
+A auditoria realizada encontrou duplicidades de DDL em `0010`, `0015`, `0019`, `0022`, `0049`, `0063` e `0067`. Elas foram removidas preservando a numeração, o journal, a ordem das alterações, os backfills e as constraints funcionais. O schema TypeScript continuou sem diferenças detectadas pelo `drizzle-kit generate`.
+
 ## 3. Substituição completa do Manus pelo login próprio
 
 ### 3.1 O que já existe
