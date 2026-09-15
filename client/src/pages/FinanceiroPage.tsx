@@ -92,8 +92,8 @@ const estadoLabels: Record<string, string> = {
   aberto: "Aberto", parcial: "Parcial", quitado: "Quitado", vencido: "Vencido", cancelado: "Cancelado",
 };
 
-type EntidadeContextual = "cliente" | "fornecedor" | "categoria" | "conta";
-type DestinoContextual = "lancamento" | "recorrencia" | "baixa" | "cheque";
+type EntidadeContextual = "cliente" | "fornecedor" | "categoria" | "conta" | "centroCusto";
+type DestinoContextual = "lancamento" | "recorrencia" | "baixa" | "cheque" | "edicaoLote";
 type VisaoFinanceira = "pagar" | "receber" | "pagas" | "recebidas";
 type ChequeRecebidoForm = { referencia: string; valor: string; clienteId: string; dataCompensacao: string };
 type TituloFinanceiro = RouterOutputs["financeiro"]["titulos"]["list"][number];
@@ -230,6 +230,8 @@ export default function FinanceiroPage() {
   const [fornecedorAberto, setFornecedorAberto] = useState(false);
   const [fornecedorEditando, setFornecedorEditando] = useState<FornecedorFinanceiro | null>(null);
   const [categoriaAberta, setCategoriaAberta] = useState(false);
+  const [centroCustoAberto, setCentroCustoAberto] = useState(false);
+  const [centroCusto, setCentroCusto] = useState({ nome: "", tipo: "industrial" as "industrial" | "comercial_administrativo" | "nao_apropriavel", observacoes: "" });
   const [contaAberta, setContaAberta] = useState(false);
   const [contaEditando, setContaEditando] = useState<ContaFinanceira | null>(null);
   const [clienteAberto, setClienteAberto] = useState(false);
@@ -391,6 +393,7 @@ export default function FinanceiroPage() {
   const criarFornecedor = trpc.financeiro.fornecedores.create.useMutation();
   const atualizarFornecedor = trpc.financeiro.fornecedores.update.useMutation();
   const criarCategoria = trpc.financeiro.categorias.create.useMutation();
+  const criarCentroCusto = trpc.financeiro.centrosCusto.create.useMutation();
   const criarConta = trpc.financeiro.contas.create.useMutation();
   const atualizarConta = trpc.financeiro.contas.update.useMutation();
   const excluirConta = trpc.financeiro.contas.delete.useMutation();
@@ -470,6 +473,7 @@ export default function FinanceiroPage() {
     utils.financeiro.titulos.list.invalidate();
     utils.financeiro.contasOperacionais.list.invalidate();
     utils.financeiro.categorias.list.invalidate();
+    utils.financeiro.centrosCusto.list.invalidate();
     utils.financeiro.fornecedores.list.invalidate();
     utils.financeiro.contas.list.invalidate();
     utils.financeiro.transferencias.list.invalidate();
@@ -585,6 +589,9 @@ export default function FinanceiroPage() {
       setChequesRecebidos((atuais) => atuais.map((cheque, indice) => indice === indiceChequeCliente ? { ...cheque, clienteId: valor } : cheque));
       setIndiceChequeCliente(null);
     }
+    if (contextoCriacao.destino === "edicaoLote" && entidade === "centroCusto") {
+      setEdicaoLote((atual) => ({ ...atual, centroCustoId: valor }));
+    }
     setContextoCriacao(null);
   };
 
@@ -594,6 +601,7 @@ export default function FinanceiroPage() {
     if (entidade === "categoria") { setCategoria({ nome: "", tipo: destino === "lancamento" ? (lancamento.tipo === "receber" ? "receita" : "despesa") : (recorrencia.tipo === "receber" ? "receita" : "despesa") }); setCategoriaAberta(true); }
     if (entidade === "conta") { setContaEditando(null); setConta(valorInicialConta()); setContaAberta(true); }
     if (entidade === "cliente") { setCliente({ nome: "", contacto: "", email: "", morada: "", nif: "", observacoes: "" }); setClienteAberto(true); }
+    if (entidade === "centroCusto") { setCentroCusto({ nome: "", tipo: "industrial", observacoes: "" }); setCentroCustoAberto(true); }
   };
 
   const arquivoParaBase64 = (arquivo: File) => new Promise<string>((resolve, reject) => {
@@ -749,6 +757,26 @@ export default function FinanceiroPage() {
         toast.success("Lançamento atualizado com sucesso");
         setTituloParaEditar(null);
         invalidarFinanceiro();
+      },
+      onError: (erro) => toast.error(erro.message),
+    });
+  };
+
+  const salvarCentroCusto = () => {
+    if (centroCusto.nome.trim().length < 2) {
+      toast.error("Informe um nome para o Centro de Custo.");
+      return;
+    }
+    criarCentroCusto.mutate({
+      nome: centroCusto.nome.trim(),
+      tipo: centroCusto.tipo,
+      observacoes: centroCusto.observacoes.trim() || null,
+    }, {
+      onSuccess: (resultado) => {
+        toast.success("Centro de Custo criado com sucesso.");
+        setCentroCustoAberto(false);
+        invalidarFinanceiro();
+        selecionarEntidadeCriada("centroCusto", resultado.id);
       },
       onError: (erro) => toast.error(erro.message),
     });
@@ -1172,7 +1200,7 @@ export default function FinanceiroPage() {
             <div className="rounded-lg bg-muted/50 p-3 text-sm"><p className="font-medium">{titulosSelecionados.length} lançamento(s) selecionado(s)</p><p className="mt-1 text-xs text-muted-foreground">Preencha somente os campos que devem mudar. Lançamentos conciliados devem ser desconciliados antes da edição.</p></div>
             <Campo label="Descrição" value={edicaoLote.descricao} onChange={(descricao) => setEdicaoLote({ ...edicaoLote, descricao })} />
             <div className="space-y-2"><Label>Categoria financeira</Label><Select value={edicaoLote.categoriaId} onValueChange={(categoriaId) => setEdicaoLote({ ...edicaoLote, categoriaId })}><SelectTrigger><SelectValue placeholder="Manter categoria atual" /></SelectTrigger><SelectContent>{(categorias.data ?? []).filter((item: any) => item.tipo === "ambos" || item.tipo === (visaoFinanceira === "pagar" || visaoFinanceira === "pagas" ? "despesa" : "receita")).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Centro de custo</Label><Select value={edicaoLote.centroCustoId || "manter"} onValueChange={(centroCustoId) => setEdicaoLote({ ...edicaoLote, centroCustoId: centroCustoId === "manter" ? "" : centroCustoId })}><SelectTrigger><SelectValue placeholder="Manter centro atual" /></SelectTrigger><SelectContent><SelectItem value="manter">Manter centro atual</SelectItem>{(centrosCusto.data ?? []).filter((item: any) => item.ativo).map((item: any) => <SelectItem key={item.id} value={String(item.id)}>{item.nome} · {item.tipo === "industrial" ? "Industrial" : item.tipo === "comercial_administrativo" ? "Comercial/Administrativo" : "Não apropriável"}</SelectItem>)}</SelectContent></Select><p className="text-xs text-muted-foreground">Use esta ação para classificar títulos históricos de forma explícita.</p></div>
+            <div className="space-y-2"><Label>Centro de Custo</Label><SearchableEntitySelect value={edicaoLote.centroCustoId} onValueChange={(centroCustoId) => setEdicaoLote({ ...edicaoLote, centroCustoId: centroCustoId === "manter" ? "" : centroCustoId })} options={[{ value: "manter", label: "Manter centro atual", details: "Não alterar" }, ...(centrosCusto.data ?? []).filter((item: any) => item.ativo).map((item: any) => ({ value: String(item.id), label: item.nome, details: item.tipo === "industrial" ? "Industrial" : item.tipo === "comercial_administrativo" ? "Comercial/Administrativo" : "Não apropriável" }))]} placeholder="Manter centro atual" searchPlaceholder="Pesquisar Centro de Custo" ariaLabel="Centro de Custo para edição em lote" createLabel="Criar novo Centro de Custo" onCreate={() => abrirCriacaoContextual("centroCusto", "edicaoLote")} /><p className="text-xs text-muted-foreground">Classifica os títulos para organização financeira; não altera a origem física dos custos.</p>{titulosSelecionados.length > 0 && <div className="flex items-start gap-2 rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs leading-relaxed text-sky-950"><CircleAlert className="mt-0.5 h-4 w-4 shrink-0 text-sky-700" /><p>Classificar romaneios de carga de toras como <strong>Matéria-prima</strong> não duplica o custo na Rentabilidade da Madeira. A análise apropria o custo pela cadeia física tora → produção e exclui os títulos de romaneio para evitar dupla contagem.</p></div>}</div>
             <Campo label="Novo vencimento" type="date" value={edicaoLote.dataVencimento} onChange={(dataVencimento) => setEdicaoLote({ ...edicaoLote, dataVencimento })} />
             <div className="space-y-2"><Label>Observações</Label><Textarea rows={3} value={edicaoLote.observacoes} onChange={(evento) => setEdicaoLote({ ...edicaoLote, observacoes: evento.target.value })} /></div>
             <Button className="w-full" onClick={salvarEdicaoEmLote} disabled={atualizarTitulosEmLote.isPending}>{atualizarTitulosEmLote.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Salvar alterações em lote</Button>
@@ -1258,6 +1286,8 @@ export default function FinanceiroPage() {
       </Dialog>
 
       <Dialog open={categoriaAberta} onOpenChange={setCategoriaAberta}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Nova categoria financeira</DialogTitle></DialogHeader><div className="space-y-4"><Campo label="Nome *" value={categoria.nome} onChange={(valor) => setCategoria({ ...categoria, nome: valor })} /><CampoSelect label="Aplicação" value={categoria.tipo} onValueChange={(valor) => setCategoria({ ...categoria, tipo: valor as "receita" | "despesa" | "ambos" })} opcoes={[["receita", "Somente receita"], ["despesa", "Somente despesa"], ["ambos", "Receita e despesa"]]} /><Button className="w-full" onClick={salvarCategoria} disabled={criarCategoria.isPending}>Salvar categoria</Button></div></DialogContent></Dialog>
+
+      <Dialog open={centroCustoAberto} onOpenChange={(aberto) => { setCentroCustoAberto(aberto); if (!aberto) setContextoCriacao(null); }}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Novo Centro de Custo</DialogTitle></DialogHeader><div className="space-y-4"><p className="text-sm text-muted-foreground">Crie um Centro de Custo e use-o imediatamente nos lançamentos selecionados.</p><Campo label="Nome *" value={centroCusto.nome} onChange={(nome) => setCentroCusto({ ...centroCusto, nome })} /><CampoSelect label="Tipo" value={centroCusto.tipo} onValueChange={(tipo) => setCentroCusto({ ...centroCusto, tipo: tipo as typeof centroCusto.tipo })} opcoes={[["industrial", "Industrial"], ["comercial_administrativo", "Comercial/Administrativo"], ["nao_apropriavel", "Não apropriável"]]} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={centroCusto.observacoes} onChange={(evento) => setCentroCusto({ ...centroCusto, observacoes: evento.target.value })} /></div><Button className="w-full" onClick={salvarCentroCusto} disabled={criarCentroCusto.isPending}>{criarCentroCusto.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Criar Centro de Custo</Button></div></DialogContent></Dialog>
 
       <Dialog open={contaAberta} onOpenChange={(aberto) => { if (!aberto) fecharDialogoConta(); else setContaAberta(true); }}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>{contaEditando ? "Editar conta financeira" : "Nova conta financeira"}</DialogTitle></DialogHeader><div className="space-y-4">{contaEditando && <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-950"><p className="font-medium">Edição cadastral segura</p><p className="mt-1 text-xs text-sky-900">Nome, dados bancários e data de início podem ser corrigidos sem alterar saldos, baixas, conciliação ou histórico.</p></div>}<Campo label="Nome *" value={conta.nome} onChange={(valor) => setConta({ ...conta, nome: valor })} />{contaEditando ? <div className="grid grid-cols-2 gap-3 rounded-lg bg-muted/45 p-3 text-sm"><div><p className="text-xs text-muted-foreground">Tipo</p><p className="mt-0.5 font-medium capitalize">{conta.tipo.replace("_", " ")}</p></div><div><p className="text-xs text-muted-foreground">Saldo inicial preservado</p><p className="mt-0.5 font-medium">{formatCurrency(conta.saldoInicial)}</p></div></div> : <><CampoSelect label="Tipo" value={conta.tipo} onValueChange={(valor) => setConta({ ...conta, tipo: valor as "caixa" | "caixa_cheque" | "banco" | "carteira" | "outro" })} opcoes={[["caixa", "Caixa"], ["caixa_cheque", "Caixa Cheque"], ["banco", "Banco"], ["carteira", "Carteira"], ["outro", "Outro"]]} /><Campo label="Saldo inicial (R$)" value={conta.saldoInicial} onChange={(valor) => setConta({ ...conta, saldoInicial: valor })} /></>}{conta.tipo === "banco" && <div className="space-y-3 rounded-lg border bg-muted/20 p-3"><div><p className="text-sm font-medium">Dados bancários</p><p className="mt-0.5 text-xs text-muted-foreground">Informações cadastrais da conta; não alteram movimentações já registradas.</p></div><Campo label="Banco" value={conta.banco} onChange={(valor) => setConta({ ...conta, banco: valor })} /><div className="grid grid-cols-2 gap-3"><Campo label="Agência" value={conta.agencia} onChange={(valor) => setConta({ ...conta, agencia: valor })} /><Campo label="Conta corrente" value={conta.numeroConta} onChange={(valor) => setConta({ ...conta, numeroConta: valor })} /></div></div>}<Campo label="Data de início" type="date" value={conta.dataInicio} onChange={(valor) => setConta({ ...conta, dataInicio: valor })} /><div className="space-y-2"><Label>Observações</Label><Textarea rows={2} value={conta.observacoes} onChange={(e) => setConta({ ...conta, observacoes: e.target.value })} /></div><Button className="w-full" onClick={salvarConta} disabled={criarConta.isPending || atualizarConta.isPending}>{(criarConta.isPending || atualizarConta.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{contaEditando ? "Salvar alterações" : "Salvar conta"}</Button></div></DialogContent></Dialog>
 

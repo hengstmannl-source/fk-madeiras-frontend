@@ -11,11 +11,13 @@ const state = vi.hoisted(() => ({
   titulos: [] as Array<Record<string, unknown>>,
   clientes: [] as Array<Record<string, unknown>>,
   categorias: [] as Array<Record<string, unknown>>,
+  centrosCusto: [] as Array<Record<string, unknown>>,
   baixas: [] as Array<Record<string, unknown>>,
   anexos: [] as Array<Record<string, unknown>>,
   cancelar: vi.fn(),
   atualizar: vi.fn(),
   atualizarLote: vi.fn(),
+  criarCentroCusto: vi.fn(),
   atualizarAgendamento: vi.fn(),
   estornar: vi.fn(),
   importar: vi.fn(),
@@ -160,6 +162,18 @@ vi.mock("@/lib/trpc", () => {
             }),
           },
         },
+        centrosCusto: {
+          list: { useQuery: () => ({ data: state.centrosCusto, isLoading: false }) },
+          create: {
+            useMutation: () => ({
+              isPending: false,
+              mutate: (input: Record<string, unknown>, callbacks: { onSuccess?: (resultado: { id: number }) => void }) => {
+                state.criarCentroCusto(input);
+                callbacks.onSuccess?.({ id: 22 });
+              },
+            }),
+          },
+        },
         contasOperacionais: { list: { useQuery: (filtros?: Record<string, unknown>) => {
           state.ultimaConsultaOperacional = filtros;
           const itens = state.contasOperacionais.itens.filter((titulo) => {
@@ -183,7 +197,6 @@ vi.mock("@/lib/trpc", () => {
           return { data: { ...state.contasOperacionais, itens, resumo }, isLoading: false, isFetching: false };
         } } },
         categorias: { list: { useQuery: () => ({ data: state.categorias, isLoading: false }) }, create: mutationInerte },
-        centrosCusto: { list: queryVazia },
         fornecedores: { list: queryVazia, create: mutationInerte, update: mutationInerte, modeloCsv: { useQuery: () => ({ isFetching: false, refetch: vi.fn().mockResolvedValue({ data: "nome;contacto;email;documento;endereco;observacoes" }) }) }, prepararImportacaoCsv: mutationInerte, importarCsv: mutationInerte },
         anexos: {
           upload: mutationInerte,
