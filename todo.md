@@ -903,7 +903,7 @@
 
 - [x] Confirmar Docker Desktop, Compose, MySQL 8.4 saudável e acesso ao banco local no projeto fk-madeiras-frontend-main
 - [ ] Construir e iniciar o fk-madeiras-app sem importar dados reais
-- [ ] Aplicar as migrations versionadas e validar o schema vazio do banco local
+- [x] Aplicar as migrations versionadas e validar o schema vazio do banco local
 - [ ] Fazer dump da origem atual e restaurá-lo somente numa base local de homologação
 
 - [x] Corrigir o pacote da versão atual para incluir docker/local/Dockerfile referenciado pelo Compose
@@ -911,8 +911,8 @@
 
 - [x] Auditar os 73 arquivos drizzle/*.sql, o journal e o schema antes de corrigir a cadeia de migrations
 - [x] Corrigir duplicidades e incompatibilidades da cadeia de migrations sem marcar migrations como executadas
-- [ ] Validar todas as migrations em um MySQL 8.4 vazio e comparar o schema criado com drizzle/schema.ts
+- [x] Validar todas as migrations em um MySQL 8.4 vazio e comparar o schema criado com drizzle/schema.ts
 - [x] Executar TypeScript e build após a correção da cadeia de migrations
 
-- [ ] Executar o Compose isolado em MySQL 8.4 vazio e comprovar as 73 migrations em __drizzle_migrations antes de considerar a migração concluída
-- [ ] Confirmar a comparação do schema criado com drizzle/schema.ts no banco vazio, sem usar fk-madeiras-mysql
+- [x] Executar o Compose isolado em MySQL 8.4 vazio e comprovar as 73 migrations em __drizzle_migrations antes de considerar a migração concluída
+- [x] Confirmar a comparação do schema criado com drizzle/schema.ts no banco vazio, sem usar fk-madeiras-mysql
