@@ -917,7 +917,7 @@
 - [x] Executar o Compose isolado em MySQL 8.4 vazio e comprovar as 73 migrations em __drizzle_migrations antes de considerar a migração concluída
 - [x] Confirmar a comparação do schema criado com drizzle/schema.ts no banco vazio, sem usar fk-madeiras-mysql
 
-- [ ] Auditar as migrations 50–73 contra o estado físico do banco local existente, sem escrever nele
-- [ ] Comparar o journal real, o backup e o schema físico para identificar objetos já adiantados
+- [x] Auditar as migrations 50–73 contra o estado físico do banco local existente, sem escrever nele
+- [x] Comparar o journal real, o backup e o schema físico para identificar objetos já adiantados
 - [ ] Preparar uma reconciliação idempotente e testá-la apenas em cópia isolada do banco
 - [ ] Criar procedimento seguro para o primeiro administrador local após a reconciliação

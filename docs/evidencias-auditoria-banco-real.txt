@@ -1,0 +1,12 @@
+Fonte: /home/ubuntu/upload/auditoria-banco-real.txt, fornecida pelo utilizador.
+
+Evidências confirmadas:
+- __drizzle_migrations: 49 registos, first_id 1, last_id 49.
+- O relatório começa a janela ordinal 50 no arquivo 0049_steep_eddie_brock.sql, porque o journal é zero-based; ordinal 73 corresponde ao arquivo 0072_dashing_changeling.sql.
+- 0049_steep_eddie_brock: folhasPagamentoRh.tituloEncargosFinanceiroId aparece como EXISTS fisicamente, embora a migration ordinal 50 não esteja registrada.
+- Todas as demais operações reportadas da janela 0050_demonic_caretaker até 0072_dashing_changeling aparecem como MISSING no estado físico, incluindo tabelas, colunas e índices esperados.
+- Entre os ausentes: regrasReducaoIrrfRh; estruturas RH 0052–0057; campos comerciais e taxas 0058–0059; sequenciasDocumentos; users.empresaAtivaId e users.papel; campos bancários 0063; transferencias financeiras 0064; extensões de conciliação 0065; custos gerenciais 0066–0069; regularizacoesVolumePlaquetas 0070; e centros de custo em 0071–0072.
+- Tabelas físicas visíveis incluem empresas com 1 linha; demais tabelas listadas aparecem com 0 linhas no relatório, mas table_rows de information_schema é estimativo em InnoDB e não substitui contagem transacional.
+- Regra do utilizador: não executar escrita, não editar __drizzle_migrations, não resetar/apagar banco/volume, preservar empresa FK Madeiras.
+
+Limitação metodológica que deve constar no relatório: o auditor atual verifica presença de tabela/coluna/índice por information_schema, mas não prova igualdade completa de tipo, nulidade, default, expressão de índice ou foreign keys. Essa comparação deve ser feita em cópia do backup antes de qualquer reconciliação real.
