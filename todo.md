@@ -921,3 +921,10 @@
 - [x] Comparar o journal real, o backup e o schema físico para identificar objetos já adiantados
 - [ ] Preparar uma reconciliação idempotente e testá-la apenas em cópia isolada do banco
 - [ ] Criar procedimento seguro para o primeiro administrador local após a reconciliação
+
+- [ ] Restaurar backup-fkmadeiras-atual.sql em homologação isolada com container, banco e volume próprios
+- [ ] Capturar baseline de estrutura, journal, contagens e hashes dos dados na homologação
+- [ ] Testar reconciliação das migrations pendentes somente na cópia restaurada
+- [ ] Tratar especificamente a migration ordinal 50 / arquivo 0049 sem editar o journal manualmente
+- [ ] Validar idempotência, schema final, journal coerente e preservação dos dados na homologação
+- [ ] Documentar comandos, SQL, resultados e procedimento futuro para o banco real sem executá-lo

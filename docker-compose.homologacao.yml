@@ -1,0 +1,37 @@
+services:
+  mysql-homologacao:
+    image: mysql:8.4
+    container_name: fk-madeiras-homologacao-mysql
+    restart: "no"
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    environment:
+      MYSQL_DATABASE: fkmadeiras_homologacao
+      MYSQL_USER: fk_madeiras_homologacao
+      MYSQL_PASSWORD: homologacao_app_password
+      MYSQL_ROOT_PASSWORD: homologacao_root_password
+    ports:
+      - "3309:3306"
+    volumes:
+      - fk_madeiras_homologacao_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -phomologacao_root_password --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  app-homologacao:
+    build:
+      context: .
+      dockerfile: docker/local/Dockerfile
+    container_name: fk-madeiras-homologacao-runner
+    restart: "no"
+    depends_on:
+      mysql-homologacao:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: mysql://fk_madeiras_homologacao:homologacao_app_password@mysql-homologacao:3306/fkmadeiras_homologacao
+
+volumes:
+  fk_madeiras_homologacao_mysql:
+    name: fk_madeiras_homologacao_mysql
