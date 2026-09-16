@@ -928,3 +928,7 @@
 - [ ] Tratar especificamente a migration ordinal 50 / arquivo 0049 sem editar o journal manualmente
 - [ ] Validar idempotência, schema final, journal coerente e preservação dos dados na homologação
 - [x] Documentar comandos, SQL, resultados e procedimento futuro para o banco real sem executá-lo
+
+- [x] Confirmar o contrato da migration 0049 e o comportamento do executor Drizzle diante de coluna pré-existente
+- [x] Comparar estratégias compatíveis com banco novo e backup parcialmente adiantado sem editar __drizzle_migrations
+- [ ] Documentar a solução escolhida e aguardar aprovação explícita antes de alterar a migration 0049
