@@ -3148,6 +3148,13 @@
           "notNull": false,
           "autoincrement": false
         },
+        "tituloEncargosFinanceiroId": {
+          "name": "tituloEncargosFinanceiroId",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
         "criadoPor": {
           "name": "criadoPor",
           "type": "int",

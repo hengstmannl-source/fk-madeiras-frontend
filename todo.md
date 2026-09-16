@@ -931,4 +931,9 @@
 
 - [x] Confirmar o contrato da migration 0049 e o comportamento do executor Drizzle diante de coluna pré-existente
 - [x] Comparar estratégias compatíveis com banco novo e backup parcialmente adiantado sem editar __drizzle_migrations
-- [ ] Documentar a solução escolhida e aguardar aprovação explícita antes de alterar a migration 0049
+- [x] Documentar a solução escolhida e aguardar aprovação explícita antes de alterar a migration 0049
+
+- [x] Aplicar a correção aprovada movendo a coluna para a migration 0048 e deixando a 0049 somente com a constraint UNIQUE
+- [x] Atualizar apenas os snapshots históricos necessários e confirmar que o _journal.json não mudou
+- [x] Preparar comandos PowerShell equivalentes para restaurar, migrar e testar idempotência na homologação
+- [ ] Validar 73 migrations, 86 tabelas, 9 tabelas essenciais e segunda execução sem alterações
