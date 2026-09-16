@@ -45,3 +45,17 @@ As migrations históricas só devem ser modificadas depois de a matriz física d
 ## Próxima evidência necessária
 
 A reconciliação ainda não está concluída. É necessário obter o arquivo `auditoria-banco-real.txt` produzido pelo comando read-only. Com esse relatório será possível informar, migration por migration, quais objetos já existem, quais faltam e qual alteração idempotente, se alguma, pode ser preparada sem apagar ou alterar dados de negócio.
+
+## Execução autorizada somente em homologação
+
+No WSL, a partir da raiz do projeto, usar o caminho do backup recebido:
+
+```bash
+BACKUP=/caminho/para/backup-fkmadeiras-atual.sql
+./scripts/restaurar-homologacao.sh "$BACKUP"
+./scripts/testar-reconciliacao-homologacao.sh
+```
+
+O primeiro comando sobe apenas `fk-madeiras-homologacao-mysql`, restaura no banco `fkmadeiras_homologacao` e utiliza o volume `fk_madeiras_homologacao_mysql`. O segundo executa `pnpm drizzle-kit migrate` duas vezes no runner `fk-madeiras-homologacao-runner`; a primeira aplica as migrations pendentes e a segunda deve ser um no-op bem-sucedido. Os artefatos `artifacts/homologacao-baseline.txt` e `artifacts/homologacao-final.txt` devem ser preservados para comparar journal, tabelas e contagens.
+
+Não executar `docker compose -f docker-compose.local.yml`, não usar `fk-madeiras-mysql`, não usar `fk_madeiras_mysql` e não apontar `DATABASE_URL` para `fkmadeiras` nesta etapa.

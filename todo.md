@@ -927,4 +927,4 @@
 - [ ] Testar reconciliação das migrations pendentes somente na cópia restaurada
 - [ ] Tratar especificamente a migration ordinal 50 / arquivo 0049 sem editar o journal manualmente
 - [ ] Validar idempotência, schema final, journal coerente e preservação dos dados na homologação
-- [ ] Documentar comandos, SQL, resultados e procedimento futuro para o banco real sem executá-lo
+- [x] Documentar comandos, SQL, resultados e procedimento futuro para o banco real sem executá-lo
